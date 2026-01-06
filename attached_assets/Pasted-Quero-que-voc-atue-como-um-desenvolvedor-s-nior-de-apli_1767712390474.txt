@@ -1,0 +1,266 @@
+Quero que você atue como um desenvolvedor sênior de aplicativos (frontend + backend + arquitetura) e crie um aplicativo completo chamado **"Salva Plantão"**, voltado para médicos plantonistas.
+
+O app deve ter:
+- Área do usuário (médicos)
+- Área administrativa exclusiva para o criador: **Dr. Eudes Rodrigues**
+- Backend seguro com autenticação, banco de dados estruturado e controle de permissões
+- Código completo, funcional e pronto para rodar em ambiente como Replit.
+
+Plataforma alvo: Android e iOS. Sugira um stack adequado (ex: Flutter ou React Native + Firebase/Supabase/Node), mas entregue o projeto completo e funcional.
+
+======================================================
+====================   CONTEXTO   ====================
+======================================================
+
+O **Salva Plantão** é um app de apoio à rotina médica, com:
+
+- Organização de plantões, agenda e controle financeiro.
+- Prescrições e checklists de condutas.
+- Área de estudo, anotações e resumos com escrita digitada e por caneta digital.
+- Interconsulta com IA usando prompt definido pelo administrador.
+- Chat entre usuários e chat direto com o administrador.
+- Biblioteca de categorias com conteúdos e vídeos.
+- Ferramentas extras úteis no plantão (calculadora flutuante, checklist de passagem, etc.)
+
+Na tela inicial deve aparecer discretamente:
+> **Criado por: Dr. Eudes Rodrigues**
+
+======================================================
+========= AUTENTICAÇÃO, ONBOARDING E TERMOS ==========
+======================================================
+
+Fluxo inicial obrigatório:
+1. Cadastro/Login
+2. Usuário deve ler e aceitar os **Termos de Uso**
+   - Sem aceitar → não acessa o app
+
+Gerar um texto-base de termos contendo:
+
+- O app é ferramenta de apoio e organização, não substitui conduta médica formal.
+- O chat entre usuários e a interconsulta com IA são apenas orientativos e educacionais.
+- O administrador e o app não se responsabilizam por decisões clínicas tomadas pelo usuário.
+- Proibido inserir dados sensíveis e identificáveis de pacientes.
+- O usuário é totalmente responsável por seus atos profissionais.
+- O administrador pode:
+  - Bloquear usuários
+  - Restringir chat
+  - Encerrar acesso por mau uso
+
+Os termos devem ser editáveis via painel do administrador.
+
+======================================================
+==================== DASHBOARD / HOME ================
+======================================================
+
+Após o login, exibir atalhos:
+
+- Prescrições
+- Checklists de Condutas
+- Interconsulta com IA
+- Chat entre usuários
+- Chat com Administrador
+- Agenda e Plantões
+- Controle de Rendimentos
+- Biblioteca / Categorias e Vídeos
+- Anotações e Resumos
+- Modo Checklist de Plantão
+- Biblioteca de Protocolos
+- Exportações e Relatórios
+
+Adicionar **calculadora flutuante** fixa, disponível em qualquer tela.
+
+======================================================
+========== CATEGORIAS / SUBCATEGORIAS / VÍDEOS =======
+======================================================
+
+Criar módulo onde o ADMIN pode:
+- Criar categorias e subcategorias
+- Adicionar vídeos (upload ou link)
+- Editar e reorganizar conteúdos
+
+Usuário visualiza como biblioteca organizada.
+
+======================================================
+============= PRESCRIÇÕES & CHECKLISTS ===============
+======================================================
+
+Ferramenta de prescrições com:
+- Modelos simples e completos
+- Campos estruturados (medicamento, dose, via, intervalo, duração)
+- Campo livre de observações
+
+Botão **Checklist de Condutas** para cada tema:
+- Itens principais de conduta
+- Exames quando indicados
+- Alertas / red flags
+
+Usuário pode:
+- Buscar, filtrar e favoritar
+
+Admin pode:
+- Criar, editar, ativar/desativar modelos
+
+======================================================
+=========== INTERCONSULTA COM IA (MÓDULO IA) =========
+======================================================
+
+Aba exclusiva com:
+
+1) Usuário pode inserir própria API Key de IA
+2) ADMIN define o **prompt-base global**
+3) Fluxo ao enviar caso clínico:
+   - IA retorna:
+     - 5 principais hipóteses diagnósticas numeradas
+     - Diferenças entre elas (anamnese / exame / evolução)
+   - Usuário escolhe uma hipótese
+   - IA responde com:
+     - Conduta completa
+     - Exames necessários
+     - Prescrição com doses
+     - Dicas práticas
+
+Aviso fixo na tela:
+“Ferramenta educacional — decisão clínica é do médico usuário.”
+
+======================================================
+=============== CHAT ENTRE USUÁRIOS ==================
+======================================================
+
+Funcionalidades:
+
+- Conversas privadas ou em grupo
+- Texto (e opcionalmente imagem)
+- Sistema de denúncias
+- Painel do ADMIN com:
+  - Bloqueio de usuários no chat
+  - Limite de mensagens
+  - Arquivamento de conversas
+
+Adicionar também:
+**Chat direto com o Administrador**
+
+======================================================
+================ BOTÃO DE FEEDBACK ===================
+======================================================
+
+Formulário simples:
+- Tipo de feedback
+- Texto
+- Nota opcional
+
+Vai para painel do ADMIN.
+
+======================================================
+============== AGENDA, PLANTÕES & FINANCEIRO =========
+======================================================
+
+Agenda:
+- Visualização dia / semana / mês
+- Lembretes
+- Plantões com:
+  - Data
+  - Local
+  - Tipo
+  - Horário
+  - **Valor a receber**
+
+Controle financeiro:
+- Soma mensal automática
+- Total previsto
+- Lista de plantões do mês
+
+MELHORIA — incluir:
+- Exportar rendimentos em PDF e Excel
+- Relatórios com gráficos:
+  - Plantões por local
+  - Ganhos por unidade
+
+======================================================
+============= ANOTAÇÕES & RESUMOS (DIGITAL + CANETA)=
+======================================================
+
+- Criar notas por texto
+- Criar notas por escrita manual (stylus)
+- Pastas / tags
+- Salvar / renomear / excluir
+
+======================================================
+================ CHECKLIST DE PLANTÃO ================
+======================================================
+
+Criar módulo especial com:
+
+- Checklist para assumir plantão
+- Checklist de passagem de plantão
+- Itens editáveis pelo ADMIN
+- Opção do usuário marcar tarefas
+
+======================================================
+============== BIBLIOTECA DE PROTOCOLOS ==============
+======================================================
+
+- ADMIN pode cadastrar links e PDFs oficiais
+- Apenas referência — nada protegido deve ser copiado
+- Organização por áreas e temas
+
+======================================================
+===================== MODO OFFLINE ====================
+======================================================
+
+Disponibilizar offline:
+- Prescrições
+- Checklists
+- Notas
+- Biblioteca básica
+
+Sincronizar quando reconectar.
+
+======================================================
+============= ALERTAS DE CARGA EXCESSIVA =============
+======================================================
+
+Se o usuário marcar muitos plantões seguidos:
+- Exibir alerta preventivo
+- Texto simples de cuidado com descanso
+
+======================================================
+================== ÁREA DO ADMIN =====================
+======================================================
+
+Admin pode:
+
+- Gerenciar usuários
+- Bloquear chat ou conta
+- Editar termos de uso
+- Editar prompt de IA
+- Editar temas, cores e layout do app
+- Criar categorias e vídeos
+- Editar prescrições
+- Gerenciar checklists
+- Editar módulos do app
+- Exportar dados
+- Ajustar limites do chat
+
+======================================================
+================= SEGURANÇA E PRIVACIDADE ============
+======================================================
+
+- Senhas criptografadas
+- Autorização por nível de acesso
+- Bloqueio total de rotas admin para usuários comuns
+
+======================================================
+===================== ENTREGA ========================
+======================================================
+
+Gerar:
+
+- Código completo (frontend + backend)
+- Estrutura do banco de dados
+- Rotas de API
+- Comentários explicativos
+- Instruções para rodar
+- Variáveis de ambiente configuráveis
+- Projeto pronto para usar no Replit
+
+Se algo precisar simplificar para manter funcional, entregue assim mesmo.
