@@ -1,119 +1,114 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { 
-  LayoutDashboard, FileText, ClipboardList, 
-  Bot, Calendar, Wallet, Library, StickyNote, 
-  LogOut, User, Activity, Plus
-} from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  LayoutDashboard,
+  FileText,
+  CheckSquare,
+  CalendarDays,
+  StickyNote,
+  Library,
+  MessageSquareText,
+  LogOut,
+  Menu,
+  Stethoscope,
+  Activity,
+  DollarSign
+} from "lucide-react";
+import { useState } from "react";
 
-export function Sidebar() {
+const NAV_ITEMS = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+  { icon: FileText, label: "Prescrições", href: "/prescriptions" },
+  { icon: CheckSquare, label: "Condutas", href: "/checklists" },
+  { icon: Stethoscope, label: "Passagem (SBAR)", href: "/handovers" },
+  { icon: CalendarDays, label: "Plantões", href: "/shifts" },
+  { icon: DollarSign, label: "Financeiro", href: "/finance" },
+  { icon: Activity, label: "Interconsulta IA", href: "/ai-chat" },
+  { icon: MessageSquareText, label: "Chat", href: "/chat" }, // Placeholder chat route
+  { icon: Library, label: "Biblioteca", href: "/library" },
+  { icon: StickyNote, label: "Anotações", href: "/notes" },
+];
+
+function NavContent({ onClose }: { onClose?: () => void }) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
-
-  const navItems = [
-    { href: "/", icon: LayoutDashboard, label: "Dashboard" },
-    { href: "/prescriptions", icon: FileText, label: "Prescrições" },
-    { href: "/checklists", icon: ClipboardList, label: "Checklists" },
-    { href: "/ai-chat", icon: Bot, label: "Interconsulta IA", highlight: true },
-    { href: "/shifts", icon: Calendar, label: "Agenda & Plantões" },
-    { href: "/finance", icon: Wallet, label: "Financeiro" },
-    { href: "/library", icon: Library, label: "Biblioteca" },
-    { href: "/notes", icon: StickyNote, label: "Anotações" },
-  ];
+  const { logout } = useAuth();
 
   return (
-    <div className="flex h-screen flex-col border-r bg-white w-64 hidden md:flex fixed left-0 top-0 shadow-lg z-20">
-      <div className="p-6 border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <div className="bg-primary/10 p-2 rounded-lg">
-            <Activity className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="font-display font-bold text-lg text-slate-900 leading-none">Salva Plantão</h1>
-            <p className="text-xs text-slate-500 mt-1">Sua central médica</p>
-          </div>
-        </div>
+    <div className="flex flex-col h-full bg-slate-900 text-slate-100">
+      <div className="p-6 border-b border-slate-800">
+        <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+          Salva Plantão
+        </h1>
+        <p className="text-xs text-slate-500 mt-1">Dr. Eudes Rodrigues</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-        {navItems.map((item) => {
+      <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1">
+        {NAV_ITEMS.map((item) => {
           const isActive = location === item.href;
           return (
             <Link key={item.href} href={item.href}>
               <div
+                onClick={onClose}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer group",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25" 
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                  item.highlight && !isActive && "text-blue-600 bg-blue-50 border border-blue-100"
+                  "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 cursor-pointer group",
+                  isActive
+                    ? "bg-primary text-white shadow-lg shadow-primary/25 font-semibold"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
                 )}
               >
-                <item.icon className={cn("h-4 w-4", isActive ? "text-white" : "text-slate-500 group-hover:text-slate-700")} />
-                {item.label}
+                <item.icon className={cn("h-5 w-5", isActive ? "animate-pulse" : "group-hover:text-white")} />
+                <span>{item.label}</span>
               </div>
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t bg-slate-50/50">
-        <div className="flex items-center gap-3 mb-4">
-          <Avatar className="h-9 w-9 border bg-white">
-            <AvatarImage src={user?.profileImageUrl} />
-            <AvatarFallback className="text-xs bg-primary/10 text-primary">DR</AvatarFallback>
-          </Avatar>
-          <div className="overflow-hidden">
-            <p className="text-sm font-medium truncate text-slate-900">{user?.firstName || "Doutor"}</p>
-            <p className="text-xs text-slate-500 truncate">{user?.email}</p>
-          </div>
-        </div>
-        <Button 
-          variant="outline" 
-          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
+      <div className="p-4 border-t border-slate-800">
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-950/20"
           onClick={() => logout()}
         >
-          <LogOut className="h-4 w-4 mr-2" />
+          <LogOut className="mr-2 h-4 w-4" />
           Sair
         </Button>
-        <div className="mt-4 text-[10px] text-center text-slate-400 font-medium">
-          Criado por: Dr. Eudes Rodrigues
-        </div>
       </div>
     </div>
   );
 }
 
+export function DesktopSidebar() {
+  return (
+    <aside className="hidden md:flex w-64 flex-col fixed inset-y-0 z-50">
+      <NavContent />
+    </aside>
+  );
+}
+
 export function MobileNav() {
-  const [location] = useLocation();
-  const navItems = [
-    { href: "/", icon: LayoutDashboard },
-    { href: "/shifts", icon: Calendar },
-    { href: "/ai-chat", icon: Bot },
-    { href: "/notes", icon: StickyNote },
-    { href: "/finance", icon: Wallet },
-  ];
+  const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
+
+  if (!isMobile) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t md:hidden z-50 pb-safe">
-      <div className="flex justify-around items-center p-2">
-        {navItems.map((item) => {
-          const isActive = location === item.href;
-          return (
-            <Link key={item.href} href={item.href}>
-              <div className={cn(
-                "flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all",
-                isActive ? "text-primary bg-primary/10" : "text-slate-400"
-              )}>
-                <item.icon className="h-6 w-6" />
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+    <div className="fixed top-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center justify-between md:hidden">
+      <h1 className="text-lg font-bold font-display text-white">Salva Plantão</h1>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="icon" className="text-white">
+            <Menu className="h-6 w-6" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="p-0 w-80 bg-slate-900 border-r-slate-800 text-white">
+          <NavContent onClose={() => setOpen(false)} />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

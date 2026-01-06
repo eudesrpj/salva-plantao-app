@@ -1,12 +1,14 @@
 import { 
-  prescriptions, checklists, shifts, notes, libraryCategories, libraryItems, shiftChecklists,
+  prescriptions, checklists, shifts, notes, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
   type Note, type InsertNote, type UpdateNoteRequest,
   type LibraryCategory, type InsertLibraryCategory, type UpdateLibraryCategoryRequest,
   type LibraryItem, type InsertLibraryItem, type UpdateLibraryItemRequest,
-  type ShiftChecklist, type InsertShiftChecklist
+  type ShiftChecklist, type InsertShiftChecklist,
+  type Handover, type InsertHandover, type UpdateHandoverRequest,
+  type Goal, type InsertGoal, type UpdateGoalRequest
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, sql } from "drizzle-orm";
@@ -32,7 +34,7 @@ export interface IStorage {
   createShift(item: InsertShift): Promise<Shift>;
   updateShift(id: number, item: UpdateShiftRequest): Promise<Shift>;
   deleteShift(id: number): Promise<void>;
-  getShiftStats(userId: string): Promise<{ totalEarnings: number, totalHours: number, upcomingShifts: Shift[] }>;
+  getShiftStats(userId: string): Promise<{ totalEarnings: number, totalHours: number, upcomingShifts: Shift[], monthlyGoal: number | null }>;
 
   // Notes
   getNotes(userId: string): Promise<Note[]>;
@@ -47,6 +49,17 @@ export interface IStorage {
   
   getLibraryItems(categoryId: number): Promise<LibraryItem[]>;
   createLibraryItem(item: InsertLibraryItem): Promise<LibraryItem>;
+
+  // Handovers
+  getHandovers(userId: string): Promise<Handover[]>;
+  getHandover(id: number): Promise<Handover | undefined>;
+  createHandover(item: InsertHandover): Promise<Handover>;
+  updateHandover(id: number, item: UpdateHandoverRequest): Promise<Handover>;
+  deleteHandover(id: number): Promise<void>;
+
+  // Goals
+  getGoal(userId: string, month: string): Promise<Goal | undefined>;
+  setGoal(item: InsertGoal): Promise<Goal>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -121,30 +134,26 @@ export class DatabaseStorage implements IStorage {
   async deleteShift(id: number): Promise<void> {
     await db.delete(shifts).where(eq(shifts.id, id));
   }
-  async getShiftStats(userId: string): Promise<{ totalEarnings: number, totalHours: number, upcomingShifts: Shift[] }> {
+  async getShiftStats(userId: string): Promise<{ totalEarnings: number, totalHours: number, upcomingShifts: Shift[], monthlyGoal: number | null }> {
     const now = new Date();
-    // Simple calculation for now
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
     const userShifts = await db.select().from(shifts).where(eq(shifts.userId, userId));
+    const userGoal = await this.getGoal(userId, currentMonth);
     
     let totalEarnings = 0;
     let totalHours = 0;
     const upcomingShifts: Shift[] = [];
 
     for (const shift of userShifts) {
-      // Calculate earnings
       if (shift.value) {
         totalEarnings += Number(shift.value);
       }
-      
-      // Calculate upcoming
       if (new Date(shift.date) >= now) {
         upcomingShifts.push(shift);
       }
-
-      // Estimate hours (rough parsing)
       if (shift.startTime && shift.endTime) {
-         // rough estimation, would need proper parsing library
-         totalHours += 12; // Placeholder
+         totalHours += 12; // Placeholder logic
       } else if (shift.type?.includes('12')) {
          totalHours += 12;
       } else if (shift.type?.includes('24')) {
@@ -154,7 +163,12 @@ export class DatabaseStorage implements IStorage {
 
     upcomingShifts.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    return { totalEarnings, totalHours, upcomingShifts };
+    return { 
+      totalEarnings, 
+      totalHours, 
+      upcomingShifts,
+      monthlyGoal: userGoal ? Number(userGoal.targetAmount) : null
+    };
   }
 
   // Notes
@@ -192,6 +206,42 @@ export class DatabaseStorage implements IStorage {
   }
   async createLibraryItem(insertItem: InsertLibraryItem): Promise<LibraryItem> {
     const [item] = await db.insert(libraryItems).values(insertItem).returning();
+    return item;
+  }
+
+  // Handovers
+  async getHandovers(userId: string): Promise<Handover[]> {
+    return await db.select().from(handovers).where(eq(handovers.userId, userId)).orderBy(desc(handovers.createdAt));
+  }
+  async getHandover(id: number): Promise<Handover | undefined> {
+    const [item] = await db.select().from(handovers).where(eq(handovers.id, id));
+    return item;
+  }
+  async createHandover(insertItem: InsertHandover): Promise<Handover> {
+    const [item] = await db.insert(handovers).values(insertItem).returning();
+    return item;
+  }
+  async updateHandover(id: number, updateItem: UpdateHandoverRequest): Promise<Handover> {
+    const [item] = await db.update(handovers).set(updateItem).where(eq(handovers.id, id)).returning();
+    return item;
+  }
+  async deleteHandover(id: number): Promise<void> {
+    await db.delete(handovers).where(eq(handovers.id, id));
+  }
+
+  // Goals
+  async getGoal(userId: string, month: string): Promise<Goal | undefined> {
+    const [item] = await db.select().from(goals).where(and(eq(goals.userId, userId), eq(goals.month, month)));
+    return item;
+  }
+  async setGoal(insertItem: InsertGoal): Promise<Goal> {
+    // Check if exists
+    const existing = await this.getGoal(insertItem.userId, insertItem.month);
+    if (existing) {
+       const [updated] = await db.update(goals).set({ targetAmount: insertItem.targetAmount }).where(eq(goals.id, existing.id)).returning();
+       return updated;
+    }
+    const [item] = await db.insert(goals).values(insertItem).returning();
     return item;
   }
 }

@@ -1,176 +1,154 @@
-import { Sidebar, MobileNav } from "@/components/Sidebar";
-import { FloatingCalculator } from "@/components/FloatingCalculator";
 import { useAuth } from "@/hooks/use-auth";
-import { useShifts, usePrescriptions } from "@/hooks/use-resources";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { 
-  FileText, Calendar, Plus, ExternalLink, 
-  Stethoscope, Pill, TrendingUp
-} from "lucide-react";
 import { Link } from "wouter";
+import { 
+  FileText, CheckSquare, CalendarDays, Activity, 
+  ArrowRight, Stethoscope, DollarSign, StickyNote 
+} from "lucide-react";
+import { useShiftStats } from "@/hooks/use-shifts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data: shifts } = useShifts();
-  const { data: prescriptions } = usePrescriptions();
-
-  const nextShift = shifts?.find(s => new Date(s.date) > new Date());
+  const { data: stats } = useShiftStats();
 
   return (
-    <div className="flex min-h-screen bg-slate-50/50">
-      <Sidebar />
-      <main className="flex-1 pb-20 md:pb-0 md:pl-64">
-        <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
-          
-          {/* Header */}
-          <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-display font-bold text-slate-900">
-                Olá, {user?.firstName || "Doutor"}! 👋
-              </h1>
-              <p className="text-slate-500">Aqui está o resumo do seu dia.</p>
+    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold font-display text-slate-900">
+          Olá, Dr. {user?.firstName || "Médico"}
+        </h1>
+        <p className="text-slate-500 mt-2">
+          Resumo do seu plantão e atividades recentes.
+        </p>
+      </header>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg shadow-blue-500/20">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-white/10 rounded-xl backdrop-blur-sm">
+              <DollarSign className="h-6 w-6 text-white" />
             </div>
-            <Link href="/shifts">
-              <Button className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Plantão
-              </Button>
-            </Link>
-          </header>
-
-          {/* Quick Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-none shadow-xl shadow-blue-500/20">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="bg-white/20 p-2 rounded-lg">
-                    <Calendar className="h-6 w-6 text-white" />
-                  </div>
-                  <span className="text-xs font-medium bg-white/20 px-2 py-1 rounded-full">Próximo</span>
-                </div>
-                <h3 className="text-lg font-semibold opacity-90">Próximo Plantão</h3>
-                {nextShift ? (
-                  <div className="mt-2">
-                    <p className="text-2xl font-bold">{format(new Date(nextShift.date), "dd 'de' MMM", { locale: ptBR })}</p>
-                    <p className="text-sm opacity-80 mt-1">{nextShift.location} • {nextShift.startTime || "07:00"}</p>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-lg opacity-80">Nenhum agendado</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all cursor-pointer border-slate-200">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="bg-emerald-100 p-2 rounded-lg">
-                    <Stethoscope className="h-6 w-6 text-emerald-600" />
-                  </div>
-                  <Link href="/ai-chat">
-                    <ExternalLink className="h-4 w-4 text-slate-400 hover:text-slate-600" />
-                  </Link>
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900">Interconsulta IA</h3>
-                <p className="text-sm text-slate-500 mt-1">Tire dúvidas clínicas em tempo real com nossa inteligência artificial.</p>
-                <Link href="/ai-chat">
-                  <Button variant="ghost" className="mt-4 w-full justify-between text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
-                    Iniciar Chat <TrendingUp className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all cursor-pointer border-slate-200">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="bg-purple-100 p-2 rounded-lg">
-                    <Pill className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-full">
-                    {prescriptions?.length || 0}
-                  </span>
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900">Prescrições</h3>
-                <p className="text-sm text-slate-500 mt-1">Acesse seus modelos de prescrição e receitas salvas.</p>
-                <Link href="/prescriptions">
-                  <Button variant="ghost" className="mt-4 w-full justify-between text-purple-600 hover:text-purple-700 hover:bg-purple-50">
-                    Ver Todas <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
+            <div>
+              <p className="text-blue-100 text-sm font-medium">Ganhos (Mês)</p>
+              <h3 className="text-2xl font-bold">
+                {stats ? `R$ ${stats.totalEarnings.toLocaleString('pt-BR')}` : "..."}
+              </h3>
+            </div>
           </div>
-
-          {/* Recent Activity / Agenda Preview */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-slate-900">Agenda Recente</h2>
-                <Link href="/shifts" className="text-sm text-primary font-medium hover:underline">Ver tudo</Link>
-              </div>
-              <div className="space-y-3">
-                {shifts?.slice(0, 3).map((shift) => (
-                  <div key={shift.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="bg-blue-50 w-12 h-12 rounded-lg flex flex-col items-center justify-center text-blue-600">
-                        <span className="text-xs font-bold uppercase">{format(new Date(shift.date), "MMM", { locale: ptBR })}</span>
-                        <span className="text-lg font-bold leading-none">{format(new Date(shift.date), "dd")}</span>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-slate-900">{shift.location}</h4>
-                        <p className="text-sm text-slate-500">{shift.type || "Plantão"} • {shift.startTime} - {shift.endTime}</p>
-                      </div>
-                    </div>
-                    {shift.isPaid ? (
-                      <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">Pago</span>
-                    ) : (
-                      <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">Pendente</span>
-                    )}
-                  </div>
-                ))}
-                {(!shifts || shifts.length === 0) && (
-                  <div className="text-center p-8 border-2 border-dashed rounded-xl text-slate-400">
-                    Nenhum plantão agendado.
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-slate-900">Acesso Rápido</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <QuickAction icon={FileText} label="Nova Prescrição" href="/prescriptions" color="text-purple-600 bg-purple-50" />
-                <QuickAction icon={Calendar} label="Adicionar Plantão" href="/shifts" color="text-blue-600 bg-blue-50" />
-                <QuickAction icon={Bot} label="Consultar IA" href="/ai-chat" color="text-emerald-600 bg-emerald-50" />
-                <QuickAction icon={Library} label="Protocolos" href="/library" color="text-amber-600 bg-amber-50" />
-              </div>
-            </section>
+          <div className="text-sm text-blue-100 bg-white/10 inline-block px-3 py-1 rounded-full">
+            {stats?.totalHours || 0} horas trabalhadas
           </div>
-
         </div>
-      </main>
-      <FloatingCalculator />
-      <MobileNav />
+
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+           <div className="flex items-center gap-4">
+            <div className="p-3 bg-emerald-50 rounded-xl">
+              <CalendarDays className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-slate-500 text-sm font-medium">Próximo Plantão</p>
+              {stats?.upcomingShifts?.[0] ? (
+                <>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    {format(new Date(stats.upcomingShifts[0].date), "dd/MM", { locale: ptBR })}
+                  </h3>
+                  <p className="text-sm text-slate-600">{stats.upcomingShifts[0].location}</p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-400">Nenhum agendado</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+           <div className="flex items-center gap-4">
+            <div className="p-3 bg-purple-50 rounded-xl">
+              <Activity className="h-6 w-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-slate-500 text-sm font-medium">IA Médica</p>
+              <Link href="/ai-chat" className="text-sm text-purple-600 font-semibold hover:underline flex items-center gap-1">
+                Iniciar Interconsulta <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Shortcuts Grid */}
+      <h2 className="text-xl font-bold font-display text-slate-900">Acesso Rápido</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <ShortcutCard href="/prescriptions" icon={FileText} label="Prescrições" color="text-blue-600" bg="bg-blue-50" />
+        <ShortcutCard href="/checklists" icon={CheckSquare} label="Condutas" color="text-indigo-600" bg="bg-indigo-50" />
+        <ShortcutCard href="/handovers" icon={Stethoscope} label="Passagem SBAR" color="text-rose-600" bg="bg-rose-50" />
+        <ShortcutCard href="/notes" icon={StickyNote} label="Anotações" color="text-amber-600" bg="bg-amber-50" />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-8">
+        <Card className="shadow-sm border-slate-100">
+          <CardHeader>
+            <CardTitle>Próximos Plantões</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {stats?.upcomingShifts?.slice(0, 3).map((shift) => (
+                <div key={shift.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-white rounded-lg border border-slate-200 flex flex-col items-center justify-center text-xs font-bold text-slate-700">
+                      <span>{format(new Date(shift.date), "dd")}</span>
+                      <span className="text-[10px] text-slate-400 font-normal uppercase">{format(new Date(shift.date), "MMM", { locale: ptBR })}</span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">{shift.location}</p>
+                      <p className="text-xs text-slate-500">{shift.type}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-mono text-slate-600">{shift.startTime} - {shift.endTime}</p>
+                  </div>
+                </div>
+              ))}
+              {(!stats?.upcomingShifts?.length) && (
+                 <p className="text-center text-slate-400 py-4">Nenhum plantão futuro.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Placeholder for Quick Notes or Recent Activity */}
+        <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white border-none shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-white">Dica do Dia</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-slate-300 italic">
+              "Sempre verifique alergias antes de prescrever. Use a calculadora para doses pediátricas."
+            </p>
+            <div className="mt-6 flex justify-end">
+              <Link href="/library">
+                <span className="text-sm text-blue-300 hover:text-white cursor-pointer transition-colors">Acessar Biblioteca →</span>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
-function QuickAction({ icon: Icon, label, href, color }: any) {
+function ShortcutCard({ href, icon: Icon, label, color, bg }: any) {
   return (
     <Link href={href}>
-      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-3 h-32 group">
-        <div className={cn("p-3 rounded-full transition-transform group-hover:scale-110", color)}>
-          <Icon className="h-6 w-6" />
+      <div className="group cursor-pointer bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:border-primary/30 transition-all text-center flex flex-col items-center gap-3">
+        <div className={`p-4 rounded-full ${bg} group-hover:scale-110 transition-transform`}>
+          <Icon className={`h-6 w-6 ${color}`} />
         </div>
-        <span className="font-medium text-slate-700 text-sm">{label}</span>
+        <span className="font-medium text-slate-700 group-hover:text-slate-900">{label}</span>
       </div>
     </Link>
   );
 }
-
-import { ChevronRight } from "lucide-react";

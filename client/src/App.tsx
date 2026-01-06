@@ -5,26 +5,27 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
+import { DesktopSidebar, MobileNav } from "@/components/Sidebar";
+import { FloatingCalculator } from "@/components/FloatingCalculator";
 
 // Page Imports
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
-import Shifts from "@/pages/Shifts";
 import Prescriptions from "@/pages/Prescriptions";
+import Checklists from "@/pages/Checklists";
+import Shifts from "@/pages/Shifts";
+import Notes from "@/pages/Notes";
+import Handovers from "@/pages/Handovers";
+import Library from "@/pages/Library";
+import Finance from "@/pages/Finance";
 import AIChat from "@/pages/AIChat";
 
-// Placeholder Pages for completeness
-function PlaceholderPage({ title }: { title: string }) {
-  const { Sidebar, MobileNav } = require("@/components/Sidebar");
-  const { FloatingCalculator } = require("@/components/FloatingCalculator");
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-slate-50/50">
-      <Sidebar />
-      <main className="flex-1 pb-20 md:pb-0 md:pl-64 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-300 mb-2">{title}</h1>
-          <p className="text-slate-400">Em desenvolvimento</p>
-        </div>
+      <DesktopSidebar />
+      <main className="flex-1 md:pl-64 pb-20 md:pb-0">
+        {children}
       </main>
       <FloatingCalculator />
       <MobileNav />
@@ -34,9 +35,15 @@ function PlaceholderPage({ title }: { title: string }) {
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return null;
+
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"/></div>;
   if (!isAuthenticated) return <Redirect to="/welcome" />;
-  return <Component />;
+
+  return (
+    <ProtectedLayout>
+      <Component />
+    </ProtectedLayout>
+  );
 }
 
 function Router() {
@@ -48,30 +55,41 @@ function Router() {
         <ProtectedRoute component={Dashboard} />
       </Route>
       
+      <Route path="/prescriptions">
+        <ProtectedRoute component={Prescriptions} />
+      </Route>
+
+      <Route path="/checklists">
+        <ProtectedRoute component={Checklists} />
+      </Route>
+
       <Route path="/shifts">
         <ProtectedRoute component={Shifts} />
       </Route>
 
-      <Route path="/prescriptions">
-        <ProtectedRoute component={Prescriptions} />
+      <Route path="/handovers">
+        <ProtectedRoute component={Handovers} />
+      </Route>
+
+      <Route path="/notes">
+        <ProtectedRoute component={Notes} />
+      </Route>
+
+      <Route path="/library">
+        <ProtectedRoute component={Library} />
+      </Route>
+
+      <Route path="/finance">
+        <ProtectedRoute component={Finance} />
       </Route>
 
       <Route path="/ai-chat">
         <ProtectedRoute component={AIChat} />
       </Route>
 
-      {/* Placeholders for MVP scope limits */}
-      <Route path="/checklists">
-        <ProtectedRoute component={() => <PlaceholderPage title="Checklists" />} />
-      </Route>
-      <Route path="/finance">
-        <ProtectedRoute component={() => <PlaceholderPage title="Financeiro" />} />
-      </Route>
-      <Route path="/library">
-        <ProtectedRoute component={() => <PlaceholderPage title="Biblioteca" />} />
-      </Route>
-      <Route path="/notes">
-        <ProtectedRoute component={() => <PlaceholderPage title="Anotações" />} />
+      {/* Redirect chat alias to ai-chat for now as we merged functionality or placeholder */}
+      <Route path="/chat">
+        <Redirect to="/ai-chat" />
       </Route>
 
       <Route component={NotFound} />
@@ -83,8 +101,8 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
         <Router />
+        <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
   );

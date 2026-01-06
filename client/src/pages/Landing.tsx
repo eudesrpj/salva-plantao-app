@@ -1,69 +1,88 @@
 import { useAuth } from "@/hooks/use-auth";
+import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Activity, ShieldCheck, Zap } from "lucide-react";
-import { Redirect } from "wouter";
 
 export default function Landing() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
 
-  if (isLoading) return <div className="flex h-screen items-center justify-center"><Activity className="animate-spin h-8 w-8 text-primary" /></div>;
-  if (isAuthenticated) return <Redirect to="/" />;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Redirect to="/" />;
+  }
 
   const handleLogin = () => {
     window.location.href = "/api/login";
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-white/50">
-        <div className="bg-primary p-12 text-center relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/medical-icons.png')] opacity-10"></div>
-          <div className="relative z-10">
-            <div className="bg-white/20 p-4 rounded-2xl inline-flex mb-4 backdrop-blur-sm">
-              <Activity className="h-12 w-12 text-white" />
-            </div>
-            <h1 className="text-3xl font-display font-bold text-white mb-2">Salva Plantão</h1>
-            <p className="text-blue-100">Sua central médica de confiança</p>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans">
+      <header className="container mx-auto px-6 py-6 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Activity className="h-8 w-8 text-primary" />
+          <span className="text-2xl font-bold font-display text-slate-900">Salva Plantão</span>
         </div>
-        
-        <div className="p-8 space-y-6">
-          <div className="space-y-4">
-            <Feature icon={ShieldCheck} title="Acesso Seguro" desc="Seus dados protegidos com criptografia de ponta." />
-            <Feature icon={Zap} title="Rápido e Prático" desc="Acesse calculadoras e prescrições em segundos." />
-          </div>
+        <Button onClick={handleLogin} className="rounded-full px-8 shadow-lg hover:shadow-xl transition-all">
+          Entrar
+        </Button>
+      </header>
 
-          <div className="pt-4">
-            <Button 
-              onClick={handleLogin}
-              className="w-full h-12 text-lg font-semibold bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all"
-            >
-              Entrar com Replit
-            </Button>
-            <p className="text-center text-xs text-slate-400 mt-4">
-              Ao entrar, você concorda com nossos Termos de Uso.
-            </p>
-          </div>
+      <main className="container mx-auto px-6 pt-16 pb-24 text-center">
+        <h1 className="text-5xl md:text-7xl font-bold font-display text-slate-900 tracking-tight mb-8">
+          Sua segurança no <span className="text-primary bg-blue-100 px-2 rounded-lg">plantão</span>
+        </h1>
+        <p className="text-xl text-slate-600 max-w-2xl mx-auto mb-12 leading-relaxed">
+          Ferramentas essenciais para médicos plantonistas: prescrições, condutas, 
+          calculadoras e interconsulta com IA em um só lugar.
+        </p>
+        
+        <div className="flex flex-col sm:flex-row justify-center gap-4 mb-20">
+          <Button size="lg" onClick={handleLogin} className="h-14 px-8 text-lg rounded-full shadow-primary/25 shadow-xl hover:-translate-y-1 transition-all">
+            Começar Agora
+          </Button>
         </div>
-      </div>
-      
-      <p className="mt-8 text-slate-400 text-sm font-medium">
-        Criado por: Dr. Eudes Rodrigues
-      </p>
+
+        <div className="grid md:grid-cols-3 gap-8 text-left max-w-5xl mx-auto">
+          <FeatureCard 
+            icon={ShieldCheck}
+            title="Protocolos Confiáveis"
+            desc="Acesse rapidamente condutas e prescrições padronizadas para emergências."
+          />
+          <FeatureCard 
+            icon={Zap}
+            title="Agilidade no Atendimento"
+            desc="Calculadoras e ferramentas rápidas para tomadas de decisão críticas."
+          />
+          <FeatureCard 
+            icon={Activity}
+            title="IA Especializada"
+            desc="Discuta casos clínicos e tire dúvidas em tempo real com nossa IA médica."
+          />
+        </div>
+      </main>
+
+      <footer className="border-t border-slate-200 py-8 text-center text-slate-500">
+        <p>© 2024 Salva Plantão • Criado por Dr. Eudes Rodrigues</p>
+      </footer>
     </div>
   );
 }
 
-function Feature({ icon: Icon, title, desc }: { icon: any, title: string, desc: string }) {
+function FeatureCard({ icon: Icon, title, desc }: { icon: any, title: string, desc: string }) {
   return (
-    <div className="flex items-start gap-4">
-      <div className="bg-blue-50 p-2.5 rounded-xl">
-        <Icon className="h-5 w-5 text-primary" />
+    <div className="bg-white p-8 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 hover:border-primary/20 transition-all">
+      <div className="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center mb-6">
+        <Icon className="h-6 w-6 text-primary" />
       </div>
-      <div>
-        <h3 className="font-semibold text-slate-900">{title}</h3>
-        <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
-      </div>
+      <h3 className="text-xl font-bold mb-3 text-slate-900">{title}</h3>
+      <p className="text-slate-600 leading-relaxed">{desc}</p>
     </div>
   );
 }

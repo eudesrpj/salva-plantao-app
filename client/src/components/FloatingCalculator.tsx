@@ -1,93 +1,102 @@
 import { useState } from "react";
+import { Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Calculator, X, ChevronRight } from "lucide-react";
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 
 export function FloatingCalculator() {
-  const [isOpen, setIsOpen] = useState(false);
-  
-  return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button 
-          className="fixed bottom-20 md:bottom-8 right-4 md:right-8 h-14 w-14 rounded-full shadow-xl z-40 bg-indigo-600 hover:bg-indigo-700 hover:scale-105 transition-all"
-          size="icon"
-        >
-          <Calculator className="h-6 w-6 text-white" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Calculadora Médica</DialogTitle>
-        </DialogHeader>
-        <MedicalCalculators />
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function MedicalCalculators() {
+  const [open, setOpen] = useState(false);
   const [weight, setWeight] = useState("");
-  const [height, setHeight] = useState("");
-  
-  const imc = weight && height 
-    ? (parseFloat(weight) / ((parseFloat(height)/100) ** 2)).toFixed(1)
-    : null;
+  const [result, setResult] = useState<string | null>(null);
+
+  const calculateDose = (mgPerKg: number) => {
+    const w = parseFloat(weight);
+    if (isNaN(w)) return "Peso inválido";
+    return `${(w * mgPerKg).toFixed(1)} mg`;
+  };
 
   return (
-    <Tabs defaultValue="imc" className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="imc">IMC</TabsTrigger>
-        <TabsTrigger value="creatinine">ClCr</TabsTrigger>
-        <TabsTrigger value="drops">Gotejamento</TabsTrigger>
-      </TabsList>
-      
-      <TabsContent value="imc" className="space-y-4 py-4">
-        <div className="space-y-2">
-          <Label>Peso (kg)</Label>
-          <Input 
-            type="number" 
-            placeholder="Ex: 70" 
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Altura (cm)</Label>
-          <Input 
-            type="number" 
-            placeholder="Ex: 175" 
-            value={height}
-            onChange={(e) => setHeight(e.target.value)}
-          />
-        </div>
-        
-        {imc && (
-          <div className="mt-4 p-4 bg-slate-50 rounded-lg text-center border">
-            <p className="text-sm text-slate-500">Seu IMC</p>
-            <p className="text-3xl font-bold text-primary">{imc}</p>
-            <p className="text-xs text-slate-400 mt-1">
-              {parseFloat(imc) < 18.5 ? "Abaixo do peso" : 
-               parseFloat(imc) < 24.9 ? "Peso normal" : 
-               parseFloat(imc) < 29.9 ? "Sobrepeso" : "Obesidade"}
-            </p>
+    <div className="fixed bottom-20 right-4 z-50 md:bottom-8 md:right-8">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button size="icon" className="h-14 w-14 rounded-full shadow-xl bg-primary hover:bg-primary/90 transition-transform hover:scale-110">
+            <Calculator className="h-6 w-6 text-white" />
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Calculadora Médica Rápida</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="weight" className="text-right">
+                Peso (kg)
+              </Label>
+              <Input
+                id="weight"
+                type="number"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                className="col-span-3"
+                placeholder="Ex: 70"
+              />
+            </div>
+
+            <Tabs defaultValue="pediatria" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="pediatria">Pediatria</TabsTrigger>
+                <TabsTrigger value="emergencia">Emergência</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="pediatria" className="space-y-2 mt-4">
+                <div className="p-4 rounded-lg bg-slate-50 border border-slate-100 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Dipirona (20mg/kg)</span>
+                    <span className="text-sm font-bold text-primary">{calculateDose(20)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Paracetamol (15mg/kg)</span>
+                    <span className="text-sm font-bold text-primary">{calculateDose(15)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Ibuprofeno (10mg/kg)</span>
+                    <span className="text-sm font-bold text-primary">{calculateDose(10)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Amoxicilina (50mg/kg)</span>
+                    <span className="text-sm font-bold text-primary">{calculateDose(50)}</span>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="emergencia" className="space-y-2 mt-4">
+                 <div className="p-4 rounded-lg bg-slate-50 border border-slate-100 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Adrenalina (0.01mg/kg)</span>
+                    <span className="text-sm font-bold text-primary">{calculateDose(0.01)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Midazolam (0.1mg/kg)</span>
+                    <span className="text-sm font-bold text-primary">{calculateDose(0.1)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Fentanil (1mcg/kg)</span>
+                    <span className="text-sm font-bold text-primary">{calculateDose(0.001)}</span>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
-        )}
-      </TabsContent>
-      
-      <TabsContent value="creatinine" className="py-4 text-center text-slate-500">
-        <p>Calculadora de Cockcroft-Gault em desenvolvimento.</p>
-      </TabsContent>
-      
-      <TabsContent value="drops" className="py-4 text-center text-slate-500">
-        <p>Calculadora de Gotejamento em desenvolvimento.</p>
-      </TabsContent>
-    </Tabs>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

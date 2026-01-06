@@ -204,6 +204,59 @@ export async function registerRoutes(
     }
   });
 
+  // --- Handovers (Passagem de Plantão) ---
+  app.get(api.handovers.list.path, isAuthenticated, async (req, res) => {
+    const items = await storage.getHandovers(getUserId(req));
+    res.json(items);
+  });
+
+  app.post(api.handovers.create.path, isAuthenticated, async (req, res) => {
+    try {
+      const input = api.handovers.create.input.parse(req.body);
+      const item = await storage.createHandover({ ...input, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+  app.put(api.handovers.update.path, isAuthenticated, async (req, res) => {
+    try {
+      const input = api.handovers.update.input.parse(req.body);
+      const item = await storage.updateHandover(Number(req.params.id), input);
+      res.json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
+  app.delete(api.handovers.delete.path, isAuthenticated, async (req, res) => {
+    await storage.deleteHandover(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Goals ---
+  app.get(api.goals.get.path, isAuthenticated, async (req, res) => {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const item = await storage.getGoal(getUserId(req), currentMonth);
+    res.json(item || null);
+  });
+
+  app.post(api.goals.set.path, isAuthenticated, async (req, res) => {
+    try {
+      const input = api.goals.set.input.parse(req.body);
+      const item = await storage.setGoal({ ...input, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+
   // --- Seed Data ---
   await seedDatabase();
 

@@ -7,13 +7,17 @@ import {
   insertLibraryCategorySchema,
   insertLibraryItemSchema,
   insertShiftChecklistSchema,
+  insertHandoverSchema,
+  insertGoalSchema,
   prescriptions,
   checklists,
   shifts,
   notes,
   libraryCategories,
   libraryItems,
-  shiftChecklists
+  shiftChecklists,
+  handovers,
+  goals
 } from './schema';
 
 export const errorSchemas = {
@@ -161,6 +165,7 @@ export const api = {
           totalEarnings: z.number(),
           totalHours: z.number(),
           upcomingShifts: z.array(z.custom<typeof shifts.$inferSelect>()),
+          monthlyGoal: z.number().nullable(),
         }),
       },
     },
@@ -236,6 +241,58 @@ export const api = {
           201: z.custom<typeof libraryItems.$inferSelect>(),
           403: errorSchemas.unauthorized,
         },
+      },
+    },
+  },
+  handovers: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/handovers',
+      responses: {
+        200: z.array(z.custom<typeof handovers.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/handovers',
+      input: insertHandoverSchema,
+      responses: {
+        201: z.custom<typeof handovers.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/handovers/:id',
+      input: insertHandoverSchema.partial(),
+      responses: {
+        200: z.custom<typeof handovers.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/handovers/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+  goals: {
+    get: {
+      method: 'GET' as const,
+      path: '/api/goals', // Get current month goal
+      responses: {
+        200: z.custom<typeof goals.$inferSelect>().nullable(),
+      },
+    },
+    set: {
+      method: 'POST' as const,
+      path: '/api/goals',
+      input: insertGoalSchema,
+      responses: {
+        201: z.custom<typeof goals.$inferSelect>(),
       },
     },
   },

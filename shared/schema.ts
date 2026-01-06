@@ -116,6 +116,40 @@ export const insertShiftChecklistSchema = createInsertSchema(shiftChecklists).om
 export type ShiftChecklist = typeof shiftChecklists.$inferSelect;
 export type InsertShiftChecklist = z.infer<typeof insertShiftChecklistSchema>;
 
+// Handovers (SBAR)
+export const handovers = pgTable("handovers", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  patientName: text("patient_name").notNull(),
+  age: text("age"),
+  diagnosis: text("diagnosis"),
+  sbarSituation: text("sbar_situation"),
+  sbarBackground: text("sbar_background"),
+  sbarAssessment: text("sbar_assessment"),
+  sbarRecommendation: text("sbar_recommendation"),
+  ward: text("ward"),
+  bed: text("bed"),
+  status: text("status").default("active"), // active, archived
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertHandoverSchema = createInsertSchema(handovers).omit({ id: true, createdAt: true });
+export type Handover = typeof handovers.$inferSelect;
+export type InsertHandover = z.infer<typeof insertHandoverSchema>;
+
+// Goals (Financial)
+export const goals = pgTable("goals", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  month: text("month").notNull(), // "2023-10"
+  targetAmount: decimal("target_amount", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertGoalSchema = createInsertSchema(goals).omit({ id: true, createdAt: true });
+export type Goal = typeof goals.$inferSelect;
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
+
 // --- API Types ---
 
 export type CreatePrescriptionRequest = InsertPrescription;
@@ -135,3 +169,9 @@ export type UpdateLibraryCategoryRequest = Partial<InsertLibraryCategory>;
 
 export type CreateLibraryItemRequest = InsertLibraryItem;
 export type UpdateLibraryItemRequest = Partial<InsertLibraryItem>;
+
+export type CreateHandoverRequest = InsertHandover;
+export type UpdateHandoverRequest = Partial<InsertHandover>;
+
+export type CreateGoalRequest = InsertGoal;
+export type UpdateGoalRequest = Partial<InsertGoal>;
