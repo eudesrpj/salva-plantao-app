@@ -301,6 +301,30 @@ export const insertNoteSchema = createInsertSchema(notes).omit({ id: true, creat
 export type Note = typeof notes.$inferSelect;
 export type InsertNote = z.infer<typeof insertNoteSchema>;
 
+// Daily Tasks (Tarefas do Dia)
+export const tasks = pgTable("tasks", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  dueTime: text("due_time"), // HH:mm format
+  dueDate: timestamp("due_date"),
+  frequency: text("frequency").default("once"), // once, daily, weekly, monthly
+  reminder: boolean("reminder").default(false),
+  reminderMinutes: integer("reminder_minutes").default(30), // minutes before
+  isCompleted: boolean("is_completed").default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTaskSchema = createInsertSchema(tasks, {
+  dueDate: z.coerce.date().optional().nullable(),
+  isCompleted: z.boolean().optional().default(false),
+  reminder: z.boolean().optional().default(false),
+}).omit({ id: true, createdAt: true, completedAt: true });
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+
 // Library Categories
 export const libraryCategories = pgTable("library_categories", {
   id: serial("id").primaryKey(),

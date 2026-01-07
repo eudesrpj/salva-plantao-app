@@ -4,6 +4,7 @@ import {
   insertChecklistSchema, 
   insertShiftSchema, 
   insertNoteSchema,
+  insertTaskSchema,
   insertLibraryCategorySchema,
   insertLibraryItemSchema,
   insertShiftChecklistSchema,
@@ -18,6 +19,7 @@ import {
   checklists,
   shifts,
   notes,
+  tasks,
   libraryCategories,
   libraryItems,
   shiftChecklists,
@@ -381,7 +383,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/notes',
-      input: insertNoteSchema,
+      input: insertNoteSchema.omit({ userId: true }),
       responses: {
         201: z.custom<typeof notes.$inferSelect>(),
         400: errorSchemas.validation,
@@ -390,7 +392,7 @@ export const api = {
     update: {
       method: 'PUT' as const,
       path: '/api/notes/:id',
-      input: insertNoteSchema.partial(),
+      input: insertNoteSchema.omit({ userId: true }).partial(),
       responses: {
         200: z.custom<typeof notes.$inferSelect>(),
         404: errorSchemas.notFound,
@@ -399,6 +401,49 @@ export const api = {
     delete: {
       method: 'DELETE' as const,
       path: '/api/notes/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+  tasks: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/tasks',
+      responses: {
+        200: z.array(z.custom<typeof tasks.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/tasks',
+      input: insertTaskSchema.omit({ userId: true }),
+      responses: {
+        201: z.custom<typeof tasks.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/tasks/:id',
+      input: insertTaskSchema.omit({ userId: true }).partial(),
+      responses: {
+        200: z.custom<typeof tasks.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    toggle: {
+      method: 'POST' as const,
+      path: '/api/tasks/:id/toggle',
+      responses: {
+        200: z.custom<typeof tasks.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/tasks/:id',
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,

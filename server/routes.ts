@@ -431,6 +431,48 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // --- Tasks ---
+  app.get(api.tasks.list.path, isAuthenticated, checkActive, async (req, res) => {
+    const items = await storage.getTasks(getUserId(req));
+    res.json(items);
+  });
+
+  app.post(api.tasks.create.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.tasks.create.input.parse(req.body);
+      const item = await storage.createTask({ ...input, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+  app.put(api.tasks.update.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.tasks.update.input.parse(req.body);
+      const item = await storage.updateTask(Number(req.params.id), input);
+      res.json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
+  app.post(api.tasks.toggle.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const item = await storage.toggleTask(Number(req.params.id));
+      res.json(item);
+    } catch (err) {
+      res.status(404).json({ message: "Task not found" });
+    }
+  });
+
+  app.delete(api.tasks.delete.path, isAuthenticated, checkActive, async (req, res) => {
+    await storage.deleteTask(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // --- Library ---
   app.get(api.library.categories.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getLibraryCategories();

@@ -1,11 +1,12 @@
 import { 
-  prescriptions, checklists, shifts, notes, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
+  prescriptions, checklists, shifts, notes, tasks, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
   protocols, flashcards, favorites, adminSettings, doctorProfiles, interconsultMessages, usageStats,
   pathologies, pathologyMedications, patientHistory, calculatorSettings, medications, userPreferences,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
   type Note, type InsertNote, type UpdateNoteRequest,
+  type Task, type InsertTask,
   type LibraryCategory, type InsertLibraryCategory,
   type LibraryItem, type InsertLibraryItem,
   type ShiftChecklist, type InsertShiftChecklist,
@@ -97,6 +98,14 @@ export interface IStorage {
   createNote(item: InsertNote): Promise<Note>;
   updateNote(id: number, item: UpdateNoteRequest): Promise<Note>;
   deleteNote(id: number): Promise<void>;
+
+  // Tasks
+  getTasks(userId: string): Promise<Task[]>;
+  getTask(id: number): Promise<Task | undefined>;
+  createTask(item: InsertTask): Promise<Task>;
+  updateTask(id: number, item: Partial<InsertTask>): Promise<Task>;
+  toggleTask(id: number): Promise<Task>;
+  deleteTask(id: number): Promise<void>;
 
   // Library
   getLibraryCategories(): Promise<LibraryCategory[]>;
@@ -535,6 +544,44 @@ export class DatabaseStorage implements IStorage {
 
   async deleteNote(id: number): Promise<void> {
     await db.delete(notes).where(eq(notes.id, id));
+  }
+
+  // Tasks
+  async getTasks(userId: string): Promise<Task[]> {
+    return await db.select().from(tasks)
+      .where(eq(tasks.userId, userId))
+      .orderBy(desc(tasks.createdAt));
+  }
+
+  async getTask(id: number): Promise<Task | undefined> {
+    const [item] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return item;
+  }
+
+  async createTask(insertItem: InsertTask): Promise<Task> {
+    const [item] = await db.insert(tasks).values(insertItem).returning();
+    return item;
+  }
+
+  async updateTask(id: number, updateItem: Partial<InsertTask>): Promise<Task> {
+    const [item] = await db.update(tasks).set(updateItem).where(eq(tasks.id, id)).returning();
+    return item;
+  }
+
+  async toggleTask(id: number): Promise<Task> {
+    const task = await this.getTask(id);
+    if (!task) throw new Error("Task not found");
+    
+    const isCompleted = !task.isCompleted;
+    const [item] = await db.update(tasks).set({ 
+      isCompleted,
+      completedAt: isCompleted ? new Date() : null 
+    }).where(eq(tasks.id, id)).returning();
+    return item;
+  }
+
+  async deleteTask(id: number): Promise<void> {
+    await db.delete(tasks).where(eq(tasks.id, id));
   }
 
   // Library
