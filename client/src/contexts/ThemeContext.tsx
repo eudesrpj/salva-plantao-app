@@ -52,6 +52,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem("theme-prefs");
     return saved ? { ...defaultPrefs, ...JSON.parse(saved) } : defaultPrefs;
   });
+  const [optimisticPrefs, setOptimisticPrefs] = useState<ThemePreferences | null>(null);
 
   const { data: serverPrefs, isLoading } = useQuery<ThemePreferences>({
     queryKey: ["/api/user-preferences"],
@@ -63,12 +64,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("PUT", "/api/user-preferences", prefs);
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user-preferences"] });
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/user-preferences"], data);
+      setOptimisticPrefs(null);
+    },
+    onError: () => {
+      setOptimisticPrefs(null);
     },
   });
 
-  const prefs = isAuthenticated && serverPrefs ? serverPrefs : localPrefs;
+  const prefs = optimisticPrefs || (isAuthenticated && serverPrefs ? serverPrefs : localPrefs);
 
   const applyTheme = (theme: Theme) => {
     const root = document.documentElement;
@@ -106,6 +111,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const updatePreference = (update: Partial<ThemePreferences>) => {
     const newPrefs = { ...prefs, ...update };
     if (isAuthenticated) {
+      setOptimisticPrefs(newPrefs);
       updatePrefs.mutate(update);
     } else {
       setLocalPrefs(newPrefs);
