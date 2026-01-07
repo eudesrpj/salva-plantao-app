@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
-import { type InsertNote, type UpdateNoteRequest } from "@shared/schema";
+import { type UpdateNoteRequest } from "@shared/schema";
+import { type z } from "zod";
+
+type CreateNoteInput = z.infer<typeof api.notes.create.input>;
 
 export function useNotes() {
   return useQuery({
@@ -16,7 +19,7 @@ export function useNotes() {
 export function useCreateNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertNote) => {
+    mutationFn: async (data: CreateNoteInput) => {
       const res = await fetch(api.notes.create.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
