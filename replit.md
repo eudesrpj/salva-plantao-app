@@ -36,7 +36,16 @@ The server uses a modular integration pattern with reusable modules under `serve
 - **Schema Location**: `shared/schema.ts` defines all database tables
 - **Migrations**: Managed via drizzle-kit with `db:push` command
 
-Key database entities include: prescriptions, protocols, checklists, shifts, notes, handovers, flashcards, library items, doctor profiles, and admin settings. The schema supports multi-tenant access with `userId` foreign keys and `isPublic`/`isLocked` flags for admin-controlled content.
+Key database entities include: prescriptions, protocols, checklists, shifts, notes, handovers, flashcards, library items, doctor profiles, admin settings, drug interactions, medication contraindications, calculator settings, and prescription favorites. The schema supports multi-tenant access with `userId` foreign keys and `isPublic`/`isLocked` flags for admin-controlled content.
+
+### Version 2 Features (January 2026)
+- **SUS Prescription Printing**: Two-copy format with preview dialog, patient info fields, and doctor profile integration
+- **Prescription Favorites**: Users can save official medications as personal favorites with custom edits
+- **Prescription Sharing**: Token-based secure sharing between users with ownership validation
+- **Drug Interactions**: Quick checker with severity levels (leve, moderada, grave, contraindicada)
+- **Medication Contraindications**: Admin-configurable contraindications per medication
+- **Enhanced Pediatric Calculator**: Age input, pharmaceutical forms, concentration display, age/weight warnings
+- **Orientations Field**: "Orientações / Sinais de Alarme" field added to all prescriptions
 
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)
