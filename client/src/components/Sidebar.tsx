@@ -42,7 +42,7 @@ const NAV_ITEMS = [
   { icon: CalendarDays, label: "Plantões", href: "/shifts" },
   { icon: DollarSign, label: "Financeiro", href: "/finance" },
   { icon: Activity, label: "Interconsulta IA", href: "/ai-chat" },
-  { icon: Bot, label: "Minha IA", href: "/ai-settings" },
+  { icon: Bot, label: "Assistente IA", href: "/ai-assistant" },
   { icon: Library, label: "Biblioteca", href: "/library" },
   { icon: StickyNote, label: "Anotações", href: "/notes" },
   { icon: User, label: "Meu Perfil", href: "/profile" },

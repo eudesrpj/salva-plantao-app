@@ -33,6 +33,7 @@ import PaymentRequired from "@/pages/PaymentRequired";
 import Admin from "@/pages/Admin";
 import Settings from "@/pages/Settings";
 import DrugInteractions from "@/pages/DrugInteractions";
+import AiAssistant from "@/pages/AiAssistant";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const [isPedCalcOpen, setIsPedCalcOpen] = useState(false);
@@ -158,6 +159,10 @@ function Router() {
 
       <Route path="/drug-interactions">
         <ProtectedRoute component={DrugInteractions} />
+      </Route>
+
+      <Route path="/ai-assistant">
+        <ProtectedRoute component={AiAssistant} />
       </Route>
 
       {/* Redirect chat alias to ai-chat for now as we merged functionality or placeholder */}

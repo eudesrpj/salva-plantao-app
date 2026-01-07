@@ -1,0 +1,67 @@
+INTEGRAÇÃO COM IA (CHATGPT) – VIA WEBVIEW, LEVE E SEGURA
+
+Quero que você revise e ajuste toda a parte de integração com IA do aplicativo com o seguinte objetivo:
+
+A integração com IA deve ser feita de forma simples, leve e estável, usando uma aba web (webview) que abre o ChatGPT, permitindo que o usuário faça login com a própria conta do ChatGPT, sem que o backend do app precise chamar a API diretamente.
+
+Requisitos detalhados:
+
+Criar uma nova aba/tela no app chamada “Assistente IA”
+
+Ao acessar essa aba, o app deve abrir uma webview (ou equivalente, ex.: iframe / in-app browser) carregando o ChatGPT.
+
+O usuário deve poder logar com a conta dele do ChatGPT normalmente dentro dessa aba.
+
+Botões com prompts pré-definidos
+
+Dentro dessa tela do “Assistente IA”, criar uma área com botões de atalho para prompts pré-estabelecidos, por exemplo:
+
+“Revisar prescrição”
+
+“Gerar orientações para o paciente”
+
+“Ajustar dose conforme idade e peso”
+
+Ao clicar em cada botão, o texto do prompt correspondente deve ser:
+
+pré-preenchido no campo de entrada do ChatGPT na webview
+
+ou enviado automaticamente para o campo, deixando o usuário apenas revisar/enviar.
+
+Sem integração pesada via API por enquanto
+
+Não usar chamadas diretas à API do ChatGPT com chave minha neste momento.
+
+A IA deve rodar dentro da conta do próprio usuário, via webview.
+
+O objetivo é evitar:
+
+custo alto de uso de API
+
+complexidade de autenticação
+
+risco de queda do app se a IA falhar.
+
+Isolamento da funcionalidade de IA
+
+A aba “Assistente IA” deve ser totalmente isolada do resto do app.
+
+Se a webview ou o site do ChatGPT falhar, travar ou estiver offline:
+
+o restante do aplicativo deve continuar funcionando normalmente, sem erro de build nem crash.
+
+Performance e leveza
+
+Não adicionar bibliotecas pesadas ou dependências desnecessárias só por causa da IA.
+
+Manter o código organizado, comentado e fácil de remover/alterar no futuro, caso seja feita uma integração por API.
+
+Preparar o caminho para futura integração por API (sem implementar agora)
+
+Onde for necessário, deixar o código preparado/organizado para, no futuro, substituir a webview por uma integração via API própria.
+
+Mas neste momento, a prioridade é:
+
+webview + login do próprio usuário no ChatGPT + botões com prompts prontos,
+
+sem quebrar nada e sem pesar o app.
