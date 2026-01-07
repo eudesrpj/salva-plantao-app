@@ -10,12 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X } from "lucide-react";
+import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer } from "lucide-react";
+import { QuickPrintButton, SUSPrescriptionPrint } from "@/components/SUSPrescriptionPrint";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { PreviewGate } from "@/components/PreviewGate";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Prescription, Pathology, PathologyMedication, Medication } from "@shared/schema";
+import type { Prescription, Pathology, PathologyMedication, Medication, PrescriptionFavorite } from "@shared/schema";
 
 const INTERVALS = ["6/6h", "8/8h", "12/12h", "1x/dia", "2x/dia", "3x/dia", "Dose única", "SOS"];
 const DURATIONS = ["3 dias", "5 dias", "7 dias", "10 dias", "14 dias", "Uso contínuo", "Uso indeterminado"];
@@ -150,6 +151,76 @@ export default function Prescriptions() {
   );
 }
 
+function FavoritesSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: favorites, isLoading } = useQuery<PrescriptionFavorite[]>({
+    queryKey: ["/api/prescription-favorites"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/prescription-favorites/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescription-favorites"] });
+      toast({ title: "Removido!", description: "Favorito removido com sucesso." });
+    },
+  });
+
+  if (isLoading) {
+    return <div className="py-4 text-center text-muted-foreground">Carregando favoritos...</div>;
+  }
+
+  if (!favorites || favorites.length === 0) {
+    return (
+      <div className="text-center py-6 text-slate-400 border rounded-md bg-muted/20">
+        <Heart className="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <p className="text-sm">Nenhum favorito salvo ainda.</p>
+        <p className="text-xs mt-1">Clique no coração ao lado de uma medicação oficial para salvá-la.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="font-bold text-slate-700 flex items-center gap-2">
+        <Heart className="h-4 w-4 text-pink-500" />
+        Medicações Favoritas ({favorites.length})
+      </h3>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {favorites.map((fav) => (
+          <Card key={fav.id} className="p-3 group" data-testid={`card-favorite-${fav.id}`}>
+            <div className="flex justify-between items-start mb-2">
+              <h4 className="font-medium text-sm">{fav.title}</h4>
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <QuickPrintButton prescription={fav} />
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className="h-6 w-6 text-red-400"
+                  onClick={() => deleteMutation.mutate(fav.id)}
+                  title="Remover favorito"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            <div className="text-xs text-slate-600 space-y-0.5">
+              {fav.medication && <p><strong>Medicação:</strong> {fav.medication}</p>}
+              {fav.dose && <p><strong>Dose:</strong> {fav.dose}</p>}
+              {fav.interval && <p><strong>Intervalo:</strong> {fav.interval}</p>}
+              {fav.duration && <p><strong>Duração:</strong> {fav.duration}</p>}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function UserPathologiesView({ ageGroup, searchQuery }: { ageGroup: string; searchQuery: string }) {
   const { toast } = useToast();
   const [expandedPathologies, setExpandedPathologies] = useState<Set<number>>(new Set());
@@ -194,37 +265,37 @@ function UserPathologiesView({ ageGroup, searchQuery }: { ageGroup: string; sear
     );
   }
 
-  if (!grouped || Object.keys(grouped).length === 0) {
-    return (
-      <div className="text-center py-12 text-slate-400">
-        <FolderPlus className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p className="mb-2">Você ainda não tem patologias pessoais.</p>
-        <p className="text-sm">Clique em "Nova Patologia" para criar a sua primeira.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8">
-      {Object.entries(grouped).map(([category, items]) => (
-        <div key={category}>
-          <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
-            <Heart className="h-5 w-5 text-pink-500" />
-            {category}
-          </h2>
-          <div className="space-y-3">
-            {items.map((pathology) => (
-              <UserPathologyCard 
-                key={pathology.id} 
-                pathology={pathology} 
-                isExpanded={expandedPathologies.has(pathology.id)}
-                onToggle={() => toggleExpanded(pathology.id)}
-                ageGroup={ageGroup}
-              />
-            ))}
-          </div>
+      <FavoritesSection />
+
+      {(!grouped || Object.keys(grouped).length === 0) ? (
+        <div className="text-center py-8 text-slate-400 border rounded-md bg-muted/20">
+          <FolderPlus className="h-10 w-10 mx-auto mb-3 opacity-50" />
+          <p className="mb-2">Você ainda não tem patologias pessoais.</p>
+          <p className="text-sm">Clique em "Nova Patologia" para criar a sua primeira.</p>
         </div>
-      ))}
+      ) : (
+        Object.entries(grouped).map(([category, items]) => (
+          <div key={category}>
+            <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+              <FolderPlus className="h-5 w-5 text-primary" />
+              {category}
+            </h2>
+            <div className="space-y-3">
+              {items.map((pathology) => (
+                <UserPathologyCard 
+                  key={pathology.id} 
+                  pathology={pathology} 
+                  isExpanded={expandedPathologies.has(pathology.id)}
+                  onToggle={() => toggleExpanded(pathology.id)}
+                  ageGroup={ageGroup}
+                />
+              ))}
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -319,6 +390,54 @@ const ROUTE_NAMES: Record<string, string> = {
   "Sublingual": "via sublingual",
   "Inalatório": "via inalatória",
 };
+
+function SaveToFavoritesButton({ medication, pathologyName }: { medication: PathologyMedication; pathologyName: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/prescription-favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `${medication.medication} - ${pathologyName}`,
+          medication: medication.medication,
+          dose: medication.dose,
+          interval: medication.interval,
+          quantity: medication.quantity,
+          duration: medication.duration,
+          route: medication.route,
+          timing: medication.timing,
+          patientNotes: medication.observations,
+        }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescription-favorites"] });
+      toast({ title: "Salvo!", description: "Medicação salva nos favoritos." });
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao salvar favorito.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Button 
+      size="icon" 
+      variant="ghost" 
+      onClick={() => saveMutation.mutate()} 
+      disabled={saveMutation.isPending}
+      title="Salvar nos favoritos"
+      data-testid={`button-save-favorite-${medication.id}`}
+    >
+      <Heart className="h-4 w-4" />
+    </Button>
+  );
+}
 
 function formatMedicationSUS(med: PathologyMedication, index: number): string {
   const lines: string[] = [];
@@ -596,16 +715,36 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
                           {med.observations && <p className="text-slate-500 italic">Obs: {med.observations}</p>}
                         </div>
                       </div>
-                      <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} className="shrink-0" title="Copiar este medicamento">
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-1 shrink-0">
+                        <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} title="Copiar este medicamento">
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <SaveToFavoritesButton medication={med} pathologyName={pathology.name} />
+                      </div>
                     </div>
                   ))}
                 </div>
-                <div className="pt-2 border-t">
-                  <Button onClick={copyAllMedications} className="w-full gap-2" data-testid="button-copy-prescription-sus">
-                    <Copy className="h-4 w-4" /> Copiar Prescrição Completa (Padrão SUS)
+                <div className="pt-2 border-t flex gap-2">
+                  <Button onClick={copyAllMedications} className="flex-1 gap-2" data-testid="button-copy-prescription-sus">
+                    <Copy className="h-4 w-4" /> Copiar (Padrão SUS)
                   </Button>
+                  <SUSPrescriptionPrint
+                    prescriptions={medications.map(med => ({
+                      medication: med.medication,
+                      dose: med.dose || "",
+                      quantity: med.quantity || "",
+                      interval: med.interval || "",
+                      duration: med.duration || "",
+                      route: med.route || "",
+                      timing: med.timing || "",
+                      orientations: med.observations || "",
+                    }))}
+                    trigger={
+                      <Button variant="outline" className="gap-2" data-testid="button-print-pathology-prescription">
+                        <Printer className="h-4 w-4" /> Imprimir
+                      </Button>
+                    }
+                  />
                 </div>
               </PreviewGate>
             ) : (
@@ -667,6 +806,9 @@ function PrescriptionCard({ prescription, isAdmin, userId }: { prescription: Pre
           <Button size="icon" variant="ghost" onClick={copyToClipboard} className="h-7 w-7">
             <Copy className="h-3.5 w-3.5" />
           </Button>
+          {prescription.medication && (
+            <QuickPrintButton prescription={prescription} />
+          )}
           {canDelete && (
             <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate()} className="h-7 w-7 text-red-400">
               <Trash2 className="h-3.5 w-3.5" />

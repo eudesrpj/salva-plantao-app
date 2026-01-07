@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle } from "lucide-react";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,7 +35,7 @@ export default function Admin() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-5">
+        <TabsList className="grid w-full max-w-3xl grid-cols-6">
           <TabsTrigger value="users" className="gap-1">
             <Users className="h-4 w-4" /> Usuários
           </TabsTrigger>
@@ -44,6 +44,9 @@ export default function Admin() {
           </TabsTrigger>
           <TabsTrigger value="ai-prompts" className="gap-1">
             <Bot className="h-4 w-4" /> IA
+          </TabsTrigger>
+          <TabsTrigger value="interactions" className="gap-1">
+            <Pill className="h-4 w-4" /> Interações
           </TabsTrigger>
           <TabsTrigger value="content" className="gap-1">
             <FileText className="h-4 w-4" /> Conteúdo
@@ -63,6 +66,10 @@ export default function Admin() {
 
         <TabsContent value="ai-prompts">
           <AiPromptsTab />
+        </TabsContent>
+
+        <TabsContent value="interactions">
+          <InteractionsTab />
         </TabsContent>
 
         <TabsContent value="content">
@@ -564,6 +571,487 @@ function ContentTab() {
           {saveMutation.isPending ? "Salvando..." : "Salvar Configurações de Layout"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+interface DrugInteractionItem {
+  id: number;
+  drug1: string;
+  drug2: string;
+  severity: string;
+  description: string;
+  recommendation: string;
+  isActive: boolean;
+}
+
+interface ContraindicationItem {
+  id: number;
+  medicationName: string;
+  contraindication: string;
+  severity: string;
+  notes: string;
+  isActive: boolean;
+}
+
+function InteractionsTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isAddingInteraction, setIsAddingInteraction] = useState(false);
+  const [isAddingContraindication, setIsAddingContraindication] = useState(false);
+  const [editingInteraction, setEditingInteraction] = useState<DrugInteractionItem | null>(null);
+  const [editingContraindication, setEditingContraindication] = useState<ContraindicationItem | null>(null);
+
+  const [newInteraction, setNewInteraction] = useState({
+    drug1: "", drug2: "", severity: "moderada", description: "", recommendation: ""
+  });
+  const [newContraindication, setNewContraindication] = useState({
+    medicationName: "", contraindication: "", severity: "moderada", notes: ""
+  });
+
+  const { data: interactions = [], isLoading: loadingInteractions } = useQuery<DrugInteractionItem[]>({
+    queryKey: ["/api/drug-interactions"],
+  });
+
+  const { data: contraindications = [], isLoading: loadingContraindications } = useQuery<ContraindicationItem[]>({
+    queryKey: ["/api/medication-contraindications"],
+  });
+
+  const createInteractionMutation = useMutation({
+    mutationFn: async (data: typeof newInteraction) => {
+      const res = await apiRequest("POST", "/api/drug-interactions", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drug-interactions"] });
+      toast({ title: "Interação cadastrada!" });
+      setIsAddingInteraction(false);
+      setNewInteraction({ drug1: "", drug2: "", severity: "moderada", description: "", recommendation: "" });
+    },
+    onError: () => toast({ title: "Erro ao cadastrar", variant: "destructive" }),
+  });
+
+  const updateInteractionMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<DrugInteractionItem> }) => {
+      const res = await apiRequest("PUT", `/api/drug-interactions/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drug-interactions"] });
+      toast({ title: "Interação atualizada!" });
+      setEditingInteraction(null);
+    },
+    onError: () => toast({ title: "Erro ao atualizar", variant: "destructive" }),
+  });
+
+  const deleteInteractionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/drug-interactions/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drug-interactions"] });
+      toast({ title: "Interação removida!" });
+    },
+  });
+
+  const createContraindicationMutation = useMutation({
+    mutationFn: async (data: typeof newContraindication) => {
+      const res = await apiRequest("POST", "/api/medication-contraindications", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/medication-contraindications"] });
+      toast({ title: "Contraindicação cadastrada!" });
+      setIsAddingContraindication(false);
+      setNewContraindication({ medicationName: "", contraindication: "", severity: "moderada", notes: "" });
+    },
+    onError: () => toast({ title: "Erro ao cadastrar", variant: "destructive" }),
+  });
+
+  const updateContraindicationMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<ContraindicationItem> }) => {
+      const res = await apiRequest("PUT", `/api/medication-contraindications/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/medication-contraindications"] });
+      toast({ title: "Contraindicação atualizada!" });
+      setEditingContraindication(null);
+    },
+    onError: () => toast({ title: "Erro ao atualizar", variant: "destructive" }),
+  });
+
+  const deleteContraindicationMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/medication-contraindications/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/medication-contraindications"] });
+      toast({ title: "Contraindicação removida!" });
+    },
+  });
+
+  const severityOptions = [
+    { value: "leve", label: "Leve" },
+    { value: "moderada", label: "Moderada" },
+    { value: "grave", label: "Grave" },
+    { value: "contraindicada", label: "Contraindicada" },
+  ];
+
+  const severityColors: Record<string, string> = {
+    leve: "bg-yellow-100 text-yellow-800",
+    moderada: "bg-orange-100 text-orange-800",
+    grave: "bg-red-100 text-red-800",
+    contraindicada: "bg-red-200 text-red-900",
+  };
+
+  if (loadingInteractions || loadingContraindications) {
+    return <div className="flex justify-center p-8"><PageLoader text="Carregando..." /></div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Pill className="h-5 w-5 text-primary" /> Interações Medicamentosas
+            </CardTitle>
+            <CardDescription>Cadastre interações entre medicamentos que serão verificadas pelos usuários.</CardDescription>
+          </div>
+          <Dialog open={isAddingInteraction} onOpenChange={setIsAddingInteraction}>
+            <DialogTrigger asChild>
+              <Button className="gap-1" data-testid="button-add-interaction">
+                <Plus className="h-4 w-4" /> Nova Interação
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nova Interação Medicamentosa</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Medicamento 1</label>
+                    <Input
+                      value={newInteraction.drug1}
+                      onChange={(e) => setNewInteraction({ ...newInteraction, drug1: e.target.value })}
+                      placeholder="Ex: Varfarina"
+                      data-testid="input-new-drug1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Medicamento 2</label>
+                    <Input
+                      value={newInteraction.drug2}
+                      onChange={(e) => setNewInteraction({ ...newInteraction, drug2: e.target.value })}
+                      placeholder="Ex: AAS"
+                      data-testid="input-new-drug2"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Gravidade</label>
+                  <select
+                    className="w-full h-9 px-3 rounded-md border bg-background"
+                    value={newInteraction.severity}
+                    onChange={(e) => setNewInteraction({ ...newInteraction, severity: e.target.value })}
+                  >
+                    {severityOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Descrição</label>
+                  <Textarea
+                    value={newInteraction.description}
+                    onChange={(e) => setNewInteraction({ ...newInteraction, description: e.target.value })}
+                    placeholder="Descreva a interação..."
+                    data-testid="textarea-new-description"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Recomendação</label>
+                  <Textarea
+                    value={newInteraction.recommendation}
+                    onChange={(e) => setNewInteraction({ ...newInteraction, recommendation: e.target.value })}
+                    placeholder="Ex: Evitar associação, monitorar INR..."
+                    data-testid="textarea-new-recommendation"
+                  />
+                </div>
+                <Button
+                  onClick={() => createInteractionMutation.mutate(newInteraction)}
+                  disabled={!newInteraction.drug1 || !newInteraction.drug2 || createInteractionMutation.isPending}
+                  className="w-full"
+                  data-testid="button-save-interaction"
+                >
+                  {createInteractionMutation.isPending ? "Salvando..." : "Salvar Interação"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          {interactions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Nenhuma interação cadastrada.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Medicamentos</TableHead>
+                  <TableHead>Gravidade</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead className="w-24">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {interactions.map((int) => (
+                  <TableRow key={int.id} data-testid={`row-interaction-${int.id}`}>
+                    <TableCell className="font-medium">{int.drug1} + {int.drug2}</TableCell>
+                    <TableCell>
+                      <Badge className={severityColors[int.severity || "moderada"]}>{int.severity}</Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{int.description}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => setEditingInteraction(int)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => deleteInteractionMutation.mutate(int.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" /> Contraindicações
+            </CardTitle>
+            <CardDescription>Cadastre contraindicações de medicamentos.</CardDescription>
+          </div>
+          <Dialog open={isAddingContraindication} onOpenChange={setIsAddingContraindication}>
+            <DialogTrigger asChild>
+              <Button className="gap-1" data-testid="button-add-contraindication">
+                <Plus className="h-4 w-4" /> Nova Contraindicação
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nova Contraindicação</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Medicamento</label>
+                  <Input
+                    value={newContraindication.medicationName}
+                    onChange={(e) => setNewContraindication({ ...newContraindication, medicationName: e.target.value })}
+                    placeholder="Ex: Metformina"
+                    data-testid="input-new-medication"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Contraindicação</label>
+                  <Textarea
+                    value={newContraindication.contraindication}
+                    onChange={(e) => setNewContraindication({ ...newContraindication, contraindication: e.target.value })}
+                    placeholder="Ex: Insuficiência renal grave"
+                    data-testid="textarea-new-contraindication"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Gravidade</label>
+                  <select
+                    className="w-full h-9 px-3 rounded-md border bg-background"
+                    value={newContraindication.severity}
+                    onChange={(e) => setNewContraindication({ ...newContraindication, severity: e.target.value })}
+                  >
+                    {severityOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Observações</label>
+                  <Textarea
+                    value={newContraindication.notes}
+                    onChange={(e) => setNewContraindication({ ...newContraindication, notes: e.target.value })}
+                    placeholder="Notas adicionais..."
+                    data-testid="textarea-new-notes"
+                  />
+                </div>
+                <Button
+                  onClick={() => createContraindicationMutation.mutate(newContraindication)}
+                  disabled={!newContraindication.medicationName || !newContraindication.contraindication || createContraindicationMutation.isPending}
+                  className="w-full"
+                  data-testid="button-save-contraindication"
+                >
+                  {createContraindicationMutation.isPending ? "Salvando..." : "Salvar Contraindicação"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          {contraindications.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Nenhuma contraindicação cadastrada.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Medicamento</TableHead>
+                  <TableHead>Contraindicação</TableHead>
+                  <TableHead>Gravidade</TableHead>
+                  <TableHead className="w-24">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contraindications.map((c) => (
+                  <TableRow key={c.id} data-testid={`row-contraindication-${c.id}`}>
+                    <TableCell className="font-medium">{c.medicationName}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{c.contraindication}</TableCell>
+                    <TableCell>
+                      <Badge className={severityColors[c.severity || "moderada"]}>{c.severity}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => setEditingContraindication(c)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => deleteContraindicationMutation.mutate(c.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {editingInteraction && (
+        <Dialog open={!!editingInteraction} onOpenChange={() => setEditingInteraction(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Interação</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Medicamento 1</label>
+                  <Input
+                    value={editingInteraction.drug1}
+                    onChange={(e) => setEditingInteraction({ ...editingInteraction, drug1: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Medicamento 2</label>
+                  <Input
+                    value={editingInteraction.drug2}
+                    onChange={(e) => setEditingInteraction({ ...editingInteraction, drug2: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Gravidade</label>
+                <select
+                  className="w-full h-9 px-3 rounded-md border bg-background"
+                  value={editingInteraction.severity}
+                  onChange={(e) => setEditingInteraction({ ...editingInteraction, severity: e.target.value })}
+                >
+                  {severityOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Descrição</label>
+                <Textarea
+                  value={editingInteraction.description}
+                  onChange={(e) => setEditingInteraction({ ...editingInteraction, description: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Recomendação</label>
+                <Textarea
+                  value={editingInteraction.recommendation}
+                  onChange={(e) => setEditingInteraction({ ...editingInteraction, recommendation: e.target.value })}
+                />
+              </div>
+              <Button
+                onClick={() => updateInteractionMutation.mutate({ id: editingInteraction.id, data: editingInteraction })}
+                disabled={updateInteractionMutation.isPending}
+                className="w-full"
+              >
+                {updateInteractionMutation.isPending ? "Salvando..." : "Atualizar Interação"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {editingContraindication && (
+        <Dialog open={!!editingContraindication} onOpenChange={() => setEditingContraindication(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Contraindicação</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Medicamento</label>
+                <Input
+                  value={editingContraindication.medicationName}
+                  onChange={(e) => setEditingContraindication({ ...editingContraindication, medicationName: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Contraindicação</label>
+                <Textarea
+                  value={editingContraindication.contraindication}
+                  onChange={(e) => setEditingContraindication({ ...editingContraindication, contraindication: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Gravidade</label>
+                <select
+                  className="w-full h-9 px-3 rounded-md border bg-background"
+                  value={editingContraindication.severity}
+                  onChange={(e) => setEditingContraindication({ ...editingContraindication, severity: e.target.value })}
+                >
+                  {severityOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Observações</label>
+                <Textarea
+                  value={editingContraindication.notes}
+                  onChange={(e) => setEditingContraindication({ ...editingContraindication, notes: e.target.value })}
+                />
+              </div>
+              <Button
+                onClick={() => updateContraindicationMutation.mutate({ id: editingContraindication.id, data: editingContraindication })}
+                disabled={updateContraindicationMutation.isPending}
+                className="w-full"
+              >
+                {updateContraindicationMutation.isPending ? "Salvando..." : "Atualizar Contraindicação"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

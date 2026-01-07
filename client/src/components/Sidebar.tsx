@@ -25,7 +25,8 @@ import {
   Palette,
   Bot,
   Crown,
-  RefreshCw
+  RefreshCw,
+  Pill
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { useState } from "react";
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { icon: FileText, label: "Prescrições", href: "/prescriptions" },
   { icon: ClipboardList, label: "Protocolos", href: "/protocols" },
   { icon: CheckSquare, label: "Condutas", href: "/checklists" },
+  { icon: Pill, label: "Interações", href: "/drug-interactions" },
   { icon: Brain, label: "Memorização", href: "/flashcards" },
   { icon: Stethoscope, label: "Passagem (SBAR)", href: "/handovers" },
   { icon: CalendarDays, label: "Plantões", href: "/shifts" },

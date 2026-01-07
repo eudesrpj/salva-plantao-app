@@ -830,6 +830,125 @@ export async function registerRoutes(
     res.json(prefs);
   });
 
+  // --- Drug Interactions (Admin configurable) ---
+  app.get("/api/drug-interactions", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getDrugInteractions();
+    res.json(items);
+  });
+
+  app.get("/api/drug-interactions/check", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const drug1 = req.query.drug1 as string;
+    const drug2 = req.query.drug2 as string;
+    if (!drug1 || !drug2) {
+      return res.status(400).json({ message: "Parâmetros drug1 e drug2 são obrigatórios" });
+    }
+    const interaction = await storage.checkDrugInteraction(drug1, drug2);
+    res.json({ hasInteraction: !!interaction, interaction: interaction || null });
+  });
+
+  app.post("/api/drug-interactions", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.createDrugInteraction(req.body);
+    res.status(201).json(item);
+  });
+
+  app.put("/api/drug-interactions/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.updateDrugInteraction(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/drug-interactions/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteDrugInteraction(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Medication Contraindications (Admin configurable) ---
+  app.get("/api/medication-contraindications", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const medicationName = req.query.medication as string | undefined;
+    const items = await storage.getMedicationContraindications(medicationName);
+    res.json(items);
+  });
+
+  app.post("/api/medication-contraindications", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.createMedicationContraindication(req.body);
+    res.status(201).json(item);
+  });
+
+  app.put("/api/medication-contraindications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.updateMedicationContraindication(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/medication-contraindications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteMedicationContraindication(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Prescription Favorites (User personalized copies) ---
+  app.get("/api/prescription-favorites", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getPrescriptionFavorites(getUserId(req));
+    res.json(items);
+  });
+
+  app.get("/api/prescription-favorites/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const item = await storage.getPrescriptionFavorite(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Favorito não encontrado" });
+    if (item.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    res.json(item);
+  });
+
+  // Import a shared prescription by token (public endpoint for logged-in users)
+  app.get("/api/prescription-favorites/import/:token", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const item = await storage.getPrescriptionFavoriteByToken(req.params.token);
+    if (!item) return res.status(404).json({ message: "Prescrição não encontrada ou token inválido" });
+    // Return the prescription data for import (without user info)
+    res.json({
+      title: item.title,
+      medication: item.medication,
+      dose: item.dose,
+      pharmaceuticalForm: item.pharmaceuticalForm,
+      interval: item.interval,
+      quantity: item.quantity,
+      duration: item.duration,
+      route: item.route,
+      timing: item.timing,
+      patientNotes: item.patientNotes,
+      orientations: item.orientations
+    });
+  });
+
+  app.post("/api/prescription-favorites", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const item = await storage.createPrescriptionFavorite({ ...req.body, userId: getUserId(req) });
+    res.status(201).json(item);
+  });
+
+  app.put("/api/prescription-favorites/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getPrescriptionFavorite(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Favorito não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    const item = await storage.updatePrescriptionFavorite(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  // Generate export token for sharing
+  app.post("/api/prescription-favorites/:id/share", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getPrescriptionFavorite(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Favorito não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    
+    // Generate a random token
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const item = await storage.updatePrescriptionFavorite(Number(req.params.id), { exportToken: token });
+    res.json({ token: item.exportToken });
+  });
+
+  app.delete("/api/prescription-favorites/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getPrescriptionFavorite(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Favorito não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    await storage.deletePrescriptionFavorite(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // --- Seed Data ---
   await seedDatabase();
 
