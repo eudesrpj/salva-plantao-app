@@ -309,7 +309,7 @@ export async function registerRoutes(
     res.json(items);
   });
 
-  app.post(api.favorites.add.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.favorites.add.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.favorites.add.input.parse(req.body);
       const item = await storage.addFavorite({ ...input, userId: getUserId(req) });
@@ -320,18 +320,18 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/favorites/:itemType/:itemId", isAuthenticated, checkActive, async (req, res) => {
+  app.delete("/api/favorites/:itemType/:itemId", isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.removeFavorite(getUserId(req), req.params.itemType, Number(req.params.itemId));
     res.status(204).send();
   });
 
   // --- Doctor Profile ---
-  app.get(api.doctorProfile.get.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.doctorProfile.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const item = await storage.getDoctorProfile(getUserId(req));
     res.json(item || null);
   });
 
-  app.post(api.doctorProfile.upsert.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.doctorProfile.upsert.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.doctorProfile.upsert.input.parse(req.body);
       const item = await storage.upsertDoctorProfile({ ...input, userId: getUserId(req) });
@@ -343,13 +343,13 @@ export async function registerRoutes(
   });
 
   // --- Interconsult Messages ---
-  app.get(api.interconsult.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.interconsult.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const channel = req.query.channel as string | undefined;
     const items = await storage.getInterconsultMessages(getUserId(req), channel);
     res.json(items);
   });
 
-  app.post(api.interconsult.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.interconsult.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.interconsult.create.input.parse(req.body);
       const item = await storage.createInterconsultMessage({ ...input, senderId: getUserId(req) });
@@ -361,12 +361,12 @@ export async function registerRoutes(
   });
 
   // --- Shifts ---
-  app.get(api.shifts.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.shifts.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getShifts(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.shifts.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.shifts.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.shifts.create.input.parse(req.body);
       const item = await storage.createShift({ ...input, userId: getUserId(req) });
@@ -377,7 +377,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.shifts.update.path, isAuthenticated, checkActive, async (req, res) => {
+  app.put(api.shifts.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.shifts.update.input.parse(req.body);
       const item = await storage.updateShift(Number(req.params.id), input);
@@ -388,23 +388,23 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.shifts.delete.path, isAuthenticated, checkActive, async (req, res) => {
+  app.delete(api.shifts.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deleteShift(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.get(api.shifts.stats.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.shifts.stats.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const stats = await storage.getShiftStats(getUserId(req));
     res.json(stats);
   });
 
   // --- Notes ---
-  app.get(api.notes.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.notes.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getNotes(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.notes.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.notes.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.notes.create.input.parse(req.body);
       const item = await storage.createNote({ ...input, userId: getUserId(req) });
@@ -415,7 +415,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.notes.update.path, isAuthenticated, checkActive, async (req, res) => {
+  app.put(api.notes.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.notes.update.input.parse(req.body);
       const item = await storage.updateNote(Number(req.params.id), input);
@@ -426,7 +426,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.notes.delete.path, isAuthenticated, checkActive, async (req, res) => {
+  app.delete(api.notes.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deleteNote(Number(req.params.id));
     res.status(204).send();
   });
@@ -508,12 +508,12 @@ export async function registerRoutes(
   });
 
   // --- Handovers ---
-  app.get(api.handovers.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.handovers.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getHandovers(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.handovers.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.handovers.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.handovers.create.input.parse(req.body);
       const item = await storage.createHandover({ ...input, userId: getUserId(req) });
@@ -524,7 +524,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.handovers.update.path, isAuthenticated, checkActive, async (req, res) => {
+  app.put(api.handovers.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.handovers.update.input.parse(req.body);
       const item = await storage.updateHandover(Number(req.params.id), input);
@@ -535,20 +535,20 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.handovers.delete.path, isAuthenticated, checkActive, async (req, res) => {
+  app.delete(api.handovers.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deleteHandover(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Goals ---
-  app.get(api.goals.get.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.goals.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const item = await storage.getGoal(getUserId(req), currentMonth);
     res.json(item || null);
   });
 
-  app.post(api.goals.set.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.goals.set.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.goals.set.input.parse(req.body);
       const item = await storage.setGoal({ ...input, userId: getUserId(req) });
@@ -621,7 +621,7 @@ export async function registerRoutes(
     res.json(items);
   });
 
-  app.post("/api/pathologies", isAuthenticated, checkActive, async (req, res) => {
+  app.post("/api/pathologies", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const { isPublic, isLocked, ...data } = req.body;
     const user = await authStorage.getUser(userId);
@@ -634,7 +634,7 @@ export async function registerRoutes(
     res.status(201).json(item);
   });
 
-  app.put("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+  app.put("/api/pathologies/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));
     if (!pathology) return res.status(404).json({ message: "Not found" });
@@ -654,7 +654,7 @@ export async function registerRoutes(
     res.json(item);
   });
 
-  app.delete("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+  app.delete("/api/pathologies/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));
     if (!pathology) return res.status(404).json({ message: "Not found" });
@@ -674,7 +674,7 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  app.post("/api/pathologies/:id/medications", isAuthenticated, checkActive, async (req, res) => {
+  app.post("/api/pathologies/:id/medications", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));
     if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
@@ -697,7 +697,7 @@ export async function registerRoutes(
     res.status(201).json(item);
   });
 
-  app.put("/api/pathology-medications/:id", isAuthenticated, checkActive, async (req, res) => {
+  app.put("/api/pathology-medications/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const medication = await storage.getPathologyMedicationById(Number(req.params.id));
     if (!medication) return res.status(404).json({ message: "Medicação não encontrada" });
@@ -720,7 +720,7 @@ export async function registerRoutes(
     res.json(item);
   });
 
-  app.delete("/api/pathology-medications/:id", isAuthenticated, checkActive, async (req, res) => {
+  app.delete("/api/pathology-medications/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const medication = await storage.getPathologyMedicationById(Number(req.params.id));
     if (!medication) return res.status(404).json({ message: "Medicação não encontrada" });
@@ -777,23 +777,23 @@ export async function registerRoutes(
   });
 
   // --- Patient History ---
-  app.get("/api/patient-history", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/patient-history", isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getPatientHistory(getUserId(req));
     res.json(items);
   });
 
-  app.get("/api/patient-history/search", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/patient-history/search", isAuthenticated, checkNotBlocked, async (req, res) => {
     const patientName = req.query.name as string || "";
     const items = await storage.searchPatientHistory(getUserId(req), patientName);
     res.json(items);
   });
 
-  app.post("/api/patient-history", isAuthenticated, checkActive, async (req, res) => {
+  app.post("/api/patient-history", isAuthenticated, checkNotBlocked, async (req, res) => {
     const item = await storage.createPatientHistory({ ...req.body, userId: getUserId(req) });
     res.status(201).json(item);
   });
 
-  app.delete("/api/patient-history/:id", isAuthenticated, checkActive, async (req, res) => {
+  app.delete("/api/patient-history/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deletePatientHistory(Number(req.params.id));
     res.status(204).send();
   });
