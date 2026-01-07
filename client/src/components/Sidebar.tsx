@@ -17,21 +17,26 @@ import {
   Stethoscope,
   Activity,
   DollarSign,
-  Shield
+  Shield,
+  ClipboardList,
+  Brain,
+  User
 } from "lucide-react";
 import { useState } from "react";
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: FileText, label: "Prescrições", href: "/prescriptions" },
+  { icon: ClipboardList, label: "Protocolos", href: "/protocols" },
   { icon: CheckSquare, label: "Condutas", href: "/checklists" },
+  { icon: Brain, label: "Memorização", href: "/flashcards" },
   { icon: Stethoscope, label: "Passagem (SBAR)", href: "/handovers" },
   { icon: CalendarDays, label: "Plantões", href: "/shifts" },
   { icon: DollarSign, label: "Financeiro", href: "/finance" },
-  { icon: Activity, label: "Interconsulta IA", href: "/ai-chat" },
-  { icon: MessageSquareText, label: "Chat", href: "/chat" }, 
+  { icon: Activity, label: "Chat IA", href: "/ai-chat" },
   { icon: Library, label: "Biblioteca", href: "/library" },
   { icon: StickyNote, label: "Anotações", href: "/notes" },
+  { icon: User, label: "Meu Perfil", href: "/profile" },
 ];
 
 function NavContent({ onClose }: { onClose?: () => void }) {

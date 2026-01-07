@@ -12,13 +12,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Auth & Integrations
   await setupAuth(app);
   registerAuthRoutes(app);
   registerChatRoutes(app);
   registerImageRoutes(app);
 
-  // Helper to get userId and check roles
   const getUserId = (req: any) => req.user?.claims?.sub;
   
   const checkAdmin = async (req: any, res: any, next: any) => {
@@ -57,9 +55,47 @@ export async function registerRoutes(
     res.json(user);
   });
 
+  // --- Admin Settings ---
+  app.get(api.adminSettings.list.path, isAuthenticated, checkAdmin, async (req, res) => {
+    const items = await storage.getAllAdminSettings();
+    res.json(items);
+  });
+
+  app.get("/api/admin/settings/:key", isAuthenticated, async (req, res) => {
+    const item = await storage.getAdminSetting(req.params.key);
+    res.json(item || null);
+  });
+
+  app.post(api.adminSettings.set.path, isAuthenticated, checkAdmin, async (req, res) => {
+    const { key, value } = req.body;
+    const item = await storage.setAdminSetting(key, value);
+    res.json(item);
+  });
+
+  // Public payment settings (for PaymentRequired page)
+  app.get("/api/public/payment-settings", async (req, res) => {
+    const pixKey = await storage.getAdminSetting("pix_key");
+    const whatsapp = await storage.getAdminSetting("whatsapp_number");
+    const instructions = await storage.getAdminSetting("payment_instructions");
+    const price = await storage.getAdminSetting("subscription_price");
+    res.json({
+      pixKey: pixKey?.value || "00.000.000/0001-00",
+      whatsapp: whatsapp?.value || "5500000000000",
+      instructions: instructions?.value || "Após o pagamento, envie o comprovante para liberação.",
+      price: price?.value || "29,90"
+    });
+  });
+
   // --- Prescriptions ---
   app.get(api.prescriptions.list.path, isAuthenticated, checkActive, async (req, res) => {
-    const items = await storage.getPrescriptions(getUserId(req));
+    const ageGroup = req.query.ageGroup as string | undefined;
+    const items = await storage.getPrescriptions(getUserId(req), ageGroup);
+    res.json(items);
+  });
+
+  app.get("/api/prescriptions/search", isAuthenticated, checkActive, async (req, res) => {
+    const query = req.query.q as string || "";
+    const items = await storage.searchPrescriptions(query, getUserId(req));
     res.json(items);
   });
 
@@ -74,14 +110,12 @@ export async function registerRoutes(
       const input = api.prescriptions.create.input.parse(req.body);
       const userId = getUserId(req);
       
-      // Admin check for public items
-      if (input.isPublic) {
+      if (input.isPublic || input.isLocked) {
          const user = await authStorage.getUser(userId);
-         if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create public prescriptions" });
+         if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create official prescriptions" });
       }
 
-      // Enforce userId
-      const item = await storage.createPrescription({ ...input, userId: getUserId(req) });
+      const item = await storage.createPrescription({ ...input, userId });
       res.status(201).json(item);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json(err);
@@ -92,7 +126,6 @@ export async function registerRoutes(
   app.put(api.prescriptions.update.path, isAuthenticated, checkActive, async (req, res) => {
     try {
       const input = api.prescriptions.update.input.parse(req.body);
-      // TODO: Add ownership check or admin check
       const item = await storage.updatePrescription(Number(req.params.id), input);
       res.json(item);
     } catch (err) {
@@ -102,14 +135,73 @@ export async function registerRoutes(
   });
 
   app.delete(api.prescriptions.delete.path, isAuthenticated, checkActive, async (req, res) => {
-    // TODO: Add ownership check or admin check
     await storage.deletePrescription(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Protocols ---
+  app.get(api.protocols.list.path, isAuthenticated, checkActive, async (req, res) => {
+    const ageGroup = req.query.ageGroup as string | undefined;
+    const items = await storage.getProtocols(getUserId(req), ageGroup);
+    res.json(items);
+  });
+
+  app.get("/api/protocols/search", isAuthenticated, checkActive, async (req, res) => {
+    const query = req.query.q as string || "";
+    const items = await storage.searchProtocols(query, getUserId(req));
+    res.json(items);
+  });
+
+  app.get(api.protocols.get.path, isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.getProtocol(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Not found" });
+    res.json(item);
+  });
+
+  app.post(api.protocols.create.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.protocols.create.input.parse(req.body);
+      const userId = getUserId(req);
+      
+      if (input.isPublic || input.isLocked) {
+         const user = await authStorage.getUser(userId);
+         if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create official protocols" });
+      }
+
+      const item = await storage.createProtocol({ ...input, userId });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+  app.put(api.protocols.update.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.protocols.update.input.parse(req.body);
+      const item = await storage.updateProtocol(Number(req.params.id), input);
+      res.json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
+  app.delete(api.protocols.delete.path, isAuthenticated, checkActive, async (req, res) => {
+    await storage.deleteProtocol(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Checklists ---
   app.get(api.checklists.list.path, isAuthenticated, checkActive, async (req, res) => {
-    const items = await storage.getChecklists(getUserId(req));
+    const ageGroup = req.query.ageGroup as string | undefined;
+    const items = await storage.getChecklists(getUserId(req), ageGroup);
+    res.json(items);
+  });
+
+  app.get("/api/checklists/search", isAuthenticated, checkActive, async (req, res) => {
+    const query = req.query.q as string || "";
+    const items = await storage.searchChecklists(query, getUserId(req));
     res.json(items);
   });
 
@@ -124,13 +216,12 @@ export async function registerRoutes(
       const input = api.checklists.create.input.parse(req.body);
       const userId = getUserId(req);
 
-      // Admin check for public items
-      if (input.isPublic) {
+      if (input.isPublic || input.isLocked) {
          const user = await authStorage.getUser(userId);
-         if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create public checklists" });
+         if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create official checklists" });
       }
 
-      const item = await storage.createChecklist({ ...input, userId: getUserId(req) });
+      const item = await storage.createChecklist({ ...input, userId });
       res.status(201).json(item);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json(err);
@@ -152,6 +243,109 @@ export async function registerRoutes(
   app.delete(api.checklists.delete.path, isAuthenticated, checkActive, async (req, res) => {
     await storage.deleteChecklist(Number(req.params.id));
     res.status(204).send();
+  });
+
+  // --- Flashcards ---
+  app.get(api.flashcards.list.path, isAuthenticated, checkActive, async (req, res) => {
+    const items = await storage.getFlashcards(getUserId(req));
+    res.json(items);
+  });
+
+  app.get(api.flashcards.get.path, isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.getFlashcard(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Not found" });
+    res.json(item);
+  });
+
+  app.post(api.flashcards.create.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.flashcards.create.input.parse(req.body);
+      const userId = getUserId(req);
+      
+      if (input.isPublic) {
+         const user = await authStorage.getUser(userId);
+         if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create public flashcards" });
+      }
+
+      const item = await storage.createFlashcard({ ...input, userId });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+  app.put(api.flashcards.update.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.flashcards.update.input.parse(req.body);
+      const item = await storage.updateFlashcard(Number(req.params.id), input);
+      res.json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
+  app.delete(api.flashcards.delete.path, isAuthenticated, checkActive, async (req, res) => {
+    await storage.deleteFlashcard(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Favorites ---
+  app.get(api.favorites.list.path, isAuthenticated, checkActive, async (req, res) => {
+    const items = await storage.getFavorites(getUserId(req));
+    res.json(items);
+  });
+
+  app.post(api.favorites.add.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.favorites.add.input.parse(req.body);
+      const item = await storage.addFavorite({ ...input, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+  app.delete("/api/favorites/:itemType/:itemId", isAuthenticated, checkActive, async (req, res) => {
+    await storage.removeFavorite(getUserId(req), req.params.itemType, Number(req.params.itemId));
+    res.status(204).send();
+  });
+
+  // --- Doctor Profile ---
+  app.get(api.doctorProfile.get.path, isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.getDoctorProfile(getUserId(req));
+    res.json(item || null);
+  });
+
+  app.post(api.doctorProfile.upsert.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.doctorProfile.upsert.input.parse(req.body);
+      const item = await storage.upsertDoctorProfile({ ...input, userId: getUserId(req) });
+      res.json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+  // --- Interconsult Messages ---
+  app.get(api.interconsult.list.path, isAuthenticated, checkActive, async (req, res) => {
+    const channel = req.query.channel as string | undefined;
+    const items = await storage.getInterconsultMessages(getUserId(req), channel);
+    res.json(items);
+  });
+
+  app.post(api.interconsult.create.path, isAuthenticated, checkActive, async (req, res) => {
+    try {
+      const input = api.interconsult.create.input.parse(req.body);
+      const item = await storage.createInterconsultMessage({ ...input, senderId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
   });
 
   // --- Shifts ---
@@ -259,7 +453,7 @@ export async function registerRoutes(
     }
   });
 
-  // --- Handovers (Passagem de Plantão) ---
+  // --- Handovers ---
   app.get(api.handovers.list.path, isAuthenticated, checkActive, async (req, res) => {
     const items = await storage.getHandovers(getUserId(req));
     res.json(items);
@@ -311,7 +505,6 @@ export async function registerRoutes(
     }
   });
 
-
   // --- Seed Data ---
   await seedDatabase();
 
@@ -323,16 +516,44 @@ async function seedDatabase() {
   if (existing.length === 0) {
     await storage.createPrescription({
       title: "Dipirona",
+      medication: "Dipirona",
+      dose: "1g",
+      interval: "6/6h",
+      quantity: "1 ampola",
+      duration: "Se dor ou febre",
       content: "Dipirona 1g, IV, 6/6h, se dor ou febre.",
       category: "Analgesia",
+      ageGroup: "adulto",
       isPublic: true,
+      isLocked: true,
       userId: null,
     });
     await storage.createPrescription({
       title: "Ceftriaxona",
+      medication: "Ceftriaxona",
+      dose: "1g",
+      interval: "12/12h",
+      quantity: "1 frasco-ampola",
+      duration: "7 dias",
       content: "Ceftriaxona 1g, IV, 12/12h.",
       category: "Antibióticos",
+      ageGroup: "adulto",
       isPublic: true,
+      isLocked: true,
+      userId: null,
+    });
+    await storage.createPrescription({
+      title: "Amoxicilina Pediátrica",
+      medication: "Amoxicilina suspensão",
+      dose: "50mg/kg/dia",
+      interval: "8/8h",
+      quantity: "1 frasco",
+      duration: "7 dias",
+      content: "Amoxicilina 50mg/kg/dia, VO, 8/8h por 7 dias.",
+      category: "Antibióticos",
+      ageGroup: "pediatrico",
+      isPublic: true,
+      isLocked: true,
       userId: null,
     });
   }
@@ -348,5 +569,15 @@ async function seedDatabase() {
       description: "Síndrome Coronariana Aguda",
       order: 1
     });
+  }
+
+  // Seed default admin settings
+  const pixSetting = await storage.getAdminSetting("pix_key");
+  if (!pixSetting) {
+    await storage.setAdminSetting("pix_key", "00.000.000/0001-00");
+    await storage.setAdminSetting("whatsapp_number", "5500000000000");
+    await storage.setAdminSetting("payment_instructions", "Após o pagamento, envie o comprovante via WhatsApp para liberação imediata.");
+    await storage.setAdminSetting("subscription_price", "29,90");
+    await storage.setAdminSetting("ai_prompt", "Você é um assistente médico especializado. Responda de forma clara e objetiva, sempre recomendando buscar um profissional de saúde para diagnósticos e tratamentos.");
   }
 }

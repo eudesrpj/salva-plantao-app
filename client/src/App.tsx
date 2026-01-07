@@ -12,6 +12,8 @@ import { FloatingCalculator } from "@/components/FloatingCalculator";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Prescriptions from "@/pages/Prescriptions";
+import Protocols from "@/pages/Protocols";
+import Flashcards from "@/pages/Flashcards";
 import Checklists from "@/pages/Checklists";
 import Shifts from "@/pages/Shifts";
 import Notes from "@/pages/Notes";
@@ -19,6 +21,7 @@ import Handovers from "@/pages/Handovers";
 import Library from "@/pages/Library";
 import Finance from "@/pages/Finance";
 import AIChat from "@/pages/AIChat";
+import Profile from "@/pages/Profile";
 import PaymentRequired from "@/pages/PaymentRequired";
 import Admin from "@/pages/Admin";
 
@@ -87,6 +90,14 @@ function Router() {
         <ProtectedRoute component={Prescriptions} />
       </Route>
 
+      <Route path="/protocols">
+        <ProtectedRoute component={Protocols} />
+      </Route>
+
+      <Route path="/flashcards">
+        <ProtectedRoute component={Flashcards} />
+      </Route>
+
       <Route path="/checklists">
         <ProtectedRoute component={Checklists} />
       </Route>
@@ -113,6 +124,10 @@ function Router() {
 
       <Route path="/ai-chat">
         <ProtectedRoute component={AIChat} />
+      </Route>
+
+      <Route path="/profile">
+        <ProtectedRoute component={Profile} />
       </Route>
 
       {/* Redirect chat alias to ai-chat for now as we merged functionality or placeholder */}

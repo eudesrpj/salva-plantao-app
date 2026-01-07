@@ -1,126 +1,326 @@
 import { useState } from "react";
-import { usePrescriptions, useCreatePrescription, useDeletePrescription } from "@/hooks/use-resources";
-import { useAuth } from "@/hooks/use-auth";
-import { Card } from "@/components/ui/card";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Plus, Trash2, FileText, Copy, Check } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { motion } from "framer-motion";
+import { useAuth } from "@/hooks/use-auth";
+import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User } from "lucide-react";
+import type { Prescription } from "@shared/schema";
+
+const INTERVALS = ["6/6h", "8/8h", "12/12h", "1x/dia", "2x/dia", "3x/dia", "Dose única", "SOS"];
+const DURATIONS = ["3 dias", "5 dias", "7 dias", "10 dias", "14 dias", "Uso contínuo", "Uso indeterminado"];
+const CATEGORIES = ["Analgesia", "Antibióticos", "Anti-inflamatórios", "Antieméticos", "Cardiovascular", "Neurologia", "Gastro", "Outros"];
 
 export default function Prescriptions() {
-  const { data: prescriptions, isLoading } = usePrescriptions();
-  const { mutate: create } = useCreatePrescription();
-  const { mutate: remove } = useDeletePrescription();
+  const [ageGroup, setAgeGroup] = useState<"adulto" | "pediatrico">("adulto");
+  const [searchQuery, setSearchQuery] = useState("");
   const { user } = useAuth();
-  const { toast } = useToast();
-  
-  const [search, setSearch] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newContent, setNewContent] = useState("");
+  const isAdmin = user?.role === "admin";
+
+  const { data: prescriptions, isLoading } = useQuery<Prescription[]>({
+    queryKey: ["/api/prescriptions", ageGroup],
+    queryFn: async () => {
+      const res = await fetch(`/api/prescriptions?ageGroup=${ageGroup}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
 
   const filtered = prescriptions?.filter(p => 
-    p.title.toLowerCase().includes(search.toLowerCase()) || 
-    p.content.toLowerCase().includes(search.toLowerCase())
+    !searchQuery || 
+    p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.medication?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.category?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreate = () => {
-    create({ title: newTitle, content: newContent, isPublic: false }); // User creates private by default
-    setIsDialogOpen(false);
-    setNewTitle("");
-    setNewContent("");
-    toast({ title: "Sucesso", description: "Prescrição salva com sucesso." });
-  };
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copiado!", description: "Texto copiado para a área de transferência." });
-  };
+  const grouped = filtered?.reduce((acc, p) => {
+    const cat = p.category || "Outros";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(p);
+    return acc;
+  }, {} as Record<string, Prescription[]>);
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto min-h-screen">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold font-display text-slate-900">Prescrições</h1>
-          <p className="text-slate-500">Modelos prontos para agilizar seu atendimento.</p>
+          <p className="text-slate-500">Modelos prontos para uso rápido no plantão.</p>
         </div>
-        
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-xl shadow-lg shadow-primary/20">
-              <Plus className="mr-2 h-4 w-4" /> Nova Prescrição
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg rounded-2xl">
-            <DialogHeader>
-              <DialogTitle>Criar Nova Prescrição</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Título</label>
-                <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Ex: Pneumonia Adquirida na Comunidade" className="rounded-xl" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Conteúdo</label>
-                <Textarea value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="Digite a prescrição completa..." className="h-48 rounded-xl" />
-              </div>
-              <Button onClick={handleCreate} className="w-full rounded-xl h-12">Salvar Prescrição</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Tabs value={ageGroup} onValueChange={(v) => setAgeGroup(v as "adulto" | "pediatrico")} className="w-auto">
+            <TabsList className="grid grid-cols-2 w-[200px]">
+              <TabsTrigger value="adulto" className="gap-1" data-testid="tab-adulto">
+                <User className="h-4 w-4" /> Adulto
+              </TabsTrigger>
+              <TabsTrigger value="pediatrico" className="gap-1" data-testid="tab-pediatrico">
+                <Baby className="h-4 w-4" /> Pediátrico
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <PrescriptionDialog ageGroup={ageGroup} isAdmin={isAdmin} />
+        </div>
+      </header>
 
-      <div className="relative mb-8">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-        <Input 
-          className="pl-12 h-14 rounded-2xl border-slate-200 bg-white shadow-sm text-lg" 
-          placeholder="Buscar por doença, medicamento..." 
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <Input
+          placeholder="Buscar prescrição..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+          data-testid="input-search-prescriptions"
         />
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {[1,2,3].map(i => <div key={i} className="h-48 bg-slate-100 animate-pulse rounded-2xl" />)}
+        <div className="flex justify-center py-12">
+          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered?.map((item, i) => (
-            <motion.div 
-              key={item.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <Card className="p-6 rounded-2xl border-slate-100 hover:border-primary/50 hover:shadow-lg transition-all group h-full flex flex-col">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-                    <FileText className="h-5 w-5" />
-                  </div>
-                  {item.userId === user?.id && (
-                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-500 -mt-2 -mr-2" onClick={() => remove(item.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                
-                <h3 className="font-bold text-lg text-slate-800 mb-2">{item.title}</h3>
-                <p className="text-slate-500 text-sm line-clamp-4 flex-1 whitespace-pre-line mb-4 font-mono bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
-                  {item.content}
-                </p>
-
-                <Button variant="outline" className="w-full rounded-xl border-slate-200 group-hover:border-primary group-hover:text-primary transition-colors" onClick={() => handleCopy(item.content)}>
-                  <Copy className="mr-2 h-4 w-4" /> Copiar Texto
-                </Button>
-              </Card>
-            </motion.div>
+        <div className="space-y-8">
+          {grouped && Object.entries(grouped).map(([category, items]) => (
+            <div key={category}>
+              <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                {category}
+              </h2>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {items.map((prescription) => (
+                  <PrescriptionCard key={prescription.id} prescription={prescription} isAdmin={isAdmin} userId={user?.id} />
+                ))}
+              </div>
+            </div>
           ))}
+
+          {(!grouped || Object.keys(grouped).length === 0) && (
+            <div className="text-center py-12 text-slate-400">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhuma prescrição encontrada.</p>
+            </div>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function PrescriptionCard({ prescription, isAdmin, userId }: { prescription: Prescription; isAdmin: boolean; userId?: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/prescriptions/${prescription.id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescriptions"] });
+      toast({ title: "Removido!" });
+    },
+  });
+
+  const copyToClipboard = () => {
+    const text = prescription.medication 
+      ? `${prescription.medication} ${prescription.dose}, ${prescription.interval}, por ${prescription.duration}${prescription.patientNotes ? `\nObs: ${prescription.patientNotes}` : ""}`
+      : prescription.content || prescription.title;
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado!", description: "Prescrição copiada para a área de transferência." });
+  };
+
+  const canDelete = isAdmin || (prescription.userId === userId && !prescription.isLocked);
+
+  return (
+    <Card className="p-4 hover:shadow-md transition-shadow group" data-testid={`card-prescription-${prescription.id}`}>
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-2">
+          <h3 className="font-bold text-slate-900">{prescription.title}</h3>
+          {prescription.isLocked && <Lock className="h-3 w-3 text-slate-400" />}
+        </div>
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button size="icon" variant="ghost" onClick={copyToClipboard} className="h-7 w-7">
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+          {canDelete && (
+            <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate()} className="h-7 w-7 text-red-400">
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+      
+      {prescription.medication && (
+        <div className="space-y-1 text-sm text-slate-600 mb-3">
+          <p><strong>Medicação:</strong> {prescription.medication}</p>
+          {prescription.dose && <p><strong>Dose:</strong> {prescription.dose}</p>}
+          {prescription.interval && <p><strong>Intervalo:</strong> {prescription.interval}</p>}
+          {prescription.duration && <p><strong>Duração:</strong> {prescription.duration}</p>}
+        </div>
+      )}
+
+      {!prescription.medication && prescription.content && (
+        <p className="text-sm text-slate-600 mb-3 line-clamp-3">{prescription.content}</p>
+      )}
+
+      <div className="flex flex-wrap gap-1">
+        {prescription.isPublic && <Badge variant="secondary" className="text-xs">Oficial</Badge>}
+        {prescription.ageGroup === "pediatrico" && <Badge className="text-xs bg-pink-100 text-pink-700">Pediátrico</Badge>}
+        {prescription.tags?.map(tag => (
+          <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: boolean }) {
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch("/api/prescriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescriptions"] });
+      toast({ title: "Criado!", description: "Prescrição salva com sucesso." });
+      setOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao criar prescrição.", variant: "destructive" });
+    }
+  });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    const data = {
+      title: formData.get("title") as string,
+      medication: formData.get("medication") as string,
+      dose: formData.get("dose") as string,
+      interval: formData.get("interval") as string,
+      quantity: formData.get("quantity") as string,
+      duration: formData.get("duration") as string,
+      patientNotes: formData.get("patientNotes") as string,
+      category: formData.get("category") as string,
+      ageGroup,
+      content: `${formData.get("medication")} ${formData.get("dose")}, ${formData.get("interval")}, por ${formData.get("duration")}`,
+      isPublic: isAdmin && formData.get("isPublic") === "on",
+      isLocked: isAdmin && formData.get("isLocked") === "on",
+    };
+
+    createMutation.mutate(data);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="shadow-lg shadow-primary/25" data-testid="button-new-prescription">
+          <Plus className="mr-2 h-4 w-4" /> Nova Prescrição
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Nova Prescrição ({ageGroup === "adulto" ? "Adulto" : "Pediátrico"})</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Título / Nome</label>
+            <Input name="title" required placeholder="Ex: Dipirona para dor" data-testid="input-title" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Medicação</label>
+              <Input name="medication" placeholder="Ex: Dipirona" data-testid="input-medication" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Dose</label>
+              <Input name="dose" placeholder="Ex: 1g, 500mg" data-testid="input-dose" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Intervalo</label>
+              <Select name="interval" defaultValue="6/6h">
+                <SelectTrigger data-testid="select-interval">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVALS.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Quantidade</label>
+              <Input name="quantity" placeholder="Ex: 20 comprimidos" data-testid="input-quantity" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Duração</label>
+              <Select name="duration" defaultValue="7 dias">
+                <SelectTrigger data-testid="select-duration">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Categoria</label>
+              <Select name="category" defaultValue="Outros">
+                <SelectTrigger data-testid="select-category">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Observações do Paciente</label>
+            <Textarea name="patientNotes" placeholder="Instruções adicionais..." rows={2} data-testid="textarea-notes" />
+          </div>
+
+          {isAdmin && (
+            <div className="flex gap-6 pt-2 border-t">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="isPublic" className="rounded" />
+                <span>Modelo Oficial (público)</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="isLocked" className="rounded" />
+                <span>Bloquear edição</span>
+              </label>
+            </div>
+          )}
+
+          <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit">
+            {createMutation.isPending ? "Salvando..." : "Salvar Prescrição"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

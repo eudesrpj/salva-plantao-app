@@ -1,7 +1,6 @@
 import { pgTable, text, serial, integer, boolean, timestamp, jsonb, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { relations } from "drizzle-orm";
 
 // Re-export auth and chat models
 export * from "./models/auth";
@@ -11,14 +10,25 @@ import { users } from "./models/auth";
 
 // --- App Specific Tables ---
 
-// Prescriptions
+// Prescriptions (Updated with structured fields)
 export const prescriptions = pgTable("prescriptions", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  content: text("content").notNull(), // JSON or structured text
+  content: text("content"), // Legacy field for backwards compatibility
+  medication: text("medication"),
+  dose: text("dose"),
+  interval: text("interval"), // 6/6h, 8/8h, 12/12h, 1x/dia
+  quantity: text("quantity"), // comprimidos, gotas, ml, frascos
+  duration: text("duration"), // 3, 5, 7, 10 dias, uso indeterminado
+  patientNotes: text("patient_notes"), // Observações do paciente
+  ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
   category: text("category"),
-  isPublic: boolean("is_public").default(false), // Admin created vs User created? User prescriptions might be saved ones.
-  userId: text("user_id").references(() => users.id), // Nullable if global/admin
+  specialty: text("specialty"), // Especialidade médica
+  tags: text("tags").array(),
+  isPublic: boolean("is_public").default(false),
+  isLocked: boolean("is_locked").default(false), // Bloquear edição (modelos oficiais)
+  isFavorite: boolean("is_favorite").default(false),
+  userId: text("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -26,13 +36,39 @@ export const insertPrescriptionSchema = createInsertSchema(prescriptions).omit({
 export type Prescription = typeof prescriptions.$inferSelect;
 export type InsertPrescription = z.infer<typeof insertPrescriptionSchema>;
 
-// Checklists / Conducts
+// Protocols
+export const protocols = pgTable("protocols", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  content: jsonb("content").notNull(), // Steps, criteria, flowchart data
+  description: text("description"),
+  ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
+  specialty: text("specialty"), // Cardiologia, Pediatria, etc.
+  category: text("category"), // urgência, emergência, ambulatório
+  tags: text("tags").array(),
+  isPublic: boolean("is_public").default(false),
+  isLocked: boolean("is_locked").default(false),
+  userId: text("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertProtocolSchema = createInsertSchema(protocols).omit({ id: true, createdAt: true, updatedAt: true });
+export type Protocol = typeof protocols.$inferSelect;
+export type InsertProtocol = z.infer<typeof insertProtocolSchema>;
+
+// Checklists / Conducts (Updated)
 export const checklists = pgTable("checklists", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  content: jsonb("content").notNull(), // Structured items: { items: [], redFlags: [], exams: [] }
+  content: jsonb("content").notNull(), // { steps: [], items: [], redFlags: [], exams: [] }
+  description: text("description"),
+  ageGroup: text("age_group").default("adulto"),
   category: text("category"),
+  specialty: text("specialty"),
+  tags: text("tags").array(),
   isPublic: boolean("is_public").default(false),
+  isLocked: boolean("is_locked").default(false),
   userId: text("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -40,6 +76,95 @@ export const checklists = pgTable("checklists", {
 export const insertChecklistSchema = createInsertSchema(checklists).omit({ id: true, createdAt: true });
 export type Checklist = typeof checklists.$inferSelect;
 export type InsertChecklist = z.infer<typeof insertChecklistSchema>;
+
+// Memorization / Flashcards
+export const flashcards = pgTable("flashcards", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  type: text("type").notNull(), // resumo, mnemonico, dica, checkpoint
+  front: text("front").notNull(), // Question or term
+  back: text("back").notNull(), // Answer or explanation
+  category: text("category"),
+  specialty: text("specialty"),
+  tags: text("tags").array(),
+  isPublic: boolean("is_public").default(false),
+  userId: text("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFlashcardSchema = createInsertSchema(flashcards).omit({ id: true, createdAt: true });
+export type Flashcard = typeof flashcards.$inferSelect;
+export type InsertFlashcard = z.infer<typeof insertFlashcardSchema>;
+
+// User Favorites (junction table)
+export const favorites = pgTable("favorites", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  itemType: text("item_type").notNull(), // prescription, checklist, protocol, flashcard
+  itemId: integer("item_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFavoriteSchema = createInsertSchema(favorites).omit({ id: true, createdAt: true });
+export type Favorite = typeof favorites.$inferSelect;
+export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
+
+// Admin Settings (Payment, AI Prompts, etc.)
+export const adminSettings = pgTable("admin_settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAdminSettingSchema = createInsertSchema(adminSettings).omit({ id: true, updatedAt: true });
+export type AdminSetting = typeof adminSettings.$inferSelect;
+export type InsertAdminSetting = z.infer<typeof insertAdminSettingSchema>;
+
+// Doctor Profile (Stamp/Signature)
+export const doctorProfiles = pgTable("doctor_profiles", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id).unique(),
+  crm: text("crm"),
+  crmState: text("crm_state"),
+  specialty: text("specialty"),
+  stampText: text("stamp_text"), // Custom stamp text
+  signatureUrl: text("signature_url"), // Digital signature image
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDoctorProfileSchema = createInsertSchema(doctorProfiles).omit({ id: true, updatedAt: true });
+export type DoctorProfile = typeof doctorProfiles.$inferSelect;
+export type InsertDoctorProfile = z.infer<typeof insertDoctorProfileSchema>;
+
+// Interconsult Messages (User-to-User and User-to-Admin)
+export const interconsultMessages = pgTable("interconsult_messages", {
+  id: serial("id").primaryKey(),
+  senderId: text("sender_id").notNull().references(() => users.id),
+  receiverId: text("receiver_id").references(() => users.id), // Null = Admin support
+  channel: text("channel").notNull(), // interconsult, admin_support
+  message: text("message").notNull(),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertInterconsultMessageSchema = createInsertSchema(interconsultMessages).omit({ id: true, createdAt: true });
+export type InterconsultMessage = typeof interconsultMessages.$inferSelect;
+export type InsertInterconsultMessage = z.infer<typeof insertInterconsultMessageSchema>;
+
+// Usage Statistics (for Admin Dashboard)
+export const usageStats = pgTable("usage_stats", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  action: text("action").notNull(), // view_prescription, create_prescription, use_ai, etc.
+  itemType: text("item_type"),
+  itemId: integer("item_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUsageStatSchema = createInsertSchema(usageStats).omit({ id: true, createdAt: true });
+export type UsageStat = typeof usageStats.$inferSelect;
+export type InsertUsageStat = z.infer<typeof insertUsageStatSchema>;
 
 // Shifts (Plantões)
 export const shifts = pgTable("shifts", {
@@ -80,7 +205,7 @@ export type InsertNote = z.infer<typeof insertNoteSchema>;
 export const libraryCategories = pgTable("library_categories", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  parentId: integer("parent_id"), // For subcategories
+  parentId: integer("parent_id"),
   order: integer("order").default(0),
 });
 
@@ -107,8 +232,8 @@ export type InsertLibraryItem = z.infer<typeof insertLibraryItemSchema>;
 export const shiftChecklists = pgTable("shift_checklists", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  items: jsonb("items").notNull(), // Array of { label: string, checked: boolean }
-  type: text("type").notNull(), // 'entry' or 'exit'
+  items: jsonb("items").notNull(),
+  type: text("type").notNull(),
   isDefault: boolean("is_default").default(false),
 });
 
@@ -129,7 +254,7 @@ export const handovers = pgTable("handovers", {
   sbarRecommendation: text("sbar_recommendation"),
   ward: text("ward"),
   bed: text("bed"),
-  status: text("status").default("active"), // active, archived
+  status: text("status").default("active"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -141,7 +266,7 @@ export type InsertHandover = z.infer<typeof insertHandoverSchema>;
 export const goals = pgTable("goals", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
-  month: text("month").notNull(), // "2023-10"
+  month: text("month").notNull(),
   targetAmount: decimal("target_amount", { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -155,8 +280,14 @@ export type InsertGoal = z.infer<typeof insertGoalSchema>;
 export type CreatePrescriptionRequest = InsertPrescription;
 export type UpdatePrescriptionRequest = Partial<InsertPrescription>;
 
+export type CreateProtocolRequest = InsertProtocol;
+export type UpdateProtocolRequest = Partial<InsertProtocol>;
+
 export type CreateChecklistRequest = InsertChecklist;
 export type UpdateChecklistRequest = Partial<InsertChecklist>;
+
+export type CreateFlashcardRequest = InsertFlashcard;
+export type UpdateFlashcardRequest = Partial<InsertFlashcard>;
 
 export type CreateShiftRequest = InsertShift;
 export type UpdateShiftRequest = Partial<InsertShift>;
@@ -175,3 +306,6 @@ export type UpdateHandoverRequest = Partial<InsertHandover>;
 
 export type CreateGoalRequest = InsertGoal;
 export type UpdateGoalRequest = Partial<InsertGoal>;
+
+export type CreateDoctorProfileRequest = InsertDoctorProfile;
+export type UpdateDoctorProfileRequest = Partial<InsertDoctorProfile>;

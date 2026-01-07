@@ -1,30 +1,103 @@
 import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Send, Bot, User, Loader2, Users, Headset, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { api } from "@shared/routes";
 
 interface Message {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
+  timestamp?: Date;
 }
 
+type Channel = "ai" | "interconsult" | "admin_support";
+
+const CHANNEL_CONFIG = {
+  ai: {
+    icon: Bot,
+    title: "Assistente IA",
+    subtitle: "Tire dúvidas clínicas com IA médica.",
+    color: "purple",
+    placeholder: "Digite seu caso clínico ou dúvida...",
+  },
+  interconsult: {
+    icon: Users,
+    title: "Interconsulta",
+    subtitle: "Discuta casos com outros médicos.",
+    color: "blue",
+    placeholder: "Descreva o caso para interconsulta...",
+  },
+  admin_support: {
+    icon: Headset,
+    title: "Suporte Admin",
+    subtitle: "Entre em contato com o suporte.",
+    color: "amber",
+    placeholder: "Descreva sua dúvida ou problema...",
+  },
+};
+
 export default function AIChat() {
+  const [channel, setChannel] = useState<Channel>("ai");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  // Auto scroll
+  const config = CHANNEL_CONFIG[channel];
+  const Icon = config.icon;
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    setMessages([]);
+  }, [channel]);
+
+  const { data: interconsultMessages } = useQuery({
+    queryKey: ["/api/interconsult", channel],
+    queryFn: async () => {
+      const res = await fetch(`/api/interconsult?channel=${channel}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: channel !== "ai",
+  });
+
+  useEffect(() => {
+    if (interconsultMessages && channel !== "ai") {
+      const formatted = interconsultMessages.map((m: any) => ({
+        role: m.senderId === user?.id ? "user" : "assistant",
+        content: m.message,
+        timestamp: new Date(m.createdAt),
+      }));
+      setMessages(formatted);
+    }
+  }, [interconsultMessages, channel, user?.id]);
+
+  const sendInterconsultMutation = useMutation({
+    mutationFn: async (message: string) => {
+      const res = await fetch("/api/interconsult", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel, message }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/interconsult", channel] });
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,152 +106,189 @@ export default function AIChat() {
     const userMessage = input;
     setInput("");
     setMessages(prev => [...prev, { role: "user", content: userMessage }]);
-    setLoading(true);
 
-    // Create a temporary ID for this conversation (mock for now, ideally persist in backend first)
-    // Since we don't have conversation listing in this MVP page, we'll create a conversation on the fly or pick ID 1
-    // Ideally: Create conversation -> get ID -> stream message.
-    // Simplifying: Assume ID 1 exists or use a fixed ID for "Quick Chat"
-    
-    // Actually, let's create a conversation first if needed, but for responsiveness, we'll try to just start
-    // We'll assume a "Quick Chat" conversation ID 1 for MVP simplicity or create one.
-    // Let's implement a quick create logic in useEffect or just use a default.
-    // Better: Just stream.
-    
-    try {
-      // First ensure a conversation exists
-      let convId = 1; 
-      // This is a bit hacky for MVP but works if we assume backend handles it or we seeded it.
-      // Correct way: Fetch conversations, if empty create one.
-      
-      const res = await fetch(`/api/conversations/${convId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userMessage }),
-      });
+    if (channel === "ai") {
+      setLoading(true);
+      try {
+        let convId = 1; 
+        const res = await fetch(`/api/conversations/${convId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: userMessage }),
+          credentials: "include",
+        });
 
-      if (!res.ok) {
-         // Maybe conversation 1 doesn't exist? Try creating one.
-         const createRes = await fetch("/api/conversations", {
-             method: "POST",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify({ title: "Interconsulta" })
-         });
-         if (createRes.ok) {
+        if (!res.ok) {
+          const createRes = await fetch("/api/conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "Interconsulta" }),
+            credentials: "include",
+          });
+          if (createRes.ok) {
             const conv = await createRes.json();
             convId = conv.id;
-            // Retry message
             const retryRes = await fetch(`/api/conversations/${convId}/messages`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content: userMessage }),
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: userMessage }),
+              credentials: "include",
             });
             if(!retryRes.ok) throw new Error("Failed");
-            
-            // Handle stream
             await handleStream(retryRes);
-         } else {
-             throw new Error("Failed to start chat");
-         }
-      } else {
-         await handleStream(res);
+          } else {
+            throw new Error("Failed to start chat");
+          }
+        } else {
+          await handleStream(res);
+        }
+      } catch (error) {
+        toast({ title: "Erro", description: "Falha na comunicação com a IA.", variant: "destructive" });
+        setLoading(false);
       }
-
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha na comunicação com a IA.", variant: "destructive" });
-      setLoading(false);
+    } else {
+      sendInterconsultMutation.mutate(userMessage);
+      setMessages(prev => [...prev, { 
+        role: "system", 
+        content: channel === "admin_support" 
+          ? "Mensagem enviada para o suporte. Aguarde retorno." 
+          : "Mensagem enviada para interconsulta. Aguardando resposta dos colegas."
+      }]);
     }
   };
 
   const handleStream = async (res: Response) => {
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
+    const reader = res.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+    if (!reader) return;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
       
-      setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-
-      if (!reader) return;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n\n");
-        
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.content) {
-                setMessages(prev => {
-                  const last = prev[prev.length - 1];
-                  const others = prev.slice(0, -1);
-                  return [...others, { ...last, content: last.content + data.content }];
-                });
-              }
-              if (data.done) {
-                  setLoading(false);
-              }
-            } catch (e) {
-              // ignore parse errors for partial chunks
+      const chunk = decoder.decode(value);
+      const lines = chunk.split("\n\n");
+      
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.content) {
+              setMessages(prev => {
+                const last = prev[prev.length - 1];
+                const others = prev.slice(0, -1);
+                return [...others, { ...last, content: last.content + data.content }];
+              });
             }
-          }
+            if (data.done) {
+              setLoading(false);
+            }
+          } catch (e) {}
         }
       }
-      setLoading(false);
-  }
+    }
+    setLoading(false);
+  };
+
+  const colorMap = {
+    purple: { bg: "bg-purple-600", light: "bg-purple-100", text: "text-purple-600" },
+    blue: { bg: "bg-blue-600", light: "bg-blue-100", text: "text-blue-600" },
+    amber: { bg: "bg-amber-600", light: "bg-amber-100", text: "text-amber-600" },
+  };
+  const colors = colorMap[config.color as keyof typeof colorMap];
 
   return (
     <div className="h-[calc(100vh-4rem)] md:h-screen flex flex-col bg-slate-50">
-      <header className="p-4 bg-white border-b border-slate-200 flex items-center gap-3 shadow-sm">
-        <div className="p-2 bg-purple-100 rounded-lg">
-           <Bot className="h-6 w-6 text-purple-600" />
+      <header className="p-4 bg-white border-b border-slate-200 shadow-sm space-y-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 ${colors.light} rounded-lg`}>
+            <Icon className={`h-6 w-6 ${colors.text}`} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold font-display text-slate-900">{config.title}</h1>
+            <p className="text-xs text-slate-500">{config.subtitle}</p>
+          </div>
         </div>
-        <div>
-           <h1 className="text-xl font-bold font-display text-slate-900">Interconsulta IA</h1>
-           <p className="text-xs text-slate-500">Discuta casos clínicos e tire dúvidas.</p>
-        </div>
+        
+        <Tabs value={channel} onValueChange={(v) => setChannel(v as Channel)} className="w-full">
+          <TabsList className="grid grid-cols-3 w-full max-w-md">
+            <TabsTrigger value="ai" className="gap-1" data-testid="tab-ai">
+              <Bot className="h-4 w-4" /> IA
+            </TabsTrigger>
+            <TabsTrigger value="interconsult" className="gap-1" data-testid="tab-interconsult">
+              <Users className="h-4 w-4" /> Interconsulta
+            </TabsTrigger>
+            <TabsTrigger value="admin_support" className="gap-1" data-testid="tab-support">
+              <Headset className="h-4 w-4" /> Suporte
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6">
         {messages.length === 0 && (
           <div className="text-center text-slate-400 mt-20">
-            <Bot className="h-16 w-16 mx-auto mb-4 opacity-20" />
-            <p className="text-lg font-medium">Como posso ajudar no seu plantão hoje?</p>
-            <p className="text-sm">Ex: "Qual a dose de adrenalina para choque anafilático?"</p>
+            <Icon className="h-16 w-16 mx-auto mb-4 opacity-20" />
+            {channel === "ai" && (
+              <>
+                <p className="text-lg font-medium">Como posso ajudar no seu plantão hoje?</p>
+                <p className="text-sm">Ex: "Qual a dose de adrenalina para choque anafilático?"</p>
+              </>
+            )}
+            {channel === "interconsult" && (
+              <>
+                <p className="text-lg font-medium">Discuta casos com outros médicos</p>
+                <p className="text-sm">Descreva o caso clínico para obter uma segunda opinião.</p>
+              </>
+            )}
+            {channel === "admin_support" && (
+              <>
+                <p className="text-lg font-medium">Precisa de ajuda?</p>
+                <p className="text-sm">Envie sua dúvida ou relate um problema técnico.</p>
+              </>
+            )}
           </div>
         )}
         
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            {msg.role === "assistant" && (
-               <div className="h-8 w-8 rounded-full bg-purple-600 flex items-center justify-center shrink-0">
-                 <Bot className="h-5 w-5 text-white" />
-               </div>
+            {msg.role !== "user" && (
+              <div className={`h-8 w-8 rounded-full ${msg.role === "system" ? "bg-slate-400" : colors.bg} flex items-center justify-center shrink-0`}>
+                {msg.role === "system" ? (
+                  <MessageCircle className="h-5 w-5 text-white" />
+                ) : (
+                  <Icon className="h-5 w-5 text-white" />
+                )}
+              </div>
             )}
             <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${
               msg.role === "user" 
                 ? "bg-blue-600 text-white rounded-br-none" 
-                : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
+                : msg.role === "system"
+                  ? "bg-slate-200 text-slate-600 italic rounded-bl-none"
+                  : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
             }`}>
               <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</div>
             </div>
             {msg.role === "user" && (
-                <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
-                  <User className="h-5 w-5 text-slate-600" />
-                </div>
+              <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
+                <User className="h-5 w-5 text-slate-600" />
+              </div>
             )}
           </div>
         ))}
         
         {loading && (
           <div className="flex gap-3">
-             <div className="h-8 w-8 rounded-full bg-purple-600 flex items-center justify-center shrink-0">
-                 <Bot className="h-5 w-5 text-white" />
-             </div>
-             <div className="bg-white p-4 rounded-2xl rounded-bl-none border border-slate-100 flex items-center">
-                <Loader2 className="h-5 w-5 text-purple-600 animate-spin" />
-             </div>
+            <div className={`h-8 w-8 rounded-full ${colors.bg} flex items-center justify-center shrink-0`}>
+              <Icon className="h-5 w-5 text-white" />
+            </div>
+            <div className="bg-white p-4 rounded-2xl rounded-bl-none border border-slate-100 flex items-center">
+              <Loader2 className={`h-5 w-5 ${colors.text} animate-spin`} />
+            </div>
           </div>
         )}
       </div>
@@ -188,11 +298,18 @@ export default function AIChat() {
           <Input 
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Digite seu caso clínico ou dúvida..." 
+            placeholder={config.placeholder}
             className="flex-1 h-12 bg-slate-50 border-slate-200"
             disabled={loading}
+            data-testid="input-chat-message"
           />
-          <Button type="submit" size="icon" className="h-12 w-12 shrink-0 bg-purple-600 hover:bg-purple-700" disabled={loading}>
+          <Button 
+            type="submit" 
+            size="icon" 
+            className={`h-12 w-12 shrink-0 ${colors.bg} hover:opacity-90`} 
+            disabled={loading}
+            data-testid="button-send-message"
+          >
             <Send className="h-5 w-5" />
           </Button>
         </form>

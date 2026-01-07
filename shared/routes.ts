@@ -9,6 +9,11 @@ import {
   insertShiftChecklistSchema,
   insertHandoverSchema,
   insertGoalSchema,
+  insertProtocolSchema,
+  insertFlashcardSchema,
+  insertFavoriteSchema,
+  insertDoctorProfileSchema,
+  insertInterconsultMessageSchema,
   prescriptions,
   checklists,
   shifts,
@@ -17,7 +22,13 @@ import {
   libraryItems,
   shiftChecklists,
   handovers,
-  goals
+  goals,
+  protocols,
+  flashcards,
+  favorites,
+  adminSettings,
+  doctorProfiles,
+  interconsultMessages
 } from './schema';
 
 export const errorSchemas = {
@@ -41,6 +52,13 @@ export const api = {
     list: {
       method: 'GET' as const,
       path: '/api/prescriptions',
+      responses: {
+        200: z.array(z.custom<typeof prescriptions.$inferSelect>()),
+      },
+    },
+    search: {
+      method: 'GET' as const,
+      path: '/api/prescriptions/search',
       responses: {
         200: z.array(z.custom<typeof prescriptions.$inferSelect>()),
       },
@@ -80,10 +98,67 @@ export const api = {
       },
     },
   },
+  protocols: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/protocols',
+      responses: {
+        200: z.array(z.custom<typeof protocols.$inferSelect>()),
+      },
+    },
+    search: {
+      method: 'GET' as const,
+      path: '/api/protocols/search',
+      responses: {
+        200: z.array(z.custom<typeof protocols.$inferSelect>()),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/protocols/:id',
+      responses: {
+        200: z.custom<typeof protocols.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/protocols',
+      input: insertProtocolSchema,
+      responses: {
+        201: z.custom<typeof protocols.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/protocols/:id',
+      input: insertProtocolSchema.partial(),
+      responses: {
+        200: z.custom<typeof protocols.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/protocols/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
   checklists: {
     list: {
       method: 'GET' as const,
       path: '/api/checklists',
+      responses: {
+        200: z.array(z.custom<typeof checklists.$inferSelect>()),
+      },
+    },
+    search: {
+      method: 'GET' as const,
+      path: '/api/checklists/search',
       responses: {
         200: z.array(z.custom<typeof checklists.$inferSelect>()),
       },
@@ -120,6 +195,131 @@ export const api = {
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
+      },
+    },
+  },
+  flashcards: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/flashcards',
+      responses: {
+        200: z.array(z.custom<typeof flashcards.$inferSelect>()),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/flashcards/:id',
+      responses: {
+        200: z.custom<typeof flashcards.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/flashcards',
+      input: insertFlashcardSchema,
+      responses: {
+        201: z.custom<typeof flashcards.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/flashcards/:id',
+      input: insertFlashcardSchema.partial(),
+      responses: {
+        200: z.custom<typeof flashcards.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/flashcards/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+  favorites: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/favorites',
+      responses: {
+        200: z.array(z.custom<typeof favorites.$inferSelect>()),
+      },
+    },
+    add: {
+      method: 'POST' as const,
+      path: '/api/favorites',
+      input: insertFavoriteSchema,
+      responses: {
+        201: z.custom<typeof favorites.$inferSelect>(),
+      },
+    },
+    remove: {
+      method: 'DELETE' as const,
+      path: '/api/favorites/:itemType/:itemId',
+      responses: {
+        204: z.void(),
+      },
+    },
+  },
+  doctorProfile: {
+    get: {
+      method: 'GET' as const,
+      path: '/api/doctor-profile',
+      responses: {
+        200: z.custom<typeof doctorProfiles.$inferSelect>().nullable(),
+      },
+    },
+    upsert: {
+      method: 'POST' as const,
+      path: '/api/doctor-profile',
+      input: insertDoctorProfileSchema,
+      responses: {
+        200: z.custom<typeof doctorProfiles.$inferSelect>(),
+      },
+    },
+  },
+  adminSettings: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/admin/settings',
+      responses: {
+        200: z.array(z.custom<typeof adminSettings.$inferSelect>()),
+      },
+    },
+    get: {
+      method: 'GET' as const,
+      path: '/api/admin/settings/:key',
+      responses: {
+        200: z.custom<typeof adminSettings.$inferSelect>().nullable(),
+      },
+    },
+    set: {
+      method: 'POST' as const,
+      path: '/api/admin/settings',
+      input: z.object({ key: z.string(), value: z.string() }),
+      responses: {
+        200: z.custom<typeof adminSettings.$inferSelect>(),
+      },
+    },
+  },
+  interconsult: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/interconsult',
+      responses: {
+        200: z.array(z.custom<typeof interconsultMessages.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/interconsult',
+      input: insertInterconsultMessageSchema,
+      responses: {
+        201: z.custom<typeof interconsultMessages.$inferSelect>(),
       },
     },
   },
@@ -282,7 +482,7 @@ export const api = {
   goals: {
     get: {
       method: 'GET' as const,
-      path: '/api/goals', // Get current month goal
+      path: '/api/goals',
       responses: {
         200: z.custom<typeof goals.$inferSelect>().nullable(),
       },
