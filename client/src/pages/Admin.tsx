@@ -8,7 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3 } from "lucide-react";
+import { Loader2, CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { apiRequest } from "@/lib/queryClient";
 import type { User } from "@shared/models/auth";
 
 interface AdminSetting {
@@ -31,12 +34,15 @@ export default function Admin() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-lg grid-cols-4">
+        <TabsList className="grid w-full max-w-2xl grid-cols-5">
           <TabsTrigger value="users" className="gap-1">
             <Users className="h-4 w-4" /> Usuários
           </TabsTrigger>
           <TabsTrigger value="payment" className="gap-1">
             <CreditCard className="h-4 w-4" /> Pagamento
+          </TabsTrigger>
+          <TabsTrigger value="ai-prompts" className="gap-1">
+            <Bot className="h-4 w-4" /> IA
           </TabsTrigger>
           <TabsTrigger value="content" className="gap-1">
             <FileText className="h-4 w-4" /> Conteúdo
@@ -52,6 +58,10 @@ export default function Admin() {
 
         <TabsContent value="payment">
           <PaymentSettingsTab />
+        </TabsContent>
+
+        <TabsContent value="ai-prompts">
+          <AiPromptsTab />
         </TabsContent>
 
         <TabsContent value="content">
@@ -426,6 +436,284 @@ function StatsTab() {
       <p className="text-sm text-slate-500 text-center">
         As estatísticas de uso serão implementadas na próxima versão.
       </p>
+    </div>
+  );
+}
+
+interface AiPrompt {
+  id: number;
+  title: string;
+  description: string | null;
+  promptText: string;
+  category: string | null;
+  isActive: boolean | null;
+  createdBy: string | null;
+  createdAt: string | null;
+}
+
+function AiPromptsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingPrompt, setEditingPrompt] = useState<AiPrompt | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [promptText, setPromptText] = useState("");
+  const [category, setCategory] = useState("");
+  const [isActive, setIsActive] = useState(true);
+
+  const { data: prompts, isLoading } = useQuery<AiPrompt[]>({
+    queryKey: ["/api/admin/ai/prompts"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: { title: string; description: string; promptText: string; category: string; isActive: boolean }) => {
+      const res = await apiRequest("POST", "/api/admin/ai/prompts", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/ai/prompts"] });
+      toast({ title: "Prompt criado!" });
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro ao criar prompt", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<AiPrompt> }) => {
+      const res = await apiRequest("PUT", `/api/admin/ai/prompts/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/ai/prompts"] });
+      toast({ title: "Prompt atualizado!" });
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro ao atualizar prompt", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/ai/prompts/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/ai/prompts"] });
+      toast({ title: "Prompt removido!" });
+    },
+    onError: () => {
+      toast({ title: "Erro ao remover prompt", variant: "destructive" });
+    },
+  });
+
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setPromptText("");
+    setCategory("");
+    setIsActive(true);
+    setEditingPrompt(null);
+  };
+
+  const openEditDialog = (prompt: AiPrompt) => {
+    setEditingPrompt(prompt);
+    setTitle(prompt.title);
+    setDescription(prompt.description || "");
+    setPromptText(prompt.promptText);
+    setCategory(prompt.category || "");
+    setIsActive(prompt.isActive !== false);
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = () => {
+    if (!title || !promptText) {
+      toast({ title: "Preencha titulo e texto do prompt", variant: "destructive" });
+      return;
+    }
+
+    const data = { title, description, promptText, category, isActive };
+    
+    if (editingPrompt) {
+      updateMutation.mutate({ id: editingPrompt.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" /> Prompts da IA Médica
+            </CardTitle>
+            <CardDescription>Crie e gerencie os prompts pré-definidos para consultas médicas com IA.</CardDescription>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" data-testid="button-add-prompt">
+                <Plus className="h-4 w-4" /> Novo Prompt
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{editingPrompt ? "Editar Prompt" : "Novo Prompt"}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Titulo</label>
+                    <Input 
+                      value={title} 
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Ex: Diagnóstico Diferencial"
+                      data-testid="input-prompt-title"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Categoria</label>
+                    <Input 
+                      value={category} 
+                      onChange={(e) => setCategory(e.target.value)}
+                      placeholder="Ex: Cardiologia"
+                      data-testid="input-prompt-category"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Descrição</label>
+                  <Input 
+                    value={description} 
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Breve descrição do uso deste prompt"
+                    data-testid="input-prompt-description"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Texto do Prompt</label>
+                  <Textarea 
+                    value={promptText} 
+                    onChange={(e) => setPromptText(e.target.value)}
+                    placeholder="Você é um especialista médico. Analise o caso clínico apresentado..."
+                    rows={6}
+                    data-testid="textarea-prompt-text"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Este texto será usado como instrução do sistema para a IA durante as consultas.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox 
+                    id="isActive" 
+                    checked={isActive} 
+                    onCheckedChange={(checked) => setIsActive(checked === true)}
+                    data-testid="input-prompt-active"
+                  />
+                  <label htmlFor="isActive" className="text-sm cursor-pointer">Ativo (visível para usuários)</label>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+                  <Button 
+                    onClick={handleSubmit} 
+                    disabled={createMutation.isPending || updateMutation.isPending}
+                    data-testid="button-save-prompt"
+                  >
+                    {createMutation.isPending || updateMutation.isPending ? "Salvando..." : "Salvar"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          {prompts?.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Nenhum prompt criado ainda. Clique em "Novo Prompt" para começar.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Titulo</TableHead>
+                  <TableHead>Categoria</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {prompts?.map((prompt) => (
+                  <TableRow key={prompt.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{prompt.title}</div>
+                        {prompt.description && (
+                          <div className="text-sm text-muted-foreground">{prompt.description}</div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {prompt.category ? (
+                        <Badge variant="secondary">{prompt.category}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={prompt.isActive !== false ? "default" : "secondary"}>
+                        {prompt.isActive !== false ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          onClick={() => openEditDialog(prompt)}
+                          data-testid={`button-edit-prompt-${prompt.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="text-destructive"
+                          onClick={() => deleteMutation.mutate(prompt.id)}
+                          data-testid={`button-delete-prompt-${prompt.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Dicas para Prompts Médicos</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>Exemplos de prompts úteis:</p>
+          <ul className="list-disc list-inside space-y-1">
+            <li><strong>Diagnóstico Diferencial:</strong> "Analise os sintomas e sugira diagnósticos diferenciais ordenados por probabilidade."</li>
+            <li><strong>Revisão de Prescrição:</strong> "Verifique interações medicamentosas e ajustes de dose para função renal/hepática."</li>
+            <li><strong>Orientação para Emergência:</strong> "Forneça conduta inicial para o quadro clínico apresentado no contexto de PS."</li>
+            <li><strong>Interpretação de Exames:</strong> "Interprete os resultados laboratoriais no contexto clínico do paciente."</li>
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 }
