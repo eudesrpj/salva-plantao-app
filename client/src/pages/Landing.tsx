@@ -44,8 +44,22 @@ export default function Landing() {
         </p>
         
         <div className="flex flex-col sm:flex-row justify-center gap-4 mb-20">
-          <Button size="lg" onClick={handleLogin} className="h-14 px-8 text-lg rounded-full shadow-primary/25 shadow-xl hover:-translate-y-1 transition-all">
-            Começar Agora
+          <Button 
+            size="lg" 
+            onClick={handleLogin} 
+            className="h-14 px-8 text-lg rounded-full shadow-primary/25 shadow-xl hover:-translate-y-1 transition-all"
+            data-testid="button-subscribe"
+          >
+            Assinar
+          </Button>
+          <Button 
+            size="lg" 
+            variant="outline"
+            onClick={handleLogin} 
+            className="h-14 px-8 text-lg rounded-full hover:-translate-y-1 transition-all"
+            data-testid="button-login-landing"
+          >
+            Entrar
           </Button>
         </div>
 
