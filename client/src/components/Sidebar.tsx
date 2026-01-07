@@ -24,7 +24,8 @@ import {
   Settings,
   Palette,
   Bot,
-  Crown
+  Crown,
+  RefreshCw
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { useState } from "react";
@@ -104,8 +105,20 @@ function NavContent({ onClose }: { onClose?: () => void }) {
         )}
         <Button
           variant="ghost"
+          className="w-full justify-start text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+          onClick={() => {
+            window.location.href = "/api/logout?redirect=/api/login";
+          }}
+          data-testid="button-switch-account"
+        >
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Trocar de Conta
+        </Button>
+        <Button
+          variant="ghost"
           className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-950/20"
           onClick={() => logout()}
+          data-testid="button-logout"
         >
           <LogOut className="mr-2 h-4 w-4" />
           Sair

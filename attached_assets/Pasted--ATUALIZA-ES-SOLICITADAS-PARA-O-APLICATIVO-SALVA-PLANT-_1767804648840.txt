@@ -1,0 +1,302 @@
+🟦 ATUALIZAÇÕES SOLICITADAS PARA O APLICATIVO SALVA PLANTÃO
+
+Implemente as seguintes funcionalidades e ajustes no app, mantendo a estrutura atual do projeto, sem quebrar o que já funciona.
+
+🔹 1) Login — opção de trocar de conta
+
+Na tela de Login, adicionar a opção de “Entrar com outra conta / Trocar de conta”.
+
+O usuário deve conseguir:
+
+deslogar da conta atual
+
+escolher outra conta e logar
+
+Isso sem precisar fechar o aplicativo.
+
+🔹 2) Calculadora Pediátrica — doses, formas e edição pelo admin
+
+Atualizar todas as doses das calculadoras pediátricas
+
+Revisar as doses usadas hoje e ajustar para valores atualizados e corretos.
+
+Permitir edição das doses pelo administrador
+
+No painel do admin, criar uma área onde ele possa:
+
+editar doses de cada medicação da calculadora pediátrica
+
+salvar essas alterações sem mexer em código
+
+Formas farmacêuticas na calculadora pediátrica
+
+Em cada medicação da calculadora pediátrica, adicionar seleção de forma:
+
+Comprimido
+
+Gotas
+
+Xarope
+
+Solução / Ampola
+
+Outras formas que o admin possa cadastrar
+
+Botão para adicionar novas medicações (admin)
+
+No painel do administrador, criar o botão:
+
+“Adicionar nova medicação à calculadora pediátrica”
+
+Essa medicação deve aparecer na calculadora com:
+
+nome
+
+dose
+
+forma farmacêutica
+
+faixa etária/peso aplicável
+
+Cálculo por idade (quando aplicável)
+
+Além do cálculo por peso, adicionar opção de cálculo por idade nas drogas em que isso faça sentido.
+
+🔹 3) Menu principal — Interação Medicamentosa
+
+Adicionar no menu principal uma nova opção: “Interação Medicamentosa”.
+
+Funcionalidade:
+
+Usuário seleciona uma ou mais medicações da lista do app.
+
+O sistema verifica se existe interação medicamentosa entre elas.
+
+Exibir:
+
+se existe interação
+
+nível de risco (leve, moderada, grave – se disponível)
+
+orientação curta (ex.: “evitar associação”, “monitorar função renal”, etc.)
+
+Essas informações devem ser cadastráveis e editáveis pelo admin em um painel próprio.
+
+🔹 4) Aba Medicações — contraindicações editáveis
+
+Em cada medicação cadastrada, adicionar uma área de “Contraindicações”.
+
+No painel do admin:
+
+permitir adicionar novas contraindicações
+
+editar contraindicações existentes
+
+As contraindicações devem aparecer de forma clara quando o usuário abrir os detalhes da medicação.
+
+🔹 5) Botão “Imprimir Prescrição” — padrão SUS (duas vias)
+
+Na área de prescrição, implementar:
+
+Botão “Imprimir Prescrição”
+
+Ao clicar, abrir uma tela de pré-visualização da prescrição.
+
+Nessa tela, o usuário poderá:
+
+revisar a prescrição
+
+fazer ajustes finais (texto, posologia, orientações)
+
+confirmar impressão
+
+Formato de impressão
+
+Gerar a prescrição no padrão SUS, em duas vias.
+
+Incluir automaticamente:
+
+Data
+
+Nome do médico (puxado do perfil do usuário)
+
+CRM (puxado do perfil do usuário)
+
+Ao final da página, deixar:
+
+espaço em branco para carimbo
+
+espaço em branco para assinatura manual
+
+Opcional (se possível):
+
+gerar em PDF além da impressão direta.
+
+🔹 6) Prescrições oficiais, edição pelo usuário e favoritos
+
+Implementar um sistema que mantenha prescrições oficiais fixas, mas permita ao usuário criar versões personalizadas para uso próprio.
+
+Prescrições oficiais (base)
+
+As prescrições oficiais (modelos padrão) devem continuar salvas como modelos base, não editáveis permanentemente pelo usuário comum.
+
+Somente o admin pode alterar o modelo oficial.
+
+Edição momentânea pelo usuário
+
+Quando o usuário selecionar uma prescrição oficial:
+
+abrir uma tela onde ele possa ajustar temporariamente:
+
+dose
+
+posologia
+
+forma de apresentação
+
+observações
+
+Essa edição não deve alterar o modelo oficial no banco.
+
+Salvar como favorito
+
+Após ajustar a prescrição oficial momentaneamente, o usuário deve ter a opção:
+
+“Salvar como favorito”
+
+Isso deve criar uma cópia personalizada daquela prescrição, ligada à conta do usuário, com:
+
+nome da medicação / esquema
+
+ajustes de dose e posologia que ele fez
+
+forma farmacêutica escolhida
+
+orientações associadas (ver item abaixo)
+
+Lista de favoritos
+
+Criar uma seção onde o usuário possa:
+
+ver suas prescrições favoritas
+
+selecionar uma delas para reutilizar
+
+editar ou excluir o favorito
+
+Esses favoritos não alteram o modelo oficial do app, são apenas do usuário.
+
+🔹 7) Campo “Orientações” com sinais de alarme por prescrição
+
+Adicionar a funcionalidade “Orientações / Sinais de Alarme” nas prescrições.
+
+Campo de orientações em cada prescrição
+
+Tanto nas prescrições oficiais ajustadas quanto nas prescrições favoritas, deve existir um campo chamado “Orientações / Sinais de Alarme”.
+
+Nesse campo o usuário poderá cadastrar, por exemplo:
+
+sinais de gravidade
+
+quando retornar ao serviço
+
+quando suspender a medicação
+
+orientações ao paciente ou responsável
+
+Orientações pré-estabelecidas
+
+Permitir que, ao criar ou favoritar uma prescrição, o usuário:
+
+adicione orientações padrão que ele gosta de usar (ex.: “Retornar se febre persistir > 72h”, “Procurar emergência se aparecer falta de ar, lábios arroxeados, etc.”).
+
+Essas orientações devem:
+
+ficar salvas junto da prescrição/favorito
+
+aparecer tanto na visualização da prescrição quanto na tela de impressão (se fizer sentido).
+
+Integração com impressão
+
+Na tela de pré-visualização da prescrição para impressão:
+
+incluir as orientações / sinais de alarme abaixo da prescrição, antes da área de assinatura.
+🔹 8) Botão “Exportar Prescrição” — compartilhamento seguro entre usuários
+
+Adicionar uma funcionalidade para permitir que usuários compartilhem prescrições entre si, mas com controle de segurança e uso restrito ao aplicativo.
+
+✔ Criar botão: “Exportar Prescrição”
+
+Disponível para:
+
+prescrições criadas pelo usuário
+
+prescrições favoritas
+
+versões personalizadas de prescrições oficiais
+
+Ao clicar em Exportar Prescrição, o sistema deve gerar um arquivo seguro / token exclusivo.
+
+✔ Requisitos do formato exportado
+
+O arquivo ou token deve:
+
+permitir que outro usuário importe a prescrição para sua própria conta
+
+manter:
+
+nome da prescrição
+
+posologia ajustada
+
+formas farmacêuticas
+
+orientações / sinais de alarme
+
+Porém, não deve permitir abrir o conteúdo fora do aplicativo.
+
+✔ Restrição de uso
+
+A prescrição exportada só pode ser aberta dentro do aplicativo.
+
+Para importar, o usuário precisa:
+
+estar logado
+
+ter assinatura ativa / conta válida
+
+Caso tente abrir fora do app:
+
+exibir mensagem:
+
+“Essa prescrição só pode ser aberta dentro do aplicativo com assinatura ativa.”
+
+✔ Função “Importar Prescrição”
+
+Criar opção:
+
+“Importar Prescrição”
+
+Ao importar:
+
+a prescrição é adicionada à conta do usuário
+
+o usuário pode:
+
+editar
+
+salvar como favorito
+
+reutilizar no app
+
+Importação não altera o modelo original do remetente.
+
+✔ Segurança funcional
+
+Não permitir:
+
+exportar para PDF
+
+abrir conteúdo bruto do arquivo
+
+Objetivo: compartilhamento interno do ecossistema do app, não distribuição livre.

@@ -98,12 +98,51 @@ export const calculatorSettings = pgTable("calculator_settings", {
   unit: text("unit").default("mg"),
   interval: text("interval"),
   notes: text("notes"),
+  pharmaceuticalForm: text("pharmaceutical_form"), // Comprimido, Gotas, Xarope, Solução/Ampola
+  concentration: text("concentration"), // Ex: 500mg/ml, 100mg/5ml
+  doseByAge: jsonb("dose_by_age"), // { "0-1": "2.5ml", "1-5": "5ml", "5-12": "10ml" }
+  minAge: integer("min_age"), // Minimum age in months
+  maxAge: integer("max_age"), // Maximum age in months
+  minWeight: decimal("min_weight"), // Minimum weight in kg
+  maxWeight: decimal("max_weight"), // Maximum weight in kg
   isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCalculatorSettingSchema = createInsertSchema(calculatorSettings).omit({ id: true });
+export const insertCalculatorSettingSchema = createInsertSchema(calculatorSettings).omit({ id: true, createdAt: true });
 export type CalculatorSetting = typeof calculatorSettings.$inferSelect;
 export type InsertCalculatorSetting = z.infer<typeof insertCalculatorSettingSchema>;
+
+// Drug Interactions (Admin configurable)
+export const drugInteractions = pgTable("drug_interactions", {
+  id: serial("id").primaryKey(),
+  drug1: text("drug_1").notNull(),
+  drug2: text("drug_2").notNull(),
+  severity: text("severity").notNull(), // leve, moderada, grave
+  description: text("description").notNull(),
+  recommendation: text("recommendation"), // Ex: "evitar associação", "monitorar função renal"
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDrugInteractionSchema = createInsertSchema(drugInteractions).omit({ id: true, createdAt: true });
+export type DrugInteraction = typeof drugInteractions.$inferSelect;
+export type InsertDrugInteraction = z.infer<typeof insertDrugInteractionSchema>;
+
+// Medication Contraindications (Admin configurable)
+export const medicationContraindications = pgTable("medication_contraindications", {
+  id: serial("id").primaryKey(),
+  medicationName: text("medication_name").notNull(),
+  contraindication: text("contraindication").notNull(),
+  severity: text("severity"), // leve, moderada, grave, absoluta
+  notes: text("notes"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMedicationContraindicationSchema = createInsertSchema(medicationContraindications).omit({ id: true, createdAt: true });
+export type MedicationContraindication = typeof medicationContraindications.$inferSelect;
+export type InsertMedicationContraindication = z.infer<typeof insertMedicationContraindicationSchema>;
 
 // Prescriptions (Updated with structured fields)
 export const prescriptions = pgTable("prescriptions", {
@@ -112,12 +151,14 @@ export const prescriptions = pgTable("prescriptions", {
   content: text("content"), // Legacy field for backwards compatibility
   medication: text("medication"),
   dose: text("dose"),
+  pharmaceuticalForm: text("pharmaceutical_form"), // Comprimido, Gotas, Xarope, Solução/Ampola
   interval: text("interval"), // 6/6h, 8/8h, 12/12h, 1x/dia
   quantity: text("quantity"), // comprimidos, gotas, ml, frascos
   duration: text("duration"), // 3, 5, 7, 10 dias, uso indeterminado
   route: text("route"), // VO, IV, IM, SC, Tópico
   timing: text("timing"), // Jejum, Com alimentação, Antes de dormir
   patientNotes: text("patient_notes"), // Observações do paciente
+  orientations: text("orientations"), // Orientações / Sinais de Alarme
   ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
   category: text("category"),
   specialty: text("specialty"), // Especialidade médica
@@ -132,6 +173,31 @@ export const prescriptions = pgTable("prescriptions", {
 export const insertPrescriptionSchema = createInsertSchema(prescriptions).omit({ id: true, createdAt: true });
 export type Prescription = typeof prescriptions.$inferSelect;
 export type InsertPrescription = z.infer<typeof insertPrescriptionSchema>;
+
+// User Prescription Favorites (Personalized copies)
+export const prescriptionFavorites = pgTable("prescription_favorites", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  originalPrescriptionId: integer("original_prescription_id").references(() => prescriptions.id),
+  title: text("title").notNull(),
+  medication: text("medication"),
+  dose: text("dose"),
+  pharmaceuticalForm: text("pharmaceutical_form"),
+  interval: text("interval"),
+  quantity: text("quantity"),
+  duration: text("duration"),
+  route: text("route"),
+  timing: text("timing"),
+  patientNotes: text("patient_notes"),
+  orientations: text("orientations"), // Orientações / Sinais de Alarme
+  exportToken: text("export_token"), // Token for sharing
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPrescriptionFavoriteSchema = createInsertSchema(prescriptionFavorites).omit({ id: true, createdAt: true, updatedAt: true });
+export type PrescriptionFavorite = typeof prescriptionFavorites.$inferSelect;
+export type InsertPrescriptionFavorite = z.infer<typeof insertPrescriptionFavoriteSchema>;
 
 // Protocols
 export const protocols = pgTable("protocols", {

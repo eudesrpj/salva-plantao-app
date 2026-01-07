@@ -2,6 +2,7 @@ import {
   prescriptions, checklists, shifts, notes, tasks, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
   protocols, flashcards, favorites, adminSettings, doctorProfiles, interconsultMessages, usageStats,
   pathologies, pathologyMedications, patientHistory, calculatorSettings, medications, userPreferences,
+  drugInteractions, medicationContraindications, prescriptionFavorites,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -24,7 +25,10 @@ import {
   type PatientHistory, type InsertPatientHistory,
   type CalculatorSetting, type InsertCalculatorSetting, type UpdateCalculatorSettingRequest,
   type Medication, type InsertMedication,
-  type UserPreferences, type InsertUserPreferences
+  type UserPreferences, type InsertUserPreferences,
+  type DrugInteraction, type InsertDrugInteraction,
+  type MedicationContraindication, type InsertMedicationContraindication,
+  type PrescriptionFavorite, type InsertPrescriptionFavorite
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -163,6 +167,27 @@ export interface IStorage {
   // User Preferences
   getUserPreferences(userId: string): Promise<UserPreferences | undefined>;
   upsertUserPreferences(userId: string, prefs: Partial<InsertUserPreferences>): Promise<UserPreferences>;
+
+  // Drug Interactions
+  getDrugInteractions(): Promise<DrugInteraction[]>;
+  checkDrugInteraction(drug1: string, drug2: string): Promise<DrugInteraction | undefined>;
+  createDrugInteraction(item: InsertDrugInteraction): Promise<DrugInteraction>;
+  updateDrugInteraction(id: number, item: Partial<InsertDrugInteraction>): Promise<DrugInteraction>;
+  deleteDrugInteraction(id: number): Promise<void>;
+
+  // Medication Contraindications
+  getMedicationContraindications(medicationName?: string): Promise<MedicationContraindication[]>;
+  createMedicationContraindication(item: InsertMedicationContraindication): Promise<MedicationContraindication>;
+  updateMedicationContraindication(id: number, item: Partial<InsertMedicationContraindication>): Promise<MedicationContraindication>;
+  deleteMedicationContraindication(id: number): Promise<void>;
+
+  // Prescription Favorites
+  getPrescriptionFavorites(userId: string): Promise<PrescriptionFavorite[]>;
+  getPrescriptionFavorite(id: number): Promise<PrescriptionFavorite | undefined>;
+  getPrescriptionFavoriteByToken(token: string): Promise<PrescriptionFavorite | undefined>;
+  createPrescriptionFavorite(item: InsertPrescriptionFavorite): Promise<PrescriptionFavorite>;
+  updatePrescriptionFavorite(id: number, item: Partial<InsertPrescriptionFavorite>): Promise<PrescriptionFavorite>;
+  deletePrescriptionFavorite(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -816,6 +841,99 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return item;
     }
+  }
+
+  // Drug Interactions
+  async getDrugInteractions(): Promise<DrugInteraction[]> {
+    return await db.select().from(drugInteractions).where(eq(drugInteractions.isActive, true)).orderBy(drugInteractions.drug1);
+  }
+
+  async checkDrugInteraction(drug1: string, drug2: string): Promise<DrugInteraction | undefined> {
+    const d1Lower = drug1.toLowerCase();
+    const d2Lower = drug2.toLowerCase();
+    const [item] = await db.select().from(drugInteractions)
+      .where(and(
+        eq(drugInteractions.isActive, true),
+        or(
+          and(ilike(drugInteractions.drug1, d1Lower), ilike(drugInteractions.drug2, d2Lower)),
+          and(ilike(drugInteractions.drug1, d2Lower), ilike(drugInteractions.drug2, d1Lower))
+        )
+      ));
+    return item;
+  }
+
+  async createDrugInteraction(insertItem: InsertDrugInteraction): Promise<DrugInteraction> {
+    const [item] = await db.insert(drugInteractions).values(insertItem).returning();
+    return item;
+  }
+
+  async updateDrugInteraction(id: number, updateItem: Partial<InsertDrugInteraction>): Promise<DrugInteraction> {
+    const [item] = await db.update(drugInteractions).set(updateItem).where(eq(drugInteractions.id, id)).returning();
+    return item;
+  }
+
+  async deleteDrugInteraction(id: number): Promise<void> {
+    await db.delete(drugInteractions).where(eq(drugInteractions.id, id));
+  }
+
+  // Medication Contraindications
+  async getMedicationContraindications(medicationName?: string): Promise<MedicationContraindication[]> {
+    if (medicationName) {
+      return await db.select().from(medicationContraindications)
+        .where(and(
+          eq(medicationContraindications.isActive, true),
+          ilike(medicationContraindications.medicationName, medicationName)
+        ))
+        .orderBy(medicationContraindications.medicationName);
+    }
+    return await db.select().from(medicationContraindications)
+      .where(eq(medicationContraindications.isActive, true))
+      .orderBy(medicationContraindications.medicationName);
+  }
+
+  async createMedicationContraindication(insertItem: InsertMedicationContraindication): Promise<MedicationContraindication> {
+    const [item] = await db.insert(medicationContraindications).values(insertItem).returning();
+    return item;
+  }
+
+  async updateMedicationContraindication(id: number, updateItem: Partial<InsertMedicationContraindication>): Promise<MedicationContraindication> {
+    const [item] = await db.update(medicationContraindications).set(updateItem).where(eq(medicationContraindications.id, id)).returning();
+    return item;
+  }
+
+  async deleteMedicationContraindication(id: number): Promise<void> {
+    await db.delete(medicationContraindications).where(eq(medicationContraindications.id, id));
+  }
+
+  // Prescription Favorites
+  async getPrescriptionFavorites(userId: string): Promise<PrescriptionFavorite[]> {
+    return await db.select().from(prescriptionFavorites)
+      .where(eq(prescriptionFavorites.userId, userId))
+      .orderBy(desc(prescriptionFavorites.createdAt));
+  }
+
+  async getPrescriptionFavorite(id: number): Promise<PrescriptionFavorite | undefined> {
+    const [item] = await db.select().from(prescriptionFavorites).where(eq(prescriptionFavorites.id, id));
+    return item;
+  }
+
+  async getPrescriptionFavoriteByToken(token: string): Promise<PrescriptionFavorite | undefined> {
+    const [item] = await db.select().from(prescriptionFavorites).where(eq(prescriptionFavorites.exportToken, token));
+    return item;
+  }
+
+  async createPrescriptionFavorite(insertItem: InsertPrescriptionFavorite): Promise<PrescriptionFavorite> {
+    const [item] = await db.insert(prescriptionFavorites).values(insertItem).returning();
+    return item;
+  }
+
+  async updatePrescriptionFavorite(id: number, updateItem: Partial<InsertPrescriptionFavorite>): Promise<PrescriptionFavorite> {
+    const [item] = await db.update(prescriptionFavorites).set({ ...updateItem, updatedAt: new Date() }).where(eq(prescriptionFavorites.id, id)).returning();
+    return item;
+  }
+
+  async deletePrescriptionFavorite(id: number): Promise<void> {
+    await db.delete(prescriptionFavorites).where(eq(prescriptionFavorites.id, id));
   }
 }
 
