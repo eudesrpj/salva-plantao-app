@@ -23,6 +23,9 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   role: text("role").default("user"), // user, admin
   status: text("status").default("pending"), // pending, active, blocked
+  authProvider: text("auth_provider").default("replit"), // replit, local
+  passwordHash: text("password_hash"), // For local auth only
+  whatsapp: varchar("whatsapp", { length: 20 }), // WhatsApp phone number
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
