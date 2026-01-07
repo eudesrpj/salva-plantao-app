@@ -226,6 +226,59 @@ function PathologiesView({ ageGroup, searchQuery, isAdmin }: { ageGroup: string;
   );
 }
 
+const ROUTE_NAMES: Record<string, string> = {
+  "VO": "via oral",
+  "IV": "via intravenosa",
+  "IM": "via intramuscular",
+  "SC": "via subcutânea",
+  "Tópico": "uso tópico",
+  "Retal": "via retal",
+  "Sublingual": "via sublingual",
+  "Inalatório": "via inalatória",
+};
+
+function formatMedicationSUS(med: PathologyMedication, index: number): string {
+  const lines: string[] = [];
+  
+  lines.push(`${index}) ${med.medication}`);
+  
+  if (med.quantity) {
+    lines.push(`   Quantidade: ${med.quantity}`);
+  }
+  
+  const routeName = med.route ? (ROUTE_NAMES[med.route] || med.route.toLowerCase()) : "via oral";
+  
+  let posology = "   ";
+  if (med.dose) {
+    posology += `Tomar ${med.dose}`;
+    if (med.dosePerKg) {
+      posology += ` (${med.dosePerKg}/kg)`;
+    }
+    posology += `, ${routeName}`;
+    if (med.interval) {
+      posology += `, de ${med.interval}`;
+    }
+    if (med.duration) {
+      posology += `, por ${med.duration}`;
+    }
+    lines.push(posology);
+  }
+  
+  if (med.timing) {
+    lines.push(`   Horário: ${med.timing}`);
+  }
+  
+  if (med.maxDose) {
+    lines.push(`   Dose máxima: ${med.maxDose}`);
+  }
+  
+  if (med.observations) {
+    lines.push(`   Obs: ${med.observations}`);
+  }
+  
+  return lines.join("\n");
+}
+
 function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Pathology; isExpanded: boolean; onToggle: () => void }) {
   const { toast } = useToast();
 
@@ -242,29 +295,29 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
   const copyAllMedications = () => {
     if (!medications || medications.length === 0) return;
     
-    const text = medications.map(m => {
-      const parts = [
-        m.medication,
-        m.quantity || "",
-        m.dose ? `Tomar ${m.dose}, ${m.route || "VO"}, ${m.interval || ""} por ${m.duration || ""}` : "",
-        m.observations || "",
-      ].filter(Boolean);
-      return parts.join("\n");
-    }).join("\n\n---\n\n");
+    const header = `PRESCRIÇÃO - ${pathology.name.toUpperCase()}`;
+    const separator = "=".repeat(40);
+    
+    const formattedMeds = medications.map((m, idx) => formatMedicationSUS(m, idx + 1));
+    
+    const text = [
+      separator,
+      header,
+      separator,
+      "",
+      ...formattedMeds,
+      "",
+      separator,
+    ].join("\n");
     
     navigator.clipboard.writeText(text);
-    toast({ title: "Copiado!", description: "Todas as medicações foram copiadas." });
+    toast({ title: "Prescrição copiada!", description: "Formato padrão SUS pronto para colar." });
   };
 
   const copySingleMedication = (med: PathologyMedication) => {
-    const parts = [
-      med.medication,
-      med.quantity || "",
-      med.dose ? `Tomar ${med.dose}, ${med.route || "VO"}, ${med.interval || ""} por ${med.duration || ""}` : "",
-      med.observations || "",
-    ].filter(Boolean);
-    navigator.clipboard.writeText(parts.join("\n"));
-    toast({ title: "Copiado!", description: `${med.medication} copiado.` });
+    const text = formatMedicationSUS(med, 1);
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado!", description: `${med.medication} copiado no formato SUS.` });
   };
 
   return (
@@ -296,35 +349,32 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
               <div className="py-4 text-center text-muted-foreground">Carregando medicações...</div>
             ) : medications && medications.length > 0 ? (
               <>
-                <div className="flex justify-end py-2">
-                  <Button size="sm" variant="outline" onClick={copyAllMedications} className="gap-1">
-                    <Copy className="h-3 w-3" /> Copiar Tudo
-                  </Button>
-                </div>
-                <div className="space-y-3">
+                <div className="space-y-3 py-3">
                   {medications.map((med, idx) => (
                     <div key={med.id} className="p-3 bg-background rounded-md border flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <Pill className="h-4 w-4 text-primary" />
-                          <span className="font-medium">{med.medication}</span>
+                          <span className="font-medium">{idx + 1}) {med.medication}</span>
                           {med.maxDose && <Badge variant="outline" className="text-xs">Max: {med.maxDose}</Badge>}
                         </div>
-                        <div className="text-sm text-slate-600 space-y-0.5">
-                          {med.dose && <p><strong>Dose:</strong> {med.dose} {med.dosePerKg && `(${med.dosePerKg}/kg)`}</p>}
-                          {med.interval && <p><strong>Intervalo:</strong> {med.interval}</p>}
-                          {med.duration && <p><strong>Duração:</strong> {med.duration}</p>}
-                          {med.route && <p><strong>Via:</strong> {med.route}</p>}
+                        <div className="text-sm text-slate-600 space-y-0.5 ml-6">
                           {med.quantity && <p><strong>Quantidade:</strong> {med.quantity}</p>}
+                          {med.dose && <p><strong>Posologia:</strong> Tomar {med.dose}{med.dosePerKg && ` (${med.dosePerKg}/kg)`}, {ROUTE_NAMES[med.route || "VO"] || med.route}{med.interval && `, de ${med.interval}`}{med.duration && `, por ${med.duration}`}</p>}
                           {med.timing && <p><strong>Horário:</strong> {med.timing}</p>}
-                          {med.observations && <p className="text-slate-500 italic">{med.observations}</p>}
+                          {med.observations && <p className="text-slate-500 italic">Obs: {med.observations}</p>}
                         </div>
                       </div>
-                      <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} className="shrink-0">
+                      <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} className="shrink-0" title="Copiar este medicamento">
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
                   ))}
+                </div>
+                <div className="pt-2 border-t">
+                  <Button onClick={copyAllMedications} className="w-full gap-2" data-testid="button-copy-prescription-sus">
+                    <Copy className="h-4 w-4" /> Copiar Prescrição Completa (Padrão SUS)
+                  </Button>
                 </div>
               </>
             ) : (
