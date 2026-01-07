@@ -23,8 +23,10 @@ import {
   User,
   Settings,
   Palette,
-  Bot
+  Bot,
+  Crown
 } from "lucide-react";
+import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { useState } from "react";
 
 const NAV_ITEMS = [
@@ -96,7 +98,10 @@ function NavContent({ onClose }: { onClose?: () => void }) {
         )}
       </nav>
 
-      <div className="p-4 border-t border-slate-800">
+      <div className="p-4 border-t border-slate-800 space-y-2">
+        {user?.status !== 'active' && user?.role !== 'admin' && (
+          <SubscribeButton className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg" />
+        )}
         <Button
           variant="ghost"
           className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-950/20"

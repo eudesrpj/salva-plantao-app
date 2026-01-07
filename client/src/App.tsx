@@ -58,11 +58,12 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"/></div>;
   if (!isAuthenticated) return <Redirect to="/welcome" />;
 
-  // Payment Lock (except for Admin)
-  if (user?.status !== 'active' && user?.role !== 'admin') {
+  // Block only users with 'blocked' status
+  if (user?.status === 'blocked') {
     return <PaymentRequired />;
   }
 
+  // Allow preview access for pending users (limited content shown via PreviewGate)
   return (
     <ProtectedLayout>
       <Component />
