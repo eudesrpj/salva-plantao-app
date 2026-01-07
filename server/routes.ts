@@ -1069,6 +1069,378 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(204).send();
   });
 
+  // --- Evolution Models ---
+  app.get("/api/evolution-models", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const category = req.query.category as string | undefined;
+    const items = await storage.getEvolutionModels(getUserId(req), category);
+    res.json(items);
+  });
+
+  app.post("/api/evolution-models", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(255),
+        content: z.string().min(1),
+        category: z.string().optional(),
+        isPublic: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createEvolutionModel({ ...validated, userId: getUserId(req), isPublic: false });
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.patch("/api/evolution-models/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getEvolutionModel(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Modelo não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(255).optional(),
+        content: z.string().min(1).optional(),
+        category: z.string().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.updateEvolutionModel(Number(req.params.id), validated);
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/evolution-models/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getEvolutionModel(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Modelo não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    await storage.deleteEvolutionModel(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Physical Exam Templates ---
+  app.get("/api/physical-exam-templates", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getPhysicalExamTemplates(getUserId(req));
+    res.json(items);
+  });
+
+  app.post("/api/physical-exam-templates", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const schema = z.object({
+        section: z.string().min(1).max(100),
+        title: z.string().min(1).max(255),
+        content: z.string().min(1),
+        order: z.number().optional(),
+        isPublic: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createPhysicalExamTemplate({ ...validated, userId: getUserId(req), isPublic: false });
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.patch("/api/physical-exam-templates/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getPhysicalExamTemplate(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Template não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    try {
+      const schema = z.object({
+        section: z.string().min(1).max(100).optional(),
+        title: z.string().min(1).max(255).optional(),
+        content: z.string().min(1).optional(),
+        order: z.number().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.updatePhysicalExamTemplate(Number(req.params.id), validated);
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/physical-exam-templates/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getPhysicalExamTemplate(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Template não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    await storage.deletePhysicalExamTemplate(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Signs and Symptoms (Admin only for creation) ---
+  app.get("/api/signs-symptoms", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const category = req.query.category as string | undefined;
+    const items = await storage.getSignsSymptoms(getUserId(req), category);
+    res.json(items);
+  });
+
+  app.post("/api/admin/signs-symptoms", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(255),
+        content: z.string().min(1),
+        category: z.string().optional(),
+        isPublic: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createSignsSymptoms({ ...validated, userId: getUserId(req), isPublic: true });
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.patch("/api/admin/signs-symptoms/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(255).optional(),
+        content: z.string().min(1).optional(),
+        category: z.string().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.updateSignsSymptoms(Number(req.params.id), validated);
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/admin/signs-symptoms/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteSignsSymptoms(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Semiological Signs (Admin only for creation) ---
+  app.get("/api/semiological-signs", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const category = req.query.category as string | undefined;
+    const items = await storage.getSemiologicalSigns(getUserId(req), category);
+    res.json(items);
+  });
+
+  app.post("/api/admin/semiological-signs", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(255),
+        content: z.string().min(1),
+        category: z.string().optional(),
+        isPublic: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createSemiologicalSigns({ ...validated, userId: getUserId(req), isPublic: true });
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.patch("/api/admin/semiological-signs/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(255).optional(),
+        content: z.string().min(1).optional(),
+        category: z.string().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.updateSemiologicalSigns(Number(req.params.id), validated);
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/admin/semiological-signs/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteSemiologicalSigns(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Medical Certificates ---
+  app.get("/api/medical-certificates", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getMedicalCertificates(getUserId(req));
+    res.json(items);
+  });
+
+  app.post("/api/medical-certificates", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const schema = z.object({
+        patientName: z.string().min(1).max(255),
+        patientDocument: z.string().optional(),
+        daysOff: z.number().min(1).max(365),
+        startDate: z.string().or(z.date()),
+        reason: z.string().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createMedicalCertificate({ ...validated, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/medical-certificates/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getMedicalCertificate(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Atestado não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    await storage.deleteMedicalCertificate(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Attendance Declarations ---
+  app.get("/api/attendance-declarations", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getAttendanceDeclarations(getUserId(req));
+    res.json(items);
+  });
+
+  app.post("/api/attendance-declarations", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const schema = z.object({
+        patientName: z.string().min(1).max(255),
+        patientDocument: z.string().optional(),
+        attendanceDate: z.string().or(z.date()),
+        period: z.string().min(1).max(50),
+        startTime: z.string().optional(),
+        endTime: z.string().optional(),
+        location: z.string().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createAttendanceDeclaration({ ...validated, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/attendance-declarations/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getAttendanceDeclaration(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Declaração não encontrada" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    await storage.deleteAttendanceDeclaration(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Medical Referrals ---
+  app.get("/api/medical-referrals", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getMedicalReferrals(getUserId(req));
+    res.json(items);
+  });
+
+  app.post("/api/medical-referrals", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const schema = z.object({
+        patientName: z.string().min(1).max(255),
+        patientBirthDate: z.string().or(z.date()).nullable().optional(),
+        patientAge: z.string().optional(),
+        patientSex: z.string().optional(),
+        patientDocument: z.string().optional(),
+        patientAddress: z.string().optional(),
+        originUnit: z.string().optional(),
+        vitalSigns: z.any().optional(),
+        referralReason: z.string().min(1),
+        destination: z.string().min(1),
+        clinicalHistory: z.string().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createMedicalReferral({ ...validated, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/medical-referrals/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const existing = await storage.getMedicalReferral(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Encaminhamento não encontrado" });
+    if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
+    await storage.deleteMedicalReferral(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Referral Destinations (Admin) ---
+  app.get("/api/referral-destinations", isAuthenticated, async (req, res) => {
+    const items = await storage.getReferralDestinations();
+    res.json(items);
+  });
+
+  app.post("/api/admin/referral-destinations", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(255),
+        address: z.string().optional(),
+        phone: z.string().optional(),
+        specialty: z.string().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createReferralDestination(validated);
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.patch("/api/admin/referral-destinations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(255).optional(),
+        address: z.string().optional(),
+        phone: z.string().optional(),
+        specialty: z.string().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.updateReferralDestination(Number(req.params.id), validated);
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/admin/referral-destinations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteReferralDestination(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Referral Reasons (Admin) ---
+  app.get("/api/referral-reasons", isAuthenticated, async (req, res) => {
+    const items = await storage.getReferralReasons();
+    res.json(items);
+  });
+
+  app.post("/api/admin/referral-reasons", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        description: z.string().min(1).max(255),
+        category: z.string().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createReferralReason(validated);
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.patch("/api/admin/referral-reasons/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        description: z.string().min(1).max(255).optional(),
+        category: z.string().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.updateReferralReason(Number(req.params.id), validated);
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/admin/referral-reasons/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteReferralReason(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // --- Seed Data ---
   await seedDatabase();
 

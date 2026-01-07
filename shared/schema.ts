@@ -452,6 +452,154 @@ export const insertHandoverSchema = createInsertSchema(handovers).omit({ id: tru
 export type Handover = typeof handovers.$inferSelect;
 export type InsertHandover = z.infer<typeof insertHandoverSchema>;
 
+// Evolution Models (Modelos de Evolução Clínica)
+export const evolutionModels = pgTable("evolution_models", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  category: text("category"), // clínica médica, pediatria, gineco, pronto-atendimento
+  isPublic: boolean("is_public").default(true),
+  userId: text("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertEvolutionModelSchema = createInsertSchema(evolutionModels).omit({ id: true, createdAt: true });
+export type EvolutionModel = typeof evolutionModels.$inferSelect;
+export type InsertEvolutionModel = z.infer<typeof insertEvolutionModelSchema>;
+
+// Physical Exam Templates (Exame Físico Padrão)
+export const physicalExamTemplates = pgTable("physical_exam_templates", {
+  id: serial("id").primaryKey(),
+  section: text("section").notNull(), // estado_geral, sinais_vitais, cabeca_pescoco, cardiovascular, respiratorio, abdome, neurologico, extremidades
+  content: text("content").notNull(),
+  order: integer("order").default(0),
+  isPublic: boolean("is_public").default(true),
+  userId: text("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPhysicalExamTemplateSchema = createInsertSchema(physicalExamTemplates).omit({ id: true, createdAt: true });
+export type PhysicalExamTemplate = typeof physicalExamTemplates.$inferSelect;
+export type InsertPhysicalExamTemplate = z.infer<typeof insertPhysicalExamTemplateSchema>;
+
+// Signs and Symptoms Templates
+export const signsSymptoms = pgTable("signs_symptoms", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  category: text("category"), // cardiologia, respiratório, abdome, neurológico
+  isPublic: boolean("is_public").default(true),
+  userId: text("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSignsSymptomsSchema = createInsertSchema(signsSymptoms).omit({ id: true, createdAt: true });
+export type SignsSymptoms = typeof signsSymptoms.$inferSelect;
+export type InsertSignsSymptoms = z.infer<typeof insertSignsSymptomsSchema>;
+
+// Semiological Signs Templates
+export const semiologicalSigns = pgTable("semiological_signs", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  category: text("category"),
+  isPublic: boolean("is_public").default(true),
+  userId: text("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSemiologicalSignsSchema = createInsertSchema(semiologicalSigns).omit({ id: true, createdAt: true });
+export type SemiologicalSigns = typeof semiologicalSigns.$inferSelect;
+export type InsertSemiologicalSigns = z.infer<typeof insertSemiologicalSignsSchema>;
+
+// Medical Certificates (Atestados Médicos)
+export const medicalCertificates = pgTable("medical_certificates", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  patientName: text("patient_name").notNull(),
+  patientDocument: text("patient_document"),
+  daysOff: integer("days_off").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMedicalCertificateSchema = createInsertSchema(medicalCertificates, {
+  startDate: z.coerce.date(),
+}).omit({ id: true, createdAt: true });
+export type MedicalCertificate = typeof medicalCertificates.$inferSelect;
+export type InsertMedicalCertificate = z.infer<typeof insertMedicalCertificateSchema>;
+
+// Attendance Declarations (Declarações de Comparecimento)
+export const attendanceDeclarations = pgTable("attendance_declarations", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  patientName: text("patient_name").notNull(),
+  patientDocument: text("patient_document"),
+  attendanceDate: timestamp("attendance_date").notNull(),
+  period: text("period"), // manhã, tarde, noite
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  location: text("location"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAttendanceDeclarationSchema = createInsertSchema(attendanceDeclarations, {
+  attendanceDate: z.coerce.date(),
+}).omit({ id: true, createdAt: true });
+export type AttendanceDeclaration = typeof attendanceDeclarations.$inferSelect;
+export type InsertAttendanceDeclaration = z.infer<typeof insertAttendanceDeclarationSchema>;
+
+// Referral Destinations (Destinos de Encaminhamento)
+export const referralDestinations = pgTable("referral_destinations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type"), // UPA, hospital, pronto-socorro, especialidade
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertReferralDestinationSchema = createInsertSchema(referralDestinations).omit({ id: true, createdAt: true });
+export type ReferralDestination = typeof referralDestinations.$inferSelect;
+export type InsertReferralDestination = z.infer<typeof insertReferralDestinationSchema>;
+
+// Referral Reasons (Motivos de Encaminhamento)
+export const referralReasons = pgTable("referral_reasons", {
+  id: serial("id").primaryKey(),
+  description: text("description").notNull(),
+  category: text("category"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertReferralReasonSchema = createInsertSchema(referralReasons).omit({ id: true, createdAt: true });
+export type ReferralReason = typeof referralReasons.$inferSelect;
+export type InsertReferralReason = z.infer<typeof insertReferralReasonSchema>;
+
+// Medical Referrals (Encaminhamentos)
+export const medicalReferrals = pgTable("medical_referrals", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  patientName: text("patient_name").notNull(),
+  patientBirthDate: timestamp("patient_birth_date"),
+  patientAge: text("patient_age"),
+  patientSex: text("patient_sex"),
+  patientDocument: text("patient_document"),
+  patientAddress: text("patient_address"),
+  originUnit: text("origin_unit"),
+  vitalSigns: jsonb("vital_signs"), // { pa, fc, fr, spo2, temp }
+  referralReason: text("referral_reason").notNull(),
+  destination: text("destination").notNull(),
+  clinicalHistory: text("clinical_history"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMedicalReferralSchema = createInsertSchema(medicalReferrals, {
+  patientBirthDate: z.coerce.date().optional().nullable(),
+}).omit({ id: true, createdAt: true });
+export type MedicalReferral = typeof medicalReferrals.$inferSelect;
+export type InsertMedicalReferral = z.infer<typeof insertMedicalReferralSchema>;
+
 // Goals (Financial)
 export const goals = pgTable("goals", {
   id: serial("id").primaryKey(),

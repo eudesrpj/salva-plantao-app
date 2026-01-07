@@ -26,7 +26,12 @@ import {
   Bot,
   Crown,
   RefreshCw,
-  Pill
+  Pill,
+  FileEdit,
+  FileBadge,
+  FileCheck,
+  ArrowRightLeft,
+  MessageCircle
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -35,6 +40,10 @@ import { useState } from "react";
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: FileText, label: "Prescrições", href: "/prescriptions" },
+  { icon: FileEdit, label: "Evolução", href: "/evolution" },
+  { icon: FileBadge, label: "Atestado", href: "/medical-certificate" },
+  { icon: FileCheck, label: "Declaração", href: "/attendance-declaration" },
+  { icon: ArrowRightLeft, label: "Encaminhamento", href: "/referral" },
   { icon: ClipboardList, label: "Protocolos", href: "/protocols" },
   { icon: CheckSquare, label: "Condutas", href: "/checklists" },
   { icon: Pill, label: "Interações", href: "/drug-interactions" },
@@ -42,8 +51,7 @@ const NAV_ITEMS = [
   { icon: Stethoscope, label: "Passagem (SBAR)", href: "/handovers" },
   { icon: CalendarDays, label: "Plantões", href: "/shifts" },
   { icon: DollarSign, label: "Financeiro", href: "/finance" },
-  { icon: Activity, label: "Interconsulta IA", href: "/ai-chat" },
-  { icon: Bot, label: "Assistente IA", href: "/ai-assistant" },
+  { icon: MessageCircle, label: "Assistente IA", href: "/ai-webview" },
   { icon: Library, label: "Biblioteca", href: "/library" },
   { icon: StickyNote, label: "Anotações", href: "/notes" },
   { icon: User, label: "Meu Perfil", href: "/profile" },

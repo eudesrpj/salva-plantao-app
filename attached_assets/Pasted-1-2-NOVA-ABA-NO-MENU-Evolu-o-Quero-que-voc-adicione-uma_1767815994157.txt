@@ -1,0 +1,484 @@
+1️⃣2️⃣ NOVA ABA NO MENU: “Evolução”
+
+Quero que você adicione uma nova opção no menu principal chamada “Evolução”, focada em facilitar o registro e cópia rápida de textos de evolução clínica.
+
+Objetivo da aba “Evolução”
+
+Permitir que o usuário tenha modelos de evolução pré-estabelecidos, textos de exame físico padrão, sinais e sintomas e signos semiológicos sempre à mão, de forma rápida, editável e copiável, para uso no prontuário / sistema que ele estiver utilizando.
+1️⃣4️⃣ AJUSTE GERAL DA INTEGRAÇÃO COM IA (ADMIN x USUÁRIO)
+
+Quero que você ajuste toda a arquitetura de IA do app seguindo as regras abaixo, para separar claramente o que é IA interna para o ADMIN e o que é acesso à IA para o USUÁRIO:
+
+🔹 1) Integração direta com ChatGPT via API – APENAS PARA O ADMIN
+
+A integração direta com a API do ChatGPT / OpenAI (com chave de API) deve existir somente no painel do administrador.
+
+Apenas o admin poderá:
+
+configurar a chave da API
+
+usar o “Assistente IA do Admin” para:
+
+gerar rascunhos de medicações
+
+gerar modelos de prescrição
+
+gerar resumos
+
+gerar checklists
+
+gerar outros conteúdos textuais do app
+
+Nenhum usuário comum deve ter integração direta com a API de IA.
+
+Remover qualquer lógica anterior que use IA externa baseada no perfil do usuário ou na conta individual dele dentro do app.
+
+Resumo:
+👉 A API do ChatGPT é usada exclusivamente para ajudar o ADMIN a criar e manter conteúdo, nunca diretamente pelo usuário final.
+
+🔹 2) Usuário comum: apenas acesso via web ao ChatGPT + prompts pré-definidos
+
+Para os usuários médicos, a integração com ChatGPT deve ser somente via aba web (webview), conforme já descrito:
+
+uma tela/aba “Assistente IA”
+
+que abre o site do ChatGPT dentro do app / PWA
+
+o usuário loga com a própria conta do ChatGPT (se quiser)
+
+Nessa tela:
+
+devem aparecer botões com prompts pré-estabelecidos, que:
+
+podem ser criados pelo admin
+
+podem ser criados também pelo próprio usuário, se permitido
+
+ao clicar, o prompt é preenchido no campo de entrada do ChatGPT (web), para o usuário revisar e enviar.
+
+Importante:
+
+Nenhuma chamada à API do ChatGPT deve ser feita em nome do usuário comum usando a chave do app.
+
+O acesso do usuário à IA é sempre via site do ChatGPT, dentro da aba web.
+
+🔹 3) “IA do Sistema” para sugestões – sem IA externa, sem API
+
+O módulo “Assistente de Sugestão de Prescrição (IA do Sistema)” deve continuar funcionando apenas com base no banco interno do app, SEM usar ChatGPT ou qualquer outra API externa.
+
+Ele apenas:
+
+busca modelos de prescrição
+
+cruza com faixa etária, peso, diagnóstico, etc.
+
+sugere opções com base nos dados já cadastrados
+
+Não deve haver nenhuma chamada externa de IA nesse módulo.
+
+Ele é uma inteligência interna, baseada em regras e dados, não uma IA externa.
+
+🔹 4) Remover integração de IA direta no perfil do usuário
+
+Se existir qualquer configuração, campo ou lógica que faça:
+
+vincular IA externa (API) ao perfil do usuário
+
+usar chave de API ou algo similar para o usuário
+
+Isso deve ser removido ou desativado.
+
+A lógica final deve ser:
+
+Admin → usa IA via API (ChatGPT) somente no painel do admin, para gerar conteúdo e preencher banco de dados.
+
+Usuário comum → usa:
+
+webview do ChatGPT (com login na própria conta)
+
+“IA do sistema” (sugestão interna de modelos, baseada no banco do app)
+
+🔹 5) Resumo comportamental esperado
+
+Admin:
+
+vê e usa:
+
+Configurações de IA (chave de API)
+
+Assistente IA do Admin (gerar conteúdo)
+
+IA externa ajuda a alimentar o sistema, nunca prescreve direto para o paciente.
+
+Usuário médico:
+
+vê:
+
+Assistente IA via web (ChatGPT em aba web, com prompts)
+
+Assistente de Sugestão de Prescrição (IA do Sistema, interna)
+
+não tem nenhuma integração direta com a API do ChatGPT pela conta do app.
+1. Estrutura geral da tela “Evolução”
+
+Na aba “Evolução”, criar uma interface com:
+
+Lista de modelos de evolução pré-estabelecidos
+
+Seções de conteúdo rápido:
+
+Exame físico padrão
+
+Sinais e sintomas
+
+Signos semiológicos
+
+Cada item deve ser:
+
+facilmente visualizado
+
+editável
+
+com botão de “Copiar texto” para área de transferência
+
+2. Modelos de Evolução
+
+No painel do admin, permitir cadastrar modelos de evolução com campos como:
+
+título do modelo (ex.: “Evolução clínica em enfermaria”, “Evolução em UPA – dor torácica”)
+
+texto da evolução (corpo)
+
+categoria (ex.: clínica médica, pediatria, gineco, pronto-atendimento, etc.)
+
+Na tela do usuário:
+
+exibir lista de modelos
+
+permitir filtrar por categoria
+
+permitir:
+
+abrir o modelo
+
+editar localmente (para aquele atendimento)
+
+copiar o texto com um clique
+
+3. Exame Físico Padrão
+
+Criar uma seção específica dentro da aba “Evolução”:
+
+“Exame Físico Padrão”
+
+Com blocos como:
+
+Estado geral
+
+Sinais vitais
+
+Cabeça e pescoço
+
+Cardiovascular
+
+Respiratório
+
+Abdome
+
+Neurológico
+
+Extremidades
+
+Cada bloco deve conter textos padrão (frases-modelo), por exemplo:
+
+“Eupneico, corado, hidratado, afebril, consciente e orientado…”
+
+“MV presente bilateralmente, sem ruídos adventícios…”
+
+Requisitos:
+
+Esses textos devem ser editáveis pelo usuário (pelo menos como cópia local)
+
+No painel do admin, deve ser possível definir e atualizar os textos padrão para todos os usuários
+
+Na interface, ter sempre um botão “Copiar exame físico completo” e/ou “Copiar só este segmento”
+
+4. Sinais e Sintomas / Signos Semiológicos
+
+Criar duas áreas:
+
+“Sinais e sintomas”
+
+“Signos semiológicos”
+
+Nelas, o usuário deve ter:
+
+lista de itens com texto pronto (ex.: “Dor em aperto em hemitórax esquerdo irradiando para MSE”, “Edema em membros inferiores + sinal de cacifo +/4+”)
+
+possibilidade de:
+
+editar texto
+
+copiar rapidamente
+
+salvar novos modelos
+
+No painel do admin:
+
+permitir cadastrar, editar e remover modelos padrão
+
+organizar por categoria (ex.: cardiologia, respiratório, abdome, etc.)
+
+Toda a aba “Evolução” é apenas para acesso rápido a texto – o sistema não precisa salvar como prontuário, apenas fornecer texto para o usuário usar onde precisar.
+
+1️⃣3️⃣ NOVAS ABAS NO MENU: ATESTADO MÉDICO, DECLARAÇÃO DE COMPARECIMENTO E ENCAMINHAMENTO
+
+Quero adicionar no menu principal as seguintes opções:
+
+“Atestado Médico”
+
+“Declaração de Comparecimento”
+
+“Encaminhamento”
+
+Todas devem gerar documentos no padrão SUS, com opção de imprimir e, se possível, salvar em PDF, sempre deixando espaço para carimbo e assinatura manual.
+
+1️⃣3️⃣.1 Aba “Atestado Médico”
+
+Criar uma tela específica para gerar atestados médicos.
+
+Campos:
+
+Nome do paciente
+
+Documento (opcional: CPF/RG – se quiser implementar)
+
+Quantidade de dias de afastamento
+
+Data de início e/ou data da emissão (data atual sugerida)
+
+Motivo (campo texto ou opcional, se desejar)
+
+Dados do médico:
+
+Puxar automaticamente do perfil do usuário (médico):
+
+Nome do médico
+
+CRM
+
+Especialidade (se disponível)
+
+Funcionalidade:
+
+Ao preencher os campos, o sistema monta automaticamente o texto do atestado em um formato padrão SUS
+
+Exibir uma pré-visualização do documento
+
+Botão:
+
+“Imprimir atestado”
+
+opcional: “Salvar em PDF”
+
+Layout do documento:
+
+Cabeçalho (nome do serviço / app, se houver)
+
+Texto padrão de atestado
+
+Data
+
+Dados do paciente
+
+Período/dias
+
+No final:
+
+linha para assinatura
+
+espaço para carimbo do médico
+
+1️⃣3️⃣.2 Aba “Declaração de Comparecimento”
+
+Criar uma tela para gerar declaração de comparecimento.
+
+Campos:
+
+Nome do paciente
+
+Documento (opcional)
+
+Data de comparecimento
+
+Período do dia:
+
+opções (ex.: manhã, tarde, noite)
+
+ou horário: das : às :
+
+Local/serviço (opcional, pode ser preenchido ou padrão)
+
+Dados do médico:
+
+Puxar do perfil do usuário:
+
+Nome do médico
+
+CRM
+
+Funcionalidade:
+
+Gerar texto padrão de declaração de comparecimento
+
+Exibir pré-visualização
+
+Botões:
+
+“Imprimir declaração”
+
+opcional “Salvar em PDF”
+
+Layout:
+
+Texto padrão dizendo que o paciente esteve em atendimento no serviço naquele dia/período
+
+Data
+
+Rodapé com:
+
+nome do médico
+
+CRM
+
+linha para assinatura
+
+espaço para carimbo
+
+1️⃣3️⃣.3 Aba “Encaminhamento”
+
+Criar uma tela para encaminhamento de paciente, no padrão da planilha de encaminhamento SUS, mas com alguns campos pré-salvos para agilizar o preenchimento.
+
+Campos obrigatórios:
+
+Nome completo do paciente
+
+Dados pessoais:
+
+data de nascimento
+
+idade
+
+sexo
+
+documento (opcional)
+
+Endereço (opcional)
+
+Unidade de origem (pode ser padrão, mas editável)
+
+Sinais vitais:
+
+PA
+
+FC
+
+FR
+
+Saturação (SpO2)
+
+Temperatura
+
+Outros, se necessário
+
+Motivo do encaminhamento:
+
+Campo texto
+
+Opcionalmente, uma lista de motivos pré-cadastrados (admin pode criar):
+
+ex.: “Dor torácica com suspeita de SCA”, “Dispneia grave”, “Queda com TCE”, etc.
+
+Serviço de destino:
+
+Campo para selecionar:
+
+qual serviço está sendo solicitado
+
+ex.: UPA, hospital de referência, pronto-socorro, cardiologia, ortopedia, etc.
+
+Esses serviços podem ser gerenciáveis pelo admin no painel (tabela de destinos).
+
+História clínica e justificativa:
+
+Campo de texto grande para:
+
+resumo da história
+
+exames realizados
+
+conduta inicial
+
+justificativa do encaminhamento
+
+Dados do médico:
+
+Nome do médico (do perfil)
+
+CRM
+
+Unidade / serviço de origem (se quiser puxar automático)
+
+Funcionalidade:
+
+Gerar documento de encaminhamento em layout padrão SUS (sem precisar ser idêntico, mas no mesmo espírito)
+
+Permitir:
+
+pré-visualizar o documento
+
+imprimir
+
+opcional: “Salvar em PDF”
+
+Layout:
+
+Cabeçalho com:
+
+identificação da unidade / serviço
+
+Blocos bem definidos:
+
+Dados do paciente
+
+Sinais vitais
+
+Motivo do encaminhamento
+
+Serviço de destino
+
+História clínica / justificativa
+
+Rodapé:
+
+nome do médico
+
+CRM
+
+espaço para assinatura
+
+espaço para carimbo
+
+Pré-salvos / atalhos:
+
+No painel do admin, permitir cadastrar:
+
+motivos de encaminhamento mais frequentes
+
+serviços de referência mais usados
+
+Na tela do usuário, permitir:
+
+selecionar esses motivos/serviços pré-salvos em dropdowns
+
+editar o texto antes de imprimir

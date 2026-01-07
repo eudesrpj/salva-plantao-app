@@ -3,6 +3,8 @@ import {
   protocols, flashcards, favorites, adminSettings, doctorProfiles, interconsultMessages, usageStats,
   pathologies, pathologyMedications, patientHistory, calculatorSettings, medications, userPreferences,
   drugInteractions, medicationContraindications, prescriptionFavorites,
+  evolutionModels, physicalExamTemplates, signsSymptoms, semiologicalSigns,
+  medicalCertificates, attendanceDeclarations, medicalReferrals, referralDestinations, referralReasons,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -28,7 +30,16 @@ import {
   type UserPreferences, type InsertUserPreferences,
   type DrugInteraction, type InsertDrugInteraction,
   type MedicationContraindication, type InsertMedicationContraindication,
-  type PrescriptionFavorite, type InsertPrescriptionFavorite
+  type PrescriptionFavorite, type InsertPrescriptionFavorite,
+  type EvolutionModel, type InsertEvolutionModel,
+  type PhysicalExamTemplate, type InsertPhysicalExamTemplate,
+  type SignsSymptoms, type InsertSignsSymptoms,
+  type SemiologicalSigns, type InsertSemiologicalSigns,
+  type MedicalCertificate, type InsertMedicalCertificate,
+  type AttendanceDeclaration, type InsertAttendanceDeclaration,
+  type MedicalReferral, type InsertMedicalReferral,
+  type ReferralDestination, type InsertReferralDestination,
+  type ReferralReason, type InsertReferralReason
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -195,6 +206,57 @@ export interface IStorage {
     ageGroup?: string;
     userId?: string;
   }): Promise<Array<Prescription & { relevanceScore: number }>>;
+
+  // Evolution Models
+  getEvolutionModels(userId?: string, category?: string): Promise<EvolutionModel[]>;
+  createEvolutionModel(item: InsertEvolutionModel): Promise<EvolutionModel>;
+  updateEvolutionModel(id: number, item: Partial<InsertEvolutionModel>): Promise<EvolutionModel>;
+  deleteEvolutionModel(id: number): Promise<void>;
+
+  // Physical Exam Templates
+  getPhysicalExamTemplates(userId?: string): Promise<PhysicalExamTemplate[]>;
+  createPhysicalExamTemplate(item: InsertPhysicalExamTemplate): Promise<PhysicalExamTemplate>;
+  updatePhysicalExamTemplate(id: number, item: Partial<InsertPhysicalExamTemplate>): Promise<PhysicalExamTemplate>;
+  deletePhysicalExamTemplate(id: number): Promise<void>;
+
+  // Signs and Symptoms
+  getSignsSymptoms(userId?: string, category?: string): Promise<SignsSymptoms[]>;
+  createSignsSymptoms(item: InsertSignsSymptoms): Promise<SignsSymptoms>;
+  updateSignsSymptoms(id: number, item: Partial<InsertSignsSymptoms>): Promise<SignsSymptoms>;
+  deleteSignsSymptoms(id: number): Promise<void>;
+
+  // Semiological Signs
+  getSemiologicalSigns(userId?: string, category?: string): Promise<SemiologicalSigns[]>;
+  createSemiologicalSigns(item: InsertSemiologicalSigns): Promise<SemiologicalSigns>;
+  updateSemiologicalSigns(id: number, item: Partial<InsertSemiologicalSigns>): Promise<SemiologicalSigns>;
+  deleteSemiologicalSigns(id: number): Promise<void>;
+
+  // Medical Certificates
+  getMedicalCertificates(userId: string): Promise<MedicalCertificate[]>;
+  createMedicalCertificate(item: InsertMedicalCertificate): Promise<MedicalCertificate>;
+  deleteMedicalCertificate(id: number): Promise<void>;
+
+  // Attendance Declarations
+  getAttendanceDeclarations(userId: string): Promise<AttendanceDeclaration[]>;
+  createAttendanceDeclaration(item: InsertAttendanceDeclaration): Promise<AttendanceDeclaration>;
+  deleteAttendanceDeclaration(id: number): Promise<void>;
+
+  // Medical Referrals
+  getMedicalReferrals(userId: string): Promise<MedicalReferral[]>;
+  createMedicalReferral(item: InsertMedicalReferral): Promise<MedicalReferral>;
+  deleteMedicalReferral(id: number): Promise<void>;
+
+  // Referral Destinations
+  getReferralDestinations(): Promise<ReferralDestination[]>;
+  createReferralDestination(item: InsertReferralDestination): Promise<ReferralDestination>;
+  updateReferralDestination(id: number, item: Partial<InsertReferralDestination>): Promise<ReferralDestination>;
+  deleteReferralDestination(id: number): Promise<void>;
+
+  // Referral Reasons
+  getReferralReasons(): Promise<ReferralReason[]>;
+  createReferralReason(item: InsertReferralReason): Promise<ReferralReason>;
+  updateReferralReason(id: number, item: Partial<InsertReferralReason>): Promise<ReferralReason>;
+  deleteReferralReason(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1008,6 +1070,238 @@ export class DatabaseStorage implements IStorage {
     return scored
       .filter(p => p.relevanceScore > 0)
       .sort((a, b) => b.relevanceScore - a.relevanceScore);
+  }
+
+  // Evolution Models
+  async getEvolutionModel(id: number): Promise<EvolutionModel | undefined> {
+    const [item] = await db.select().from(evolutionModels).where(eq(evolutionModels.id, id));
+    return item;
+  }
+
+  async getEvolutionModels(userId?: string, category?: string): Promise<EvolutionModel[]> {
+    const conditions = [];
+    if (userId) {
+      conditions.push(or(eq(evolutionModels.isPublic, true), eq(evolutionModels.userId, userId)));
+    } else {
+      conditions.push(eq(evolutionModels.isPublic, true));
+    }
+    if (category) {
+      conditions.push(eq(evolutionModels.category, category));
+    }
+    return await db.select().from(evolutionModels)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(evolutionModels.createdAt));
+  }
+
+  async createEvolutionModel(insertItem: InsertEvolutionModel): Promise<EvolutionModel> {
+    const [item] = await db.insert(evolutionModels).values(insertItem).returning();
+    return item;
+  }
+
+  async updateEvolutionModel(id: number, updateItem: Partial<InsertEvolutionModel>): Promise<EvolutionModel> {
+    const [item] = await db.update(evolutionModels).set(updateItem).where(eq(evolutionModels.id, id)).returning();
+    return item;
+  }
+
+  async deleteEvolutionModel(id: number): Promise<void> {
+    await db.delete(evolutionModels).where(eq(evolutionModels.id, id));
+  }
+
+  // Physical Exam Templates
+  async getPhysicalExamTemplate(id: number): Promise<PhysicalExamTemplate | undefined> {
+    const [item] = await db.select().from(physicalExamTemplates).where(eq(physicalExamTemplates.id, id));
+    return item;
+  }
+
+  async getPhysicalExamTemplates(userId?: string): Promise<PhysicalExamTemplate[]> {
+    const conditions = [];
+    if (userId) {
+      conditions.push(or(eq(physicalExamTemplates.isPublic, true), eq(physicalExamTemplates.userId, userId)));
+    } else {
+      conditions.push(eq(physicalExamTemplates.isPublic, true));
+    }
+    return await db.select().from(physicalExamTemplates)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(physicalExamTemplates.order);
+  }
+
+  async createPhysicalExamTemplate(insertItem: InsertPhysicalExamTemplate): Promise<PhysicalExamTemplate> {
+    const [item] = await db.insert(physicalExamTemplates).values(insertItem).returning();
+    return item;
+  }
+
+  async updatePhysicalExamTemplate(id: number, updateItem: Partial<InsertPhysicalExamTemplate>): Promise<PhysicalExamTemplate> {
+    const [item] = await db.update(physicalExamTemplates).set(updateItem).where(eq(physicalExamTemplates.id, id)).returning();
+    return item;
+  }
+
+  async deletePhysicalExamTemplate(id: number): Promise<void> {
+    await db.delete(physicalExamTemplates).where(eq(physicalExamTemplates.id, id));
+  }
+
+  // Signs and Symptoms
+  async getSignsSymptoms(userId?: string, category?: string): Promise<SignsSymptoms[]> {
+    const conditions = [];
+    if (userId) {
+      conditions.push(or(eq(signsSymptoms.isPublic, true), eq(signsSymptoms.userId, userId)));
+    } else {
+      conditions.push(eq(signsSymptoms.isPublic, true));
+    }
+    if (category) {
+      conditions.push(eq(signsSymptoms.category, category));
+    }
+    return await db.select().from(signsSymptoms)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(signsSymptoms.createdAt));
+  }
+
+  async createSignsSymptoms(insertItem: InsertSignsSymptoms): Promise<SignsSymptoms> {
+    const [item] = await db.insert(signsSymptoms).values(insertItem).returning();
+    return item;
+  }
+
+  async updateSignsSymptoms(id: number, updateItem: Partial<InsertSignsSymptoms>): Promise<SignsSymptoms> {
+    const [item] = await db.update(signsSymptoms).set(updateItem).where(eq(signsSymptoms.id, id)).returning();
+    return item;
+  }
+
+  async deleteSignsSymptoms(id: number): Promise<void> {
+    await db.delete(signsSymptoms).where(eq(signsSymptoms.id, id));
+  }
+
+  // Semiological Signs
+  async getSemiologicalSigns(userId?: string, category?: string): Promise<SemiologicalSigns[]> {
+    const conditions = [];
+    if (userId) {
+      conditions.push(or(eq(semiologicalSigns.isPublic, true), eq(semiologicalSigns.userId, userId)));
+    } else {
+      conditions.push(eq(semiologicalSigns.isPublic, true));
+    }
+    if (category) {
+      conditions.push(eq(semiologicalSigns.category, category));
+    }
+    return await db.select().from(semiologicalSigns)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(semiologicalSigns.createdAt));
+  }
+
+  async createSemiologicalSigns(insertItem: InsertSemiologicalSigns): Promise<SemiologicalSigns> {
+    const [item] = await db.insert(semiologicalSigns).values(insertItem).returning();
+    return item;
+  }
+
+  async updateSemiologicalSigns(id: number, updateItem: Partial<InsertSemiologicalSigns>): Promise<SemiologicalSigns> {
+    const [item] = await db.update(semiologicalSigns).set(updateItem).where(eq(semiologicalSigns.id, id)).returning();
+    return item;
+  }
+
+  async deleteSemiologicalSigns(id: number): Promise<void> {
+    await db.delete(semiologicalSigns).where(eq(semiologicalSigns.id, id));
+  }
+
+  // Medical Certificates
+  async getMedicalCertificate(id: number): Promise<MedicalCertificate | undefined> {
+    const [item] = await db.select().from(medicalCertificates).where(eq(medicalCertificates.id, id));
+    return item;
+  }
+
+  async getMedicalCertificates(userId: string): Promise<MedicalCertificate[]> {
+    return await db.select().from(medicalCertificates)
+      .where(eq(medicalCertificates.userId, userId))
+      .orderBy(desc(medicalCertificates.createdAt));
+  }
+
+  async createMedicalCertificate(insertItem: InsertMedicalCertificate): Promise<MedicalCertificate> {
+    const [item] = await db.insert(medicalCertificates).values(insertItem).returning();
+    return item;
+  }
+
+  async deleteMedicalCertificate(id: number): Promise<void> {
+    await db.delete(medicalCertificates).where(eq(medicalCertificates.id, id));
+  }
+
+  // Attendance Declarations
+  async getAttendanceDeclaration(id: number): Promise<AttendanceDeclaration | undefined> {
+    const [item] = await db.select().from(attendanceDeclarations).where(eq(attendanceDeclarations.id, id));
+    return item;
+  }
+
+  async getAttendanceDeclarations(userId: string): Promise<AttendanceDeclaration[]> {
+    return await db.select().from(attendanceDeclarations)
+      .where(eq(attendanceDeclarations.userId, userId))
+      .orderBy(desc(attendanceDeclarations.createdAt));
+  }
+
+  async createAttendanceDeclaration(insertItem: InsertAttendanceDeclaration): Promise<AttendanceDeclaration> {
+    const [item] = await db.insert(attendanceDeclarations).values(insertItem).returning();
+    return item;
+  }
+
+  async deleteAttendanceDeclaration(id: number): Promise<void> {
+    await db.delete(attendanceDeclarations).where(eq(attendanceDeclarations.id, id));
+  }
+
+  // Medical Referrals
+  async getMedicalReferral(id: number): Promise<MedicalReferral | undefined> {
+    const [item] = await db.select().from(medicalReferrals).where(eq(medicalReferrals.id, id));
+    return item;
+  }
+
+  async getMedicalReferrals(userId: string): Promise<MedicalReferral[]> {
+    return await db.select().from(medicalReferrals)
+      .where(eq(medicalReferrals.userId, userId))
+      .orderBy(desc(medicalReferrals.createdAt));
+  }
+
+  async createMedicalReferral(insertItem: InsertMedicalReferral): Promise<MedicalReferral> {
+    const [item] = await db.insert(medicalReferrals).values(insertItem).returning();
+    return item;
+  }
+
+  async deleteMedicalReferral(id: number): Promise<void> {
+    await db.delete(medicalReferrals).where(eq(medicalReferrals.id, id));
+  }
+
+  // Referral Destinations
+  async getReferralDestinations(): Promise<ReferralDestination[]> {
+    return await db.select().from(referralDestinations)
+      .where(eq(referralDestinations.isActive, true))
+      .orderBy(referralDestinations.name);
+  }
+
+  async createReferralDestination(insertItem: InsertReferralDestination): Promise<ReferralDestination> {
+    const [item] = await db.insert(referralDestinations).values(insertItem).returning();
+    return item;
+  }
+
+  async updateReferralDestination(id: number, updateItem: Partial<InsertReferralDestination>): Promise<ReferralDestination> {
+    const [item] = await db.update(referralDestinations).set(updateItem).where(eq(referralDestinations.id, id)).returning();
+    return item;
+  }
+
+  async deleteReferralDestination(id: number): Promise<void> {
+    await db.delete(referralDestinations).where(eq(referralDestinations.id, id));
+  }
+
+  // Referral Reasons
+  async getReferralReasons(): Promise<ReferralReason[]> {
+    return await db.select().from(referralReasons)
+      .where(eq(referralReasons.isActive, true))
+      .orderBy(referralReasons.description);
+  }
+
+  async createReferralReason(insertItem: InsertReferralReason): Promise<ReferralReason> {
+    const [item] = await db.insert(referralReasons).values(insertItem).returning();
+    return item;
+  }
+
+  async updateReferralReason(id: number, updateItem: Partial<InsertReferralReason>): Promise<ReferralReason> {
+    const [item] = await db.update(referralReasons).set(updateItem).where(eq(referralReasons.id, id)).returning();
+    return item;
+  }
+
+  async deleteReferralReason(id: number): Promise<void> {
+    await db.delete(referralReasons).where(eq(referralReasons.id, id));
   }
 }
 

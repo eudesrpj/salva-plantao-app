@@ -34,6 +34,11 @@ import Admin from "@/pages/Admin";
 import Settings from "@/pages/Settings";
 import DrugInteractions from "@/pages/DrugInteractions";
 import AiAssistant from "@/pages/AiAssistant";
+import Evolution from "@/pages/Evolution";
+import MedicalCertificate from "@/pages/MedicalCertificate";
+import AttendanceDeclaration from "@/pages/AttendanceDeclaration";
+import Referral from "@/pages/Referral";
+import AiWebView from "@/pages/AiWebView";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const [isPedCalcOpen, setIsPedCalcOpen] = useState(false);
@@ -163,6 +168,26 @@ function Router() {
 
       <Route path="/ai-assistant">
         <ProtectedRoute component={AiAssistant} />
+      </Route>
+
+      <Route path="/evolution">
+        <ProtectedRoute component={Evolution} />
+      </Route>
+
+      <Route path="/medical-certificate">
+        <ProtectedRoute component={MedicalCertificate} />
+      </Route>
+
+      <Route path="/attendance-declaration">
+        <ProtectedRoute component={AttendanceDeclaration} />
+      </Route>
+
+      <Route path="/referral">
+        <ProtectedRoute component={Referral} />
+      </Route>
+
+      <Route path="/ai-webview">
+        <ProtectedRoute component={AiWebView} />
       </Route>
 
       {/* Redirect chat alias to ai-chat for now as we merged functionality or placeholder */}
