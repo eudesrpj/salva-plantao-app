@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User } from "lucide-react";
+import { PageLoader } from "@/components/ui/loading-spinner";
 import type { Prescription } from "@shared/schema";
 
 const INTERVALS = ["6/6h", "8/8h", "12/12h", "1x/dia", "2x/dia", "3x/dia", "Dose única", "SOS"];
@@ -83,7 +84,7 @@ export default function Prescriptions() {
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+          <PageLoader text="Carregando prescrições..." />
         </div>
       ) : (
         <div className="space-y-8">

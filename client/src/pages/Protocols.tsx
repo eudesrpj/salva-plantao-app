@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Search, Plus, Trash2, Lock, ClipboardList, Baby, User, ChevronRight, AlertTriangle, Zap } from "lucide-react";
+import { PageLoader } from "@/components/ui/loading-spinner";
 import type { Protocol } from "@shared/schema";
 
 const SPECIALTIES = ["Cardiologia", "Pneumologia", "Neurologia", "Gastroenterologia", "Infectologia", "Pediatria", "Emergência", "Clínica Geral", "Outros"];
@@ -81,7 +82,7 @@ export default function Protocols() {
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+          <PageLoader text="Carregando protocolos..." />
         </div>
       ) : (
         <div className="grid lg:grid-cols-3 gap-6">

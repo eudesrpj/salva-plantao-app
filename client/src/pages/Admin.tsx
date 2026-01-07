@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil } from "lucide-react";
+import { PageLoader } from "@/components/ui/loading-spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest } from "@/lib/queryClient";
@@ -121,7 +122,7 @@ function UsersTab() {
     },
   });
 
-  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+  if (isLoading) return <div className="flex justify-center p-8"><PageLoader text="Carregando usuários..." /></div>;
 
   const activeUsers = users?.filter(u => u.status === "active").length || 0;
   const pendingUsers = users?.filter(u => u.status === "pending").length || 0;
@@ -277,7 +278,7 @@ function PaymentSettingsTab() {
     saveMutation.mutate({ key: "ai_prompt", value: aiPrompt });
   };
 
-  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+  if (isLoading) return <div className="flex justify-center p-8"><PageLoader text="Carregando configurações..." /></div>;
 
   return (
     <div className="space-y-6">
@@ -545,7 +546,7 @@ function AiPromptsTab() {
     }
   };
 
-  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+  if (isLoading) return <div className="flex justify-center p-8"><PageLoader text="Carregando prompts..." /></div>;
 
   return (
     <div className="space-y-6">

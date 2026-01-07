@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Send, Bot, User, Loader2, Users, Headset, MessageCircle, Settings } from "lucide-react";
+import { Send, Bot, User, Users, Headset, MessageCircle, Settings } from "lucide-react";
+import { LoadingDots } from "@/components/ui/loading-spinner";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
@@ -273,8 +274,9 @@ export default function AIChat() {
             <div className={`h-8 w-8 rounded-full ${colors.bg} flex items-center justify-center shrink-0`}>
               <Icon className="h-5 w-5 text-white" />
             </div>
-            <div className="bg-white p-4 rounded-2xl rounded-bl-none border border-slate-100 flex items-center">
-              <Loader2 className={`h-5 w-5 ${colors.text} animate-spin`} />
+            <div className="bg-white p-4 rounded-2xl rounded-bl-none border border-slate-100 flex items-center gap-2">
+              <LoadingDots />
+              <span className="text-sm text-muted-foreground">Pensando...</span>
             </div>
           </div>
         )}

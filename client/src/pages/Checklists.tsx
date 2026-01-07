@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from "@/components/ui/textarea"; // Using Textarea for JSON input for MVP
 import { Search, Plus, Trash2, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PageLoader } from "@/components/ui/loading-spinner";
 
 export default function Checklists() {
   const { data: checklists, isLoading } = useChecklists();
@@ -43,7 +44,7 @@ export default function Checklists() {
     if (confirm("Excluir?")) await del.mutateAsync(id);
   };
 
-  if (isLoading) return <div className="p-8">Carregando...</div>;
+  if (isLoading) return <div className="p-8 flex justify-center"><PageLoader text="Carregando condutas..." /></div>;
 
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-6">
