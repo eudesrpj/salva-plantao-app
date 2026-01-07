@@ -98,6 +98,76 @@ export async function registerRoutes(
     });
   });
 
+  // --- Admin AI Content Generation ---
+  app.post("/api/admin/ai/generate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { contentType, context, title } = req.body;
+      
+      if (!contentType || !context) {
+        return res.status(400).json({ message: "contentType e context são obrigatórios" });
+      }
+
+      const validTypes = ["protocol", "checklist", "flashcard", "prescription"];
+      if (!validTypes.includes(contentType)) {
+        return res.status(400).json({ message: "contentType inválido" });
+      }
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const systemPrompts: Record<string, string> = {
+        protocol: `Você é um assistente médico especializado em criar protocolos clínicos. 
+Gere um protocolo em português brasileiro, estruturado com seções claras.
+Formato: JSON com campos { title, content, specialty, category, tags[] }.
+O conteúdo deve incluir: indicações, contraindicações, condutas passo-a-passo, e referências quando apropriado.
+IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publicação.`,
+        
+        checklist: `Você é um assistente médico especializado em criar checklists clínicos.
+Gere um checklist em português brasileiro, com itens práticos e objetivos.
+Formato: JSON com campos { title, items[], category, specialty, ageGroup }.
+Os items devem ser strings curtas e acionáveis para uso rápido no plantão.
+IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publicação.`,
+        
+        flashcard: `Você é um assistente médico especializado em criar material de estudo.
+Gere um flashcard em português brasileiro para revisão rápida.
+Formato: JSON com campos { title, front (pergunta/termo), back (resposta/explicação), type, category, specialty }.
+Types válidos: resumo, mnemonico, dica, checkpoint.
+IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publicação.`,
+        
+        prescription: `Você é um assistente médico especializado em modelos de prescrição.
+Gere um modelo de prescrição em português brasileiro.
+Formato: JSON com campos { title, medication, dose, interval, duration, route, pharmaceuticalForm, patientNotes, orientations, category, ageGroup }.
+Inclua doses padrão e orientações ao paciente.
+IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publicação.`,
+      };
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompts[contentType] },
+          { role: "user", content: `Título sugerido: ${title || "A definir"}\n\nContexto/Descrição: ${context}` }
+        ],
+        max_completion_tokens: 2000,
+        response_format: { type: "json_object" },
+      });
+
+      const generatedContent = response.choices[0]?.message?.content || "{}";
+      
+      res.json({
+        draft: JSON.parse(generatedContent),
+        contentType,
+        message: "Rascunho gerado. Revise antes de salvar.",
+        isAIDraft: true,
+      });
+    } catch (err) {
+      console.error("Admin AI generation error:", err);
+      res.status(500).json({ message: "Erro ao gerar conteúdo com IA" });
+    }
+  });
+
   // --- Prescriptions ---
   app.get(api.prescriptions.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;

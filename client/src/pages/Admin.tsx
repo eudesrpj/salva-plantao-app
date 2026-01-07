@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1352,6 +1353,8 @@ function AiPromptsTab() {
         </CardContent>
       </Card>
 
+      <AiContentGenerator />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Dicas para Prompts Médicos</CardTitle>
@@ -1367,6 +1370,207 @@ function AiPromptsTab() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function AiContentGenerator() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [contentType, setContentType] = useState("protocol");
+  const [title, setTitle] = useState("");
+  const [context, setContext] = useState("");
+  const [generatedDraft, setGeneratedDraft] = useState<any>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentType, title, context }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Erro ao gerar conteúdo");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setGeneratedDraft(data.draft);
+      setShowPreview(true);
+      toast({ title: "Rascunho gerado!", description: "Revise o conteúdo antes de salvar." });
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao gerar conteúdo com IA.", variant: "destructive" });
+    },
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: async () => {
+      if (!generatedDraft) throw new Error("Nenhum rascunho");
+      
+      const endpoints: Record<string, string> = {
+        protocol: "/api/protocols",
+        checklist: "/api/checklists",
+        flashcard: "/api/flashcards",
+        prescription: "/api/prescriptions",
+      };
+      
+      const endpoint = endpoints[contentType];
+      const body: any = { ...generatedDraft };
+      
+      if (contentType === "protocol" || contentType === "flashcard") {
+        body.isPublic = true;
+      }
+      if (contentType === "prescription") {
+        body.isPublic = true;
+        body.isLocked = true;
+      }
+      if (contentType === "checklist" && Array.isArray(body.items)) {
+        body.items = body.items.join("|");
+      }
+      
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Erro ao salvar");
+      return res.json();
+    },
+    onSuccess: () => {
+      const keys: Record<string, string> = {
+        protocol: "/api/protocols",
+        checklist: "/api/checklists",
+        flashcard: "/api/flashcards",
+        prescription: "/api/prescriptions",
+      };
+      queryClient.invalidateQueries({ queryKey: [keys[contentType]] });
+      toast({ title: "Salvo!", description: "Conteúdo publicado com sucesso." });
+      setGeneratedDraft(null);
+      setShowPreview(false);
+      setTitle("");
+      setContext("");
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao salvar conteúdo.", variant: "destructive" });
+    },
+  });
+
+  const contentTypeLabels: Record<string, string> = {
+    protocol: "Protocolo",
+    checklist: "Checklist",
+    flashcard: "Flashcard",
+    prescription: "Prescrição",
+  };
+
+  return (
+    <Card className="border-purple-200 dark:border-purple-900">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-purple-500" /> Gerador de Conteúdo com IA
+        </CardTitle>
+        <CardDescription>
+          Use a IA para gerar rascunhos de protocolos, checklists, flashcards e prescrições. 
+          Todo conteúdo deve ser revisado antes de publicar.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Tipo de Conteúdo</label>
+            <Select value={contentType} onValueChange={setContentType}>
+              <SelectTrigger data-testid="select-ai-content-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="protocol">Protocolo Clínico</SelectItem>
+                <SelectItem value="checklist">Checklist</SelectItem>
+                <SelectItem value="flashcard">Flashcard</SelectItem>
+                <SelectItem value="prescription">Modelo de Prescrição</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Título Sugerido</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex: Protocolo de IAM"
+              data-testid="input-ai-title"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Contexto / Descrição</label>
+          <Textarea
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+            placeholder="Descreva o que o conteúdo deve abordar. Ex: Protocolo completo para manejo de infarto agudo do miocárdio no PS, incluindo critérios diagnósticos, conduta inicial e indicações de reperfusão..."
+            rows={4}
+            data-testid="textarea-ai-context"
+          />
+        </div>
+        <Button 
+          onClick={() => generateMutation.mutate()}
+          disabled={generateMutation.isPending || !context}
+          className="gap-2"
+          data-testid="button-generate-ai-content"
+        >
+          {generateMutation.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Gerando...
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" /> Gerar Rascunho
+            </>
+          )}
+        </Button>
+
+        {showPreview && generatedDraft && (
+          <div className="mt-6 p-4 border rounded-lg bg-muted/50 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <h4 className="font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Rascunho: {contentTypeLabels[contentType]}
+              </h4>
+              <Badge variant="outline">Revisão Obrigatória</Badge>
+            </div>
+            
+            <div className="bg-background p-4 rounded border text-sm space-y-2 max-h-[300px] overflow-y-auto">
+              <pre className="whitespace-pre-wrap font-mono text-xs">
+                {JSON.stringify(generatedDraft, null, 2)}
+              </pre>
+            </div>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 dark:border-amber-800">
+              <p className="text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                Revise cuidadosamente o conteúdo gerado pela IA antes de publicar. 
+                Verifique doses, indicações e contraindicações.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => { setShowPreview(false); setGeneratedDraft(null); }}
+                data-testid="button-discard-draft"
+              >
+                Descartar
+              </Button>
+              <Button 
+                onClick={() => saveDraftMutation.mutate()}
+                disabled={saveDraftMutation.isPending}
+                data-testid="button-save-draft"
+              >
+                {saveDraftMutation.isPending ? "Salvando..." : "Revisar e Publicar"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
