@@ -10,6 +10,7 @@ import { DesktopSidebar, MobileNav } from "@/components/Sidebar";
 import { FloatingCalculator } from "@/components/FloatingCalculator";
 import { PediatricCalculator, PediatricCalculatorButton } from "@/components/PediatricCalculator";
 import { CreatorFooter } from "@/components/CreatorFooter";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 // Page Imports
 import Landing from "@/pages/Landing";
@@ -29,12 +30,13 @@ import AiInterconsult from "@/pages/AiInterconsult";
 import Profile from "@/pages/Profile";
 import PaymentRequired from "@/pages/PaymentRequired";
 import Admin from "@/pages/Admin";
+import Settings from "@/pages/Settings";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const [isPedCalcOpen, setIsPedCalcOpen] = useState(false);
   
   return (
-    <div className="flex min-h-screen bg-slate-50/50">
+    <div className="flex min-h-screen bg-background">
       <DesktopSidebar />
       <div className="flex-1 md:pl-64 flex flex-col min-h-screen">
         <main className="flex-1 pb-20 md:pb-0">
@@ -146,6 +148,10 @@ function Router() {
         <ProtectedRoute component={Profile} />
       </Route>
 
+      <Route path="/settings">
+        <ProtectedRoute component={Settings} />
+      </Route>
+
       {/* Redirect chat alias to ai-chat for now as we merged functionality or placeholder */}
       <Route path="/chat">
         <Redirect to="/ai-chat" />
@@ -159,10 +165,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Router />
-        <Toaster />
-      </TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Router />
+          <Toaster />
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

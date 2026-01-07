@@ -21,7 +21,9 @@ import {
   ClipboardList,
   Brain,
   User,
-  Settings
+  Settings,
+  Palette,
+  Bot
 } from "lucide-react";
 import { useState } from "react";
 
@@ -35,10 +37,11 @@ const NAV_ITEMS = [
   { icon: CalendarDays, label: "Plantões", href: "/shifts" },
   { icon: DollarSign, label: "Financeiro", href: "/finance" },
   { icon: Activity, label: "Interconsulta IA", href: "/ai-chat" },
-  { icon: Settings, label: "Minha IA", href: "/ai-settings" },
+  { icon: Bot, label: "Minha IA", href: "/ai-settings" },
   { icon: Library, label: "Biblioteca", href: "/library" },
   { icon: StickyNote, label: "Anotações", href: "/notes" },
   { icon: User, label: "Meu Perfil", href: "/profile" },
+  { icon: Palette, label: "Personalizar", href: "/settings" },
 ];
 
 function NavContent({ onClose }: { onClose?: () => void }) {
