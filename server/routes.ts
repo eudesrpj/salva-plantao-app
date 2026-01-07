@@ -39,6 +39,16 @@ export async function registerRoutes(
      next();
   };
 
+  const checkNotBlocked = async (req: any, res: any, next: any) => {
+     const userId = getUserId(req);
+     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+     const user = await authStorage.getUser(userId);
+     if (user?.status === "blocked" && user?.role !== "admin") {
+        return res.status(403).json({ message: "Account blocked" });
+     }
+     next();
+  };
+
   // --- Admin Routes ---
   app.get("/api/admin/users", isAuthenticated, checkAdmin, async (req, res) => {
     const users = await authStorage.getAllUsers();
@@ -89,19 +99,19 @@ export async function registerRoutes(
   });
 
   // --- Prescriptions ---
-  app.get(api.prescriptions.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.prescriptions.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getPrescriptions(getUserId(req), ageGroup);
     res.json(items);
   });
 
-  app.get("/api/prescriptions/search", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/prescriptions/search", isAuthenticated, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchPrescriptions(query, getUserId(req));
     res.json(items);
   });
 
-  app.get(api.prescriptions.get.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.prescriptions.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const item = await storage.getPrescription(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     res.json(item);
@@ -142,19 +152,19 @@ export async function registerRoutes(
   });
 
   // --- Protocols ---
-  app.get(api.protocols.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.protocols.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getProtocols(getUserId(req), ageGroup);
     res.json(items);
   });
 
-  app.get("/api/protocols/search", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/protocols/search", isAuthenticated, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchProtocols(query, getUserId(req));
     res.json(items);
   });
 
-  app.get(api.protocols.get.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.protocols.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const item = await storage.getProtocol(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     res.json(item);
@@ -195,19 +205,19 @@ export async function registerRoutes(
   });
 
   // --- Checklists ---
-  app.get(api.checklists.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.checklists.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getChecklists(getUserId(req), ageGroup);
     res.json(items);
   });
 
-  app.get("/api/checklists/search", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/checklists/search", isAuthenticated, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchChecklists(query, getUserId(req));
     res.json(items);
   });
 
-  app.get(api.checklists.get.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.checklists.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const item = await storage.getChecklist(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     res.json(item);
@@ -248,12 +258,12 @@ export async function registerRoutes(
   });
 
   // --- Flashcards ---
-  app.get(api.flashcards.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.flashcards.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getFlashcards(getUserId(req));
     res.json(items);
   });
 
-  app.get(api.flashcards.get.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.flashcards.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const item = await storage.getFlashcard(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     res.json(item);
@@ -294,7 +304,7 @@ export async function registerRoutes(
   });
 
   // --- Favorites ---
-  app.get(api.favorites.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.favorites.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getFavorites(getUserId(req));
     res.json(items);
   });
@@ -422,7 +432,7 @@ export async function registerRoutes(
   });
 
   // --- Library ---
-  app.get(api.library.categories.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.library.categories.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getLibraryCategories();
     res.json(items);
   });
@@ -438,7 +448,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.library.items.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.library.items.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const categoryId = Number(req.query.categoryId);
     const items = await storage.getLibraryItems(categoryId);
     res.json(items);
@@ -508,7 +518,7 @@ export async function registerRoutes(
   });
 
   // --- Pathologies ---
-  app.get("/api/pathologies", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/pathologies", isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const scope = req.query.scope as string | undefined;
     const userId = getUserId(req);
@@ -522,19 +532,19 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/pathologies/my", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/pathologies/my", isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getUserPathologies(getUserId(req), ageGroup);
     res.json(items);
   });
 
-  app.get("/api/pathologies/search", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/pathologies/search", isAuthenticated, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchPathologies(query, getUserId(req));
     res.json(items);
   });
 
-  app.get("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/pathologies/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const item = await storage.getPathology(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
@@ -551,7 +561,7 @@ export async function registerRoutes(
     res.json(item);
   });
 
-  app.get("/api/pathologies/:id/medications", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/pathologies/:id/medications", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));
     if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
@@ -692,19 +702,19 @@ export async function registerRoutes(
   });
 
   // --- Medications Library ---
-  app.get("/api/medications", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/medications", isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getMedications(ageGroup);
     res.json(items);
   });
 
-  app.get("/api/medications/search", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/medications/search", isAuthenticated, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchMedications(query);
     res.json(items);
   });
 
-  app.get("/api/medications/:id", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/medications/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
     const item = await storage.getMedication(Number(req.params.id));
     res.json(item);
   });
@@ -747,7 +757,7 @@ export async function registerRoutes(
   });
 
   // --- Calculator Settings ---
-  app.get("/api/calculator-settings", isAuthenticated, checkActive, async (req, res) => {
+  app.get("/api/calculator-settings", isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getCalculatorSettings();
     res.json(items);
   });

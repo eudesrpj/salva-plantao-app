@@ -977,7 +977,7 @@ function MedicationDialog({ pathologyId, medication, ageGroup }: { pathologyId: 
       interval: formData.get("interval") as string,
       duration: formData.get("duration") as string,
       route: route || "VO",
-      timing: timing || null,
+      timing: timing && timing !== "none" ? timing : null,
       quantity: formData.get("quantity") as string,
       maxDose: formData.get("maxDose") as string || null,
       observations: formData.get("observations") as string || null,
@@ -1066,12 +1066,12 @@ function MedicationDialog({ pathologyId, medication, ageGroup }: { pathologyId: 
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Horário</label>
-              <Select name="timing" defaultValue={medication?.timing || ""}>
+              <Select name="timing" defaultValue={medication?.timing || "none"}>
                 <SelectTrigger data-testid="select-medication-timing">
                   <SelectValue placeholder="Opcional" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {TIMINGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -1143,7 +1143,7 @@ function PrescriptionDialog({ ageGroup, isAdmin, isPersonal = false }: { ageGrou
       quantity: formData.get("quantity") as string,
       duration: formData.get("duration") as string,
       route: route || "VO",
-      timing: timing || null,
+      timing: timing && timing !== "none" ? timing : null,
       patientNotes: formData.get("patientNotes") as string,
       category: formData.get("category") as string,
       ageGroup,
@@ -1234,12 +1234,12 @@ function PrescriptionDialog({ ageGroup, isAdmin, isPersonal = false }: { ageGrou
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Horário/Alimentação</label>
-              <Select name="timing" defaultValue="">
+              <Select name="timing" defaultValue="none">
                 <SelectTrigger data-testid="select-timing">
                   <SelectValue placeholder="Opcional" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {TIMINGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
