@@ -940,7 +940,10 @@ function ContentManagementSection() {
             <CardTitle>Prescrições Oficiais</CardTitle>
             <CardDescription>Gerencie modelos de prescrições do sistema.</CardDescription>
           </div>
-          <Button variant="outline" onClick={() => setActiveSection(null)}>Voltar</Button>
+          <div className="flex gap-2">
+            <NewPrescriptionDialog />
+            <Button variant="outline" onClick={() => setActiveSection(null)}>Voltar</Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loadingPrescriptions ? (
@@ -998,7 +1001,10 @@ function ContentManagementSection() {
             <CardTitle>Protocolos Clínicos</CardTitle>
             <CardDescription>Gerencie protocolos oficiais do sistema.</CardDescription>
           </div>
-          <Button variant="outline" onClick={() => setActiveSection(null)}>Voltar</Button>
+          <div className="flex gap-2">
+            <NewProtocolDialog />
+            <Button variant="outline" onClick={() => setActiveSection(null)}>Voltar</Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loadingProtocols ? (
@@ -1639,5 +1645,234 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function NewPrescriptionDialog() {
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const createMutation = useMutation({
+    mutationFn: async (data: Record<string, any>) => {
+      const res = await apiRequest("POST", "/api/prescriptions", data);
+      if (!res.ok) throw new Error("Failed to create prescription");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescriptions"] });
+      toast({ title: "Prescrição criada!", description: "A prescrição oficial foi adicionada." });
+      setOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao criar prescrição.", variant: "destructive" });
+    }
+  });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const medication = (formData.get("medication") as string) || "";
+    const dose = (formData.get("dose") as string) || "";
+    const interval = (formData.get("interval") as string) || "";
+    const duration = (formData.get("duration") as string) || "";
+    const route = (formData.get("route") as string) || "VO";
+    const quantity = formData.get("quantity") as string;
+    const patientNotes = formData.get("patientNotes") as string;
+    const category = formData.get("category") as string;
+    const ageGroup = formData.get("ageGroup") as string;
+    
+    const data = {
+      title: formData.get("title") as string,
+      medication: medication || null,
+      dose: dose || null,
+      interval: interval || null,
+      quantity: quantity || null,
+      duration: duration || null,
+      route: route || null,
+      timing: null,
+      patientNotes: patientNotes || null,
+      category: category || null,
+      ageGroup: ageGroup || "adulto",
+      content: `${medication} ${dose}, ${route}, ${interval}, por ${duration}`.trim(),
+      isPublic: true,
+      isLocked: formData.get("isLocked") === "on",
+    };
+    createMutation.mutate(data);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="gap-1" data-testid="button-new-prescription-admin">
+          <Plus className="h-4 w-4" /> Nova Prescrição
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Nova Prescrição Oficial</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Título / Nome</label>
+            <Input name="title" required placeholder="Ex: Dipirona para dor" data-testid="input-admin-presc-title" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Medicação</label>
+              <Input name="medication" required placeholder="Ex: Dipirona 1g" data-testid="input-admin-presc-medication" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Dose</label>
+              <Input name="dose" required placeholder="Ex: 1g" data-testid="input-admin-presc-dose" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Intervalo</label>
+              <Input name="interval" required placeholder="Ex: 6/6h" data-testid="input-admin-presc-interval" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Duração</label>
+              <Input name="duration" placeholder="Ex: 7 dias" data-testid="input-admin-presc-duration" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Via</label>
+              <Input name="route" placeholder="Ex: VO, IV, IM" defaultValue="VO" data-testid="input-admin-presc-route" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Categoria</label>
+              <Input name="category" placeholder="Ex: Analgesia" defaultValue="Outros" data-testid="input-admin-presc-category" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Faixa Etária</label>
+              <select name="ageGroup" defaultValue="adulto" className="w-full h-9 px-3 border rounded-md text-sm bg-background" data-testid="select-admin-presc-age-group">
+                <option value="adulto">Adulto</option>
+                <option value="pediatrico">Pediátrico</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Quantidade</label>
+              <Input name="quantity" placeholder="Ex: 21 comprimidos" data-testid="input-admin-presc-quantity" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Observações do Paciente</label>
+            <Textarea name="patientNotes" placeholder="Instruções adicionais..." rows={2} data-testid="textarea-admin-presc-notes" />
+          </div>
+          <div className="flex items-center gap-2 pt-2 border-t">
+            <Checkbox id="isLocked" name="isLocked" />
+            <label htmlFor="isLocked" className="text-sm cursor-pointer">Bloquear edição por usuários</label>
+          </div>
+          <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit-admin-prescription">
+            {createMutation.isPending ? "Salvando..." : "Criar Prescrição Oficial"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NewProtocolDialog() {
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const createMutation = useMutation({
+    mutationFn: async (data: Record<string, any>) => {
+      const res = await apiRequest("POST", "/api/protocols", data);
+      if (!res.ok) throw new Error("Failed to create protocol");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/protocols"] });
+      toast({ title: "Protocolo criado!", description: "O protocolo oficial foi adicionado." });
+      setOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao criar protocolo.", variant: "destructive" });
+    }
+  });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const contentText = (formData.get("content") as string) || "";
+    const referencesText = formData.get("references") as string;
+    const specialty = formData.get("specialty") as string;
+    const category = formData.get("category") as string;
+    
+    const data = {
+      title: formData.get("title") as string,
+      content: { 
+        text: contentText,
+        steps: contentText.split('\n').filter(s => s.trim()).map((s, i) => ({ id: i + 1, text: s })),
+        references: referencesText ? referencesText.split('\n').filter(s => s.trim()) : []
+      },
+      description: contentText.substring(0, 200) || null,
+      specialty: specialty || null,
+      category: category || null,
+      ageGroup: formData.get("ageGroup") as string || "adulto",
+      isPublic: true,
+      isLocked: formData.get("isLocked") === "on",
+    };
+    createMutation.mutate(data);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="gap-1" data-testid="button-new-protocol-admin">
+          <Plus className="h-4 w-4" /> Novo Protocolo
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Novo Protocolo Clínico</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Título</label>
+            <Input name="title" required placeholder="Ex: Protocolo de Sepse" data-testid="input-admin-protocol-title" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Especialidade</label>
+              <Input name="specialty" placeholder="Ex: Clínica Médica" data-testid="input-admin-protocol-specialty" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Categoria</label>
+              <Input name="category" placeholder="Ex: Emergência" defaultValue="Geral" data-testid="input-admin-protocol-category" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Faixa Etária</label>
+            <select name="ageGroup" defaultValue="adulto" className="w-full h-9 px-3 border rounded-md text-sm bg-background" data-testid="select-admin-protocol-age-group">
+              <option value="adulto">Adulto</option>
+              <option value="pediatrico">Pediátrico</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Conteúdo do Protocolo</label>
+            <Textarea name="content" required placeholder="Descreva o protocolo em detalhes..." rows={6} data-testid="textarea-admin-protocol-content" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Referências</label>
+            <Textarea name="references" placeholder="Literatura ou guidelines de referência..." rows={2} data-testid="textarea-admin-protocol-references" />
+          </div>
+          <div className="flex items-center gap-2 pt-2 border-t">
+            <Checkbox id="isLockedProtocol" name="isLocked" />
+            <label htmlFor="isLockedProtocol" className="text-sm cursor-pointer">Bloquear edição por usuários</label>
+          </div>
+          <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit-admin-protocol">
+            {createMutation.isPending ? "Salvando..." : "Criar Protocolo Oficial"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
