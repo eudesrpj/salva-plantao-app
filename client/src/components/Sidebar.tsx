@@ -29,6 +29,7 @@ import {
   Pill
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useState } from "react";
 
 const NAV_ITEMS = [
@@ -56,9 +57,12 @@ function NavContent({ onClose }: { onClose?: () => void }) {
   return (
     <div className="flex flex-col h-full bg-slate-900 text-slate-100">
       <div className="p-6 border-b border-slate-800">
-        <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-          Salva Plantão
-        </h1>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h1 className="text-xl font-bold font-display bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+            Salva Plantão
+          </h1>
+          <NotificationBell />
+        </div>
         <p className="text-xs text-slate-500 mt-1">Dr. Eudes Rodrigues</p>
       </div>
 
@@ -145,18 +149,21 @@ export function MobileNav() {
   if (!isMobile) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center justify-between md:hidden">
+    <div className="fixed top-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center justify-between gap-2 md:hidden">
       <h1 className="text-lg font-bold font-display text-white">Salva Plantão</h1>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="text-white">
-            <Menu className="h-6 w-6" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-80 bg-slate-900 border-r-slate-800 text-white">
-          <NavContent onClose={() => setOpen(false)} />
-        </SheetContent>
-      </Sheet>
+      <div className="flex items-center gap-1">
+        <NotificationBell />
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="text-white">
+              <Menu className="h-6 w-6" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-80 bg-slate-900 border-r-slate-800 text-white">
+            <NavContent onClose={() => setOpen(false)} />
+          </SheetContent>
+        </Sheet>
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAiRoutes } from "./ai/routes";
 import { authStorage } from "./replit_integrations/auth/storage";
+import { notifyUser, notifyAllAdmins } from "./websocket";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -442,7 +443,36 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   app.post(api.interconsult.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.interconsult.create.input.parse(req.body);
-      const item = await storage.createInterconsultMessage({ ...input, senderId: getUserId(req) });
+      const senderId = getUserId(req);
+      const item = await storage.createInterconsultMessage({ ...input, senderId });
+      
+      // Send real-time notification
+      const sender = await authStorage.getUser(senderId);
+      const senderName = sender?.firstName || sender?.email?.split("@")[0] || "Usuário";
+      
+      if (input.receiverId) {
+        // Direct message to specific user
+        notifyUser(input.receiverId, {
+          type: "new_message",
+          title: "Nova mensagem",
+          message: input.message.substring(0, 100) + (input.message.length > 100 ? "..." : ""),
+          channel: input.channel,
+          senderId,
+          senderName,
+          data: { messageId: item.id }
+        });
+      } else if (input.channel === "admin_support") {
+        // Message to admin support - notify all admins
+        const allUsers = await authStorage.getAllUsers();
+        const adminIds = allUsers.filter(u => u.role === "admin").map(u => u.id);
+        notifyAllAdmins({
+          type: "new_support_message",
+          title: "Nova mensagem de suporte",
+          message: `${senderName}: ${input.message.substring(0, 80)}...`,
+          data: { messageId: item.id, senderId, channel: input.channel }
+        }, adminIds);
+      }
+      
       res.status(201).json(item);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json(err);
