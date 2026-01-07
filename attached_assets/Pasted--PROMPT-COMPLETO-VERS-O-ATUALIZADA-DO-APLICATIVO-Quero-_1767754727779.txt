@@ -1,0 +1,170 @@
+✅ PROMPT COMPLETO — VERSÃO ATUALIZADA DO APLICATIVO
+
+Quero que você atualize o aplicativo médico conforme as especificações abaixo. O app possui dois perfis de acesso: ADMIN (DM) e USUÁRIO. Todas as funções devem ser organizadas, padronizadas e focadas em rapidez de uso durante o plantão.
+
+1️⃣ — Prescrições (Adulto / Pediátrico)
+
+Antes da listagem de prescrições, exibir um seletor:
+➡️ “Adulto” | “Pediátrico”
+
+As prescrições devem ser exibidas separadamente por categoria.
+
+Na criação de prescrições, incluir campos estruturados:
+
+Nome da medicação
+
+Dose
+
+Intervalo (ex.: 6/6h, 8/8h, 12/12h, 1x/dia etc.)
+
+Quantidade (comprimidos, gotas, ml, frascos etc.)
+
+Tempo de uso:
+
+opções rápidas (3, 5, 7, 10 dias)
+
+opção uso indeterminado
+
+Campo “Observações do Paciente”
+
+A prescrição deve gerar modelo pronto preenchível rapidamente.
+
+Usuários podem criar prescrições próprias, porém:
+
+O ADMIN pode criar e editar modelos oficiais padronizados que replicam para todos.
+
+2️⃣ — Condutas e Checklists Médicos
+
+Criar aba “Condutas”.
+
+Cada conduta deve ter:
+
+Checklist organizado por etapas
+
+Campos estruturados para criação rápida
+
+Possibilidade de salvar e reutilizar modelos
+
+ADMIN pode definir condutas oficiais
+
+3️⃣ — Protocolos
+
+Criar aba “Protocolos”.
+
+Deve permitir:
+
+Criar, editar e salvar protocolos clínicos
+
+Publicar protocolos oficiais para todos os usuários
+
+Organização por:
+
+especialidade
+
+urgência/emergência
+
+pediatria / adulto
+
+4️⃣ — Memorização e Estudos Rápidos
+
+Criar aba “Memorização / Resumos”
+
+Permitir adicionar:
+
+resumos curtos
+
+mnemônicos
+
+dicas rápidas
+
+checkpoints de revisão clínica
+
+5️⃣ — Interconsulta e Comunicação
+
+Criar três canais de chat:
+
+Interconsulta entre usuários
+
+Interconsulta com IA
+
+Prompt definido pelo ADMIN
+
+Chat direto com ADMIN
+
+para feedback e suporte
+
+6️⃣ — Área de Pagamento e Ativação
+
+Tela de envio de comprovante via WhatsApp
+
+O ADMIN deve poder editar:
+
+Número do WhatsApp
+
+Chave PIX
+
+Texto de instruções
+
+Campo para substituir dados a qualquer momento
+
+7️⃣ — Permissões do ADMIN (DM)
+
+O ADMIN deve conseguir:
+
+Criar / editar prescrições padrão
+
+Criar e alterar condutas e protocolos oficiais
+
+Editar prompts da IA
+
+Alterar dados de pagamento
+
+Sincronizar modelos com todos os usuários
+
+Gerenciar categorias e organização de conteúdo
+
+🌟 FUNCIONALIDADES DIFERENCIAIS (NOVAS IDEIAS INCLuÍDAS)
+
+Implementar também os seguintes recursos para tornar o app superior aos concorrentes:
+
+🔎 Busca inteligente em prescrições, condutas e protocolos
+
+⭐ Favoritos / Itens mais usados
+
+🧾 Histórico de prescrições por paciente
+
+📂 Pastas por especialidade
+
+🏥 Modo Plantão (atalhos rápidos)
+
+🛡️ Alertas de segurança básicos (ex.: dose incomum)
+
+🔔 Lembretes automáticos para reavaliação
+
+🧑‍🏫 Modo ensino com flashcards clínicos
+
+🗂️ Exportar PDF / Compartilhar prescrições e condutas
+
+☁️ Backup em nuvem vinculado à conta
+
+🏷️ Tags (ex.: dor, pediatria, emergência)
+
+📊 Painel ADMIN com estatísticas de uso
+
+👨‍⚕️ Perfil do médico com carimbo digital automático
+
+📌 Templates duplicáveis para criação rápida
+
+⚙️ Opção de bloquear edição de modelos oficiais
+
+🎯 Objetivo Final
+
+Tornar o app uma plataforma médica profissional
+
+Padronizar condutas e prescrições
+
+Acelerar o fluxo de plantão
+
+Melhorar segurança e organização clínica
+
+Facilitar ensino, prática e documentação
