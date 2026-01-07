@@ -117,7 +117,7 @@ export async function registerRoutes(
     res.json(item);
   });
 
-  app.post(api.prescriptions.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.prescriptions.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.prescriptions.create.input.parse(req.body);
       const userId = getUserId(req);
@@ -135,7 +135,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.prescriptions.update.path, isAuthenticated, checkActive, async (req, res) => {
+  app.put(api.prescriptions.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.prescriptions.update.input.parse(req.body);
       const item = await storage.updatePrescription(Number(req.params.id), input);
@@ -146,7 +146,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.prescriptions.delete.path, isAuthenticated, checkActive, async (req, res) => {
+  app.delete(api.prescriptions.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deletePrescription(Number(req.params.id));
     res.status(204).send();
   });
@@ -170,7 +170,7 @@ export async function registerRoutes(
     res.json(item);
   });
 
-  app.post(api.protocols.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.protocols.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.protocols.create.input.parse(req.body);
       const userId = getUserId(req);
@@ -188,7 +188,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.protocols.update.path, isAuthenticated, checkActive, async (req, res) => {
+  app.put(api.protocols.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.protocols.update.input.parse(req.body);
       const item = await storage.updateProtocol(Number(req.params.id), input);
@@ -199,7 +199,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.protocols.delete.path, isAuthenticated, checkActive, async (req, res) => {
+  app.delete(api.protocols.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deleteProtocol(Number(req.params.id));
     res.status(204).send();
   });
@@ -223,7 +223,7 @@ export async function registerRoutes(
     res.json(item);
   });
 
-  app.post(api.checklists.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.checklists.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.checklists.create.input.parse(req.body);
       const userId = getUserId(req);
@@ -241,7 +241,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.checklists.update.path, isAuthenticated, checkActive, async (req, res) => {
+  app.put(api.checklists.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.checklists.update.input.parse(req.body);
       const item = await storage.updateChecklist(Number(req.params.id), input);
@@ -252,7 +252,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.checklists.delete.path, isAuthenticated, checkActive, async (req, res) => {
+  app.delete(api.checklists.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deleteChecklist(Number(req.params.id));
     res.status(204).send();
   });
@@ -269,7 +269,7 @@ export async function registerRoutes(
     res.json(item);
   });
 
-  app.post(api.flashcards.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.flashcards.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.flashcards.create.input.parse(req.body);
       const userId = getUserId(req);
@@ -287,7 +287,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.flashcards.update.path, isAuthenticated, checkActive, async (req, res) => {
+  app.put(api.flashcards.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.flashcards.update.input.parse(req.body);
       const item = await storage.updateFlashcard(Number(req.params.id), input);
@@ -298,7 +298,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.flashcards.delete.path, isAuthenticated, checkActive, async (req, res) => {
+  app.delete(api.flashcards.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deleteFlashcard(Number(req.params.id));
     res.status(204).send();
   });
