@@ -24,6 +24,8 @@ import Handovers from "@/pages/Handovers";
 import Library from "@/pages/Library";
 import Finance from "@/pages/Finance";
 import AIChat from "@/pages/AIChat";
+import AiSettings from "@/pages/AiSettings";
+import AiInterconsult from "@/pages/AiInterconsult";
 import Profile from "@/pages/Profile";
 import PaymentRequired from "@/pages/PaymentRequired";
 import Admin from "@/pages/Admin";
@@ -133,7 +135,11 @@ function Router() {
       </Route>
 
       <Route path="/ai-chat">
-        <ProtectedRoute component={AIChat} />
+        <ProtectedRoute component={AiInterconsult} />
+      </Route>
+
+      <Route path="/ai-settings">
+        <ProtectedRoute component={AiSettings} />
       </Route>
 
       <Route path="/profile">

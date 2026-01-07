@@ -392,3 +392,60 @@ export type CreatePatientHistoryRequest = InsertPatientHistory;
 
 export type CreateCalculatorSettingRequest = InsertCalculatorSetting;
 export type UpdateCalculatorSettingRequest = Partial<InsertCalculatorSetting>;
+
+// --- AI Integration Tables ---
+
+// User AI Credentials (Encrypted API keys)
+export const userAiCredentials = pgTable("user_ai_credentials", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id).unique(),
+  provider: text("provider").default("openai"), // openai, anthropic, etc.
+  encryptedApiKey: text("encrypted_api_key").notNull(), // AES-256-GCM encrypted
+  keyIv: text("key_iv").notNull(), // Initialization vector for decryption
+  keyAuthTag: text("key_auth_tag").notNull(), // Auth tag for verification
+  model: text("model").default("gpt-4o"), // gpt-4, gpt-4o, gpt-3.5-turbo
+  isEnabled: boolean("is_enabled").default(true),
+  lastTestedAt: timestamp("last_tested_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserAiCredentialsSchema = createInsertSchema(userAiCredentials).omit({ id: true, createdAt: true, updatedAt: true });
+export type UserAiCredentials = typeof userAiCredentials.$inferSelect;
+export type InsertUserAiCredentials = z.infer<typeof insertUserAiCredentialsSchema>;
+
+// AI Medical Prompts (Admin-managed)
+export const aiPrompts = pgTable("ai_prompts", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  promptText: text("prompt_text").notNull(),
+  category: text("category"), // conduta, resumo, diagnóstico, etc.
+  isActive: boolean("is_active").default(true),
+  order: integer("order").default(0),
+  createdBy: text("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAiPromptSchema = createInsertSchema(aiPrompts).omit({ id: true, createdAt: true, updatedAt: true });
+export type AiPrompt = typeof aiPrompts.$inferSelect;
+export type InsertAiPrompt = z.infer<typeof insertAiPromptSchema>;
+
+// AI Settings (Global admin settings)
+export const aiSettings = pgTable("ai_settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value"),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAiSettingSchema = createInsertSchema(aiSettings).omit({ id: true, updatedAt: true });
+export type AiSetting = typeof aiSettings.$inferSelect;
+export type InsertAiSetting = z.infer<typeof insertAiSettingSchema>;
+
+// Request types for AI
+export type CreateUserAiCredentialsRequest = Omit<InsertUserAiCredentials, 'encryptedApiKey' | 'keyIv' | 'keyAuthTag'> & { apiKey: string };
+export type CreateAiPromptRequest = InsertAiPrompt;
+export type UpdateAiPromptRequest = Partial<InsertAiPrompt>;

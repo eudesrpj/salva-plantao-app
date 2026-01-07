@@ -6,6 +6,7 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
+import { registerAiRoutes } from "./ai/routes";
 import { authStorage } from "./replit_integrations/auth/storage";
 
 export async function registerRoutes(
@@ -16,6 +17,7 @@ export async function registerRoutes(
   registerAuthRoutes(app);
   registerChatRoutes(app);
   registerImageRoutes(app);
+  registerAiRoutes(app);
 
   const getUserId = (req: any) => req.user?.claims?.sub;
   
