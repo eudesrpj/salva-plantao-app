@@ -784,3 +784,38 @@ export const userPreferences = pgTable("user_preferences", {
 export const insertUserPreferencesSchema = createInsertSchema(userPreferences).omit({ id: true, updatedAt: true });
 export type UserPreferences = typeof userPreferences.$inferSelect;
 export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;
+
+// Monthly Expenses (Gastos Mensais)
+export const monthlyExpenses = pgTable("monthly_expenses", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  value: decimal("value", { precision: 10, scale: 2 }).notNull(),
+  category: text("category"), // Moradia, Alimentação, Transporte, Saúde, etc.
+  isRecurring: boolean("is_recurring").default(true),
+  month: integer("month"), // 1-12, null for recurring
+  year: integer("year"), // null for recurring
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMonthlyExpenseSchema = createInsertSchema(monthlyExpenses).omit({ id: true, createdAt: true });
+export type MonthlyExpense = typeof monthlyExpenses.$inferSelect;
+export type InsertMonthlyExpense = z.infer<typeof insertMonthlyExpenseSchema>;
+
+// Financial Goals (Metas Financeiras)
+export const financialGoals = pgTable("financial_goals", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  targetValue: decimal("target_value", { precision: 10, scale: 2 }).notNull(),
+  currentValue: decimal("current_value", { precision: 10, scale: 2 }).default("0"),
+  deadline: timestamp("deadline"),
+  isCompleted: boolean("is_completed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFinancialGoalSchema = createInsertSchema(financialGoals, {
+  deadline: z.coerce.date().optional().nullable(),
+}).omit({ id: true, createdAt: true });
+export type FinancialGoal = typeof financialGoals.$inferSelect;
+export type InsertFinancialGoal = z.infer<typeof insertFinancialGoalSchema>;

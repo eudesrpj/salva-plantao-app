@@ -518,6 +518,66 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(stats);
   });
 
+  // --- Monthly Expenses ---
+  app.get("/api/monthly-expenses", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getMonthlyExpenses(getUserId(req));
+    res.json(items);
+  });
+
+  app.post("/api/monthly-expenses", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const item = await storage.createMonthlyExpense({ ...req.body, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+  app.put("/api/monthly-expenses/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const item = await storage.updateMonthlyExpense(Number(req.params.id), req.body);
+      res.json(item);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
+  app.delete("/api/monthly-expenses/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    await storage.deleteMonthlyExpense(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Financial Goals ---
+  app.get("/api/financial-goals", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getFinancialGoals(getUserId(req));
+    res.json(items);
+  });
+
+  app.post("/api/financial-goals", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const item = await storage.createFinancialGoal({ ...req.body, userId: getUserId(req) });
+      res.status(201).json(item);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json(err);
+      throw err;
+    }
+  });
+
+  app.put("/api/financial-goals/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const item = await storage.updateFinancialGoal(Number(req.params.id), req.body);
+      res.json(item);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
+  app.delete("/api/financial-goals/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    await storage.deleteFinancialGoal(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // --- Notes ---
   app.get(api.notes.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getNotes(getUserId(req));

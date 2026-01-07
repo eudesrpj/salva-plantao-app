@@ -5,7 +5,7 @@ import {
   drugInteractions, medicationContraindications, prescriptionFavorites,
   evolutionModels, physicalExamTemplates, signsSymptoms, semiologicalSigns,
   medicalCertificates, attendanceDeclarations, medicalReferrals, referralDestinations, referralReasons,
-  prescriptionModels, prescriptionModelMedications,
+  prescriptionModels, prescriptionModelMedications, monthlyExpenses, financialGoals,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -42,7 +42,9 @@ import {
   type ReferralDestination, type InsertReferralDestination,
   type ReferralReason, type InsertReferralReason,
   type PrescriptionModel, type InsertPrescriptionModel,
-  type PrescriptionModelMedication, type InsertPrescriptionModelMedication
+  type PrescriptionModelMedication, type InsertPrescriptionModelMedication,
+  type MonthlyExpense, type InsertMonthlyExpense,
+  type FinancialGoal, type InsertFinancialGoal
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -260,6 +262,18 @@ export interface IStorage {
   createReferralReason(item: InsertReferralReason): Promise<ReferralReason>;
   updateReferralReason(id: number, item: Partial<InsertReferralReason>): Promise<ReferralReason>;
   deleteReferralReason(id: number): Promise<void>;
+
+  // Monthly Expenses
+  getMonthlyExpenses(userId: string): Promise<MonthlyExpense[]>;
+  createMonthlyExpense(item: InsertMonthlyExpense): Promise<MonthlyExpense>;
+  updateMonthlyExpense(id: number, item: Partial<InsertMonthlyExpense>): Promise<MonthlyExpense>;
+  deleteMonthlyExpense(id: number): Promise<void>;
+
+  // Financial Goals
+  getFinancialGoals(userId: string): Promise<FinancialGoal[]>;
+  createFinancialGoal(item: InsertFinancialGoal): Promise<FinancialGoal>;
+  updateFinancialGoal(id: number, item: Partial<InsertFinancialGoal>): Promise<FinancialGoal>;
+  deleteFinancialGoal(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1358,6 +1372,48 @@ export class DatabaseStorage implements IStorage {
 
   async deletePrescriptionModelMedication(id: number): Promise<void> {
     await db.delete(prescriptionModelMedications).where(eq(prescriptionModelMedications.id, id));
+  }
+
+  // Monthly Expenses
+  async getMonthlyExpenses(userId: string): Promise<MonthlyExpense[]> {
+    return await db.select().from(monthlyExpenses)
+      .where(eq(monthlyExpenses.userId, userId))
+      .orderBy(desc(monthlyExpenses.createdAt));
+  }
+
+  async createMonthlyExpense(insertItem: InsertMonthlyExpense): Promise<MonthlyExpense> {
+    const [item] = await db.insert(monthlyExpenses).values(insertItem).returning();
+    return item;
+  }
+
+  async updateMonthlyExpense(id: number, updateItem: Partial<InsertMonthlyExpense>): Promise<MonthlyExpense> {
+    const [item] = await db.update(monthlyExpenses).set(updateItem).where(eq(monthlyExpenses.id, id)).returning();
+    return item;
+  }
+
+  async deleteMonthlyExpense(id: number): Promise<void> {
+    await db.delete(monthlyExpenses).where(eq(monthlyExpenses.id, id));
+  }
+
+  // Financial Goals
+  async getFinancialGoals(userId: string): Promise<FinancialGoal[]> {
+    return await db.select().from(financialGoals)
+      .where(eq(financialGoals.userId, userId))
+      .orderBy(desc(financialGoals.createdAt));
+  }
+
+  async createFinancialGoal(insertItem: InsertFinancialGoal): Promise<FinancialGoal> {
+    const [item] = await db.insert(financialGoals).values(insertItem).returning();
+    return item;
+  }
+
+  async updateFinancialGoal(id: number, updateItem: Partial<InsertFinancialGoal>): Promise<FinancialGoal> {
+    const [item] = await db.update(financialGoals).set(updateItem).where(eq(financialGoals.id, id)).returning();
+    return item;
+  }
+
+  async deleteFinancialGoal(id: number): Promise<void> {
+    await db.delete(financialGoals).where(eq(financialGoals.id, id));
   }
 }
 
