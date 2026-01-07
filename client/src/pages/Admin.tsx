@@ -1048,12 +1048,16 @@ function ContentManagementSection() {
     );
   }
 
+  if (activeSection === "medications") {
+    return <MedicationLibraryManagement onBack={() => setActiveSection(null)} />;
+  }
+
   if (activeSection === "pathologies") {
     return <PathologyManagement onBack={() => setActiveSection(null)} />;
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
       <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection("prescriptions")}>
         <CardHeader>
           <CardTitle className="text-lg">Prescrições Oficiais</CardTitle>
@@ -1072,10 +1076,19 @@ function ContentManagementSection() {
           <Button variant="outline" className="w-full" data-testid="button-manage-protocols">Gerenciar</Button>
         </CardContent>
       </Card>
+      <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection("medications")}>
+        <CardHeader>
+          <CardTitle className="text-lg">Medicações</CardTitle>
+          <CardDescription>Biblioteca de medicamentos reutilizáveis.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" className="w-full" data-testid="button-manage-medications">Gerenciar</Button>
+        </CardContent>
+      </Card>
       <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection("pathologies")}>
         <CardHeader>
           <CardTitle className="text-lg">Patologias</CardTitle>
-          <CardDescription>Gerencie patologias e medicações.</CardDescription>
+          <CardDescription>Gerencie patologias e selecione medicações.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button variant="outline" className="w-full" data-testid="button-manage-pathologies">Gerenciar</Button>
@@ -1095,14 +1108,19 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
   const [pathologyDescription, setPathologyDescription] = useState("");
   const [pathologyCategory, setPathologyCategory] = useState("");
   const [pathologyAgeGroup, setPathologyAgeGroup] = useState("adulto");
+  const [selectedMedicationId, setSelectedMedicationId] = useState<string>("");
 
   const { data: pathologies, isLoading } = useQuery<any[]>({
     queryKey: ["/api/pathologies"],
   });
 
-  const { data: medications } = useQuery<any[]>({
+  const { data: pathologyMeds } = useQuery<any[]>({
     queryKey: ["/api/pathologies", selectedPathology?.id, "medications"],
     enabled: !!selectedPathology,
+  });
+
+  const { data: libraryMedications } = useQuery<any[]>({
+    queryKey: ["/api/medications"],
   });
 
   const createPathology = useMutation({
@@ -1132,15 +1150,30 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
     },
   });
 
-  const createMedication = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", `/api/pathologies/${selectedPathology.id}/medications`, data);
+  const addMedicationFromLibrary = useMutation({
+    mutationFn: async (medicationId: number) => {
+      const libMed = libraryMedications?.find(m => m.id === medicationId);
+      if (!libMed) throw new Error("Medication not found");
+      const res = await apiRequest("POST", `/api/pathologies/${selectedPathology.id}/medications`, {
+        medicationId: libMed.id,
+        medication: libMed.name,
+        dose: libMed.dose,
+        dosePerKg: libMed.dosePerKg,
+        maxDose: libMed.maxDose,
+        interval: libMed.interval,
+        duration: libMed.duration,
+        route: libMed.route,
+        quantity: libMed.quantity,
+        timing: libMed.timing,
+        observations: libMed.observations,
+      });
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/pathologies", selectedPathology.id, "medications"] });
       toast({ title: "Medicação adicionada!" });
       setMedicationDialogOpen(false);
+      setSelectedMedicationId("");
     },
     onError: () => {
       toast({ title: "Erro ao adicionar medicação", variant: "destructive" });
@@ -1179,21 +1212,12 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
     });
   };
 
-  const handleCreateMedication = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    createMedication.mutate({
-      medication: formData.get("medication"),
-      dose: formData.get("dose"),
-      dosePerKg: formData.get("dosePerKg"),
-      maxDose: formData.get("maxDose"),
-      interval: formData.get("interval"),
-      duration: formData.get("duration"),
-      route: formData.get("route"),
-      quantity: formData.get("quantity"),
-      timing: formData.get("timing"),
-      observations: formData.get("observations"),
-    });
+  const handleAddMedication = () => {
+    if (!selectedMedicationId) {
+      toast({ title: "Selecione uma medicação", variant: "destructive" });
+      return;
+    }
+    addMedicationFromLibrary.mutate(Number(selectedMedicationId));
   };
 
   if (isLoading) return <PageLoader text="Carregando patologias..." />;
@@ -1207,76 +1231,74 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
             <CardDescription>Gerencie as medicações desta patologia</CardDescription>
           </div>
           <div className="flex gap-2">
-            <Dialog open={medicationDialogOpen} onOpenChange={setMedicationDialogOpen}>
+            <Dialog open={medicationDialogOpen} onOpenChange={(open) => { setMedicationDialogOpen(open); if (!open) setSelectedMedicationId(""); }}>
               <DialogTrigger asChild>
                 <Button className="gap-1" data-testid="button-add-medication">
-                  <Plus className="h-4 w-4" /> Nova Medicação
+                  <Plus className="h-4 w-4" /> Adicionar Medicação
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Adicionar Medicação</DialogTitle>
+                  <DialogTitle>Selecionar Medicação da Biblioteca</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleCreateMedication} className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Medicação *</label>
-                    <Input name="medication" required placeholder="Ex: Dipirona 500mg" data-testid="input-medication" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Dose</label>
-                      <Input name="dose" placeholder="Ex: 1g" />
+                <div className="space-y-4 py-4">
+                  {libraryMedications && libraryMedications.length > 0 ? (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Selecione uma medicação *</label>
+                        <select 
+                          value={selectedMedicationId} 
+                          onChange={(e) => setSelectedMedicationId(e.target.value)}
+                          className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                          data-testid="select-medication"
+                        >
+                          <option value="">-- Escolha uma medicação --</option>
+                          {libraryMedications.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} {m.presentation && `(${m.presentation})`} - {m.dose || "sem dose"} {m.route || ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedMedicationId && (
+                        <div className="p-3 bg-muted rounded-md text-sm">
+                          {(() => {
+                            const med = libraryMedications.find(m => m.id === Number(selectedMedicationId));
+                            if (!med) return null;
+                            return (
+                              <div className="space-y-1">
+                                <p><strong>{med.name}</strong></p>
+                                {med.dose && <p>Dose: {med.dose}</p>}
+                                {med.interval && <p>Intervalo: {med.interval}</p>}
+                                {med.duration && <p>Duração: {med.duration}</p>}
+                                {med.route && <p>Via: {med.route}</p>}
+                                {med.quantity && <p>Quantidade: {med.quantity}</p>}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setMedicationDialogOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleAddMedication} disabled={addMedicationFromLibrary.isPending || !selectedMedicationId}>
+                          {addMedicationFromLibrary.isPending ? "Adicionando..." : "Adicionar à Patologia"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <p>Nenhuma medicação na biblioteca.</p>
+                      <p className="text-sm mt-2">Vá para "Medicações" no menu anterior para criar medicamentos primeiro.</p>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Dose/kg (pediátrico)</label>
-                      <Input name="dosePerKg" placeholder="Ex: 10mg/kg" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Dose Máxima</label>
-                      <Input name="maxDose" placeholder="Ex: 4g/dia" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Intervalo</label>
-                      <Input name="interval" placeholder="Ex: 6/6h" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Duração</label>
-                      <Input name="duration" placeholder="Ex: 5 dias" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Via</label>
-                      <Input name="route" placeholder="Ex: VO, IV, IM" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Quantidade</label>
-                      <Input name="quantity" placeholder="Ex: 20 comprimidos" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Horário</label>
-                      <Input name="timing" placeholder="Ex: Jejum" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Observações</label>
-                    <Textarea name="observations" placeholder="Observações adicionais..." rows={2} />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={createMedication.isPending}>
-                    {createMedication.isPending ? "Salvando..." : "Adicionar Medicação"}
-                  </Button>
-                </form>
+                  )}
+                </div>
               </DialogContent>
             </Dialog>
             <Button variant="outline" onClick={() => setSelectedPathology(null)}>Voltar</Button>
           </div>
         </CardHeader>
         <CardContent>
-          {medications && medications.length > 0 ? (
+          {pathologyMeds && pathologyMeds.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1288,7 +1310,7 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {medications.map((m) => (
+                {pathologyMeds.map((m) => (
                   <TableRow key={m.id}>
                     <TableCell className="font-medium">{m.medication}</TableCell>
                     <TableCell>{m.dose || "-"} {m.dosePerKg && `(${m.dosePerKg}/kg)`}</TableCell>
@@ -1305,7 +1327,7 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
             </Table>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
-              Nenhuma medicação cadastrada. Clique em "Nova Medicação" para adicionar.
+              Nenhuma medicação cadastrada. Clique em "Adicionar Medicação" para selecionar da biblioteca.
             </div>
           )}
         </CardContent>
@@ -1419,6 +1441,200 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
         ) : (
           <div className="text-center py-8 text-muted-foreground">
             Nenhuma patologia cadastrada. Clique em "Nova Patologia" para começar.
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const { data: medicationsList, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/medications"],
+  });
+
+  const createMedication = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/medications", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/medications"] });
+      toast({ title: "Medicação criada!" });
+      setDialogOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro ao criar medicação", variant: "destructive" });
+    },
+  });
+
+  const deleteMedication = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/medications/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/medications"] });
+      toast({ title: "Medicação removida!" });
+    },
+  });
+
+  const handleCreateMedication = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    createMedication.mutate({
+      name: formData.get("name"),
+      presentation: formData.get("presentation"),
+      dose: formData.get("dose"),
+      dosePerKg: formData.get("dosePerKg"),
+      maxDose: formData.get("maxDose"),
+      interval: formData.get("interval"),
+      duration: formData.get("duration"),
+      route: formData.get("route"),
+      quantity: formData.get("quantity"),
+      timing: formData.get("timing"),
+      observations: formData.get("observations"),
+      category: formData.get("category"),
+      ageGroup: formData.get("ageGroup") || "adulto",
+    });
+  };
+
+  if (isLoading) return <PageLoader text="Carregando medicações..." />;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
+        <div>
+          <CardTitle>Biblioteca de Medicações</CardTitle>
+          <CardDescription>Crie medicamentos reutilizáveis para associar às patologias.</CardDescription>
+        </div>
+        <div className="flex gap-2">
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-1" data-testid="button-add-library-medication">
+                <Plus className="h-4 w-4" /> Nova Medicação
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Adicionar Medicação à Biblioteca</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreateMedication} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Nome da Medicação *</label>
+                    <Input name="name" required placeholder="Ex: Dipirona 500mg" data-testid="input-med-name" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Apresentação</label>
+                    <Input name="presentation" placeholder="Ex: Comprimido, Gotas" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Categoria</label>
+                    <Input name="category" placeholder="Ex: Analgésicos" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Faixa Etária</label>
+                    <select name="ageGroup" className="w-full h-9 rounded-md border bg-background px-3 text-sm">
+                      <option value="adulto">Adulto</option>
+                      <option value="pediatrico">Pediátrico</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Dose Padrão</label>
+                    <Input name="dose" placeholder="Ex: 1g" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Dose/kg (pediátrico)</label>
+                    <Input name="dosePerKg" placeholder="Ex: 10mg/kg" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Dose Máxima</label>
+                    <Input name="maxDose" placeholder="Ex: 4g/dia" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Intervalo</label>
+                    <Input name="interval" placeholder="Ex: 6/6h" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Duração</label>
+                    <Input name="duration" placeholder="Ex: 5 dias" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Via</label>
+                    <Input name="route" placeholder="Ex: VO, IV, IM" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Quantidade</label>
+                    <Input name="quantity" placeholder="Ex: 20 comprimidos" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Horário</label>
+                    <Input name="timing" placeholder="Ex: Jejum" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Observações</label>
+                  <Textarea name="observations" placeholder="Observações adicionais..." rows={2} />
+                </div>
+                <Button type="submit" className="w-full" disabled={createMedication.isPending}>
+                  {createMedication.isPending ? "Salvando..." : "Adicionar à Biblioteca"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Button variant="outline" onClick={onBack}>Voltar</Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {medicationsList && medicationsList.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Medicação</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead>Dose</TableHead>
+                <TableHead>Intervalo</TableHead>
+                <TableHead>Via</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {medicationsList.map((m) => (
+                <TableRow key={m.id}>
+                  <TableCell className="font-medium">
+                    {m.name}
+                    {m.presentation && <span className="text-muted-foreground ml-1">({m.presentation})</span>}
+                  </TableCell>
+                  <TableCell>{m.category || "-"}</TableCell>
+                  <TableCell>{m.dose || "-"} {m.dosePerKg && `(${m.dosePerKg}/kg)`}</TableCell>
+                  <TableCell>{m.interval || "-"}</TableCell>
+                  <TableCell>{m.route || "-"}</TableCell>
+                  <TableCell className="text-right">
+                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteMedication.mutate(m.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            Nenhuma medicação cadastrada. Clique em "Nova Medicação" para criar sua biblioteca de medicamentos.
           </div>
         )}
       </CardContent>

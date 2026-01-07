@@ -1,7 +1,7 @@
 import { 
   prescriptions, checklists, shifts, notes, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
   protocols, flashcards, favorites, adminSettings, doctorProfiles, interconsultMessages, usageStats,
-  pathologies, pathologyMedications, patientHistory, calculatorSettings,
+  pathologies, pathologyMedications, patientHistory, calculatorSettings, medications,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -21,7 +21,8 @@ import {
   type Pathology, type InsertPathology, type UpdatePathologyRequest,
   type PathologyMedication, type InsertPathologyMedication, type UpdatePathologyMedicationRequest,
   type PatientHistory, type InsertPatientHistory,
-  type CalculatorSetting, type InsertCalculatorSetting, type UpdateCalculatorSettingRequest
+  type CalculatorSetting, type InsertCalculatorSetting, type UpdateCalculatorSettingRequest,
+  type Medication, type InsertMedication
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -138,6 +139,14 @@ export interface IStorage {
   createCalculatorSetting(item: InsertCalculatorSetting): Promise<CalculatorSetting>;
   updateCalculatorSetting(id: number, item: UpdateCalculatorSettingRequest): Promise<CalculatorSetting>;
   deleteCalculatorSetting(id: number): Promise<void>;
+
+  // Medications Library
+  getMedications(ageGroup?: string): Promise<Medication[]>;
+  searchMedications(query: string): Promise<Medication[]>;
+  getMedication(id: number): Promise<Medication | undefined>;
+  createMedication(item: InsertMedication): Promise<Medication>;
+  updateMedication(id: number, item: Partial<InsertMedication>): Promise<Medication>;
+  deleteMedication(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -677,6 +686,44 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCalculatorSetting(id: number): Promise<void> {
     await db.delete(calculatorSettings).where(eq(calculatorSettings.id, id));
+  }
+
+  // Medications Library
+  async getMedications(ageGroup?: string): Promise<Medication[]> {
+    const conditions = [eq(medications.isActive, true)];
+    if (ageGroup) {
+      conditions.push(eq(medications.ageGroup, ageGroup));
+    }
+    return await db.select().from(medications).where(and(...conditions)).orderBy(medications.name);
+  }
+
+  async searchMedications(query: string): Promise<Medication[]> {
+    const searchPattern = `%${query}%`;
+    return await db.select().from(medications)
+      .where(and(
+        eq(medications.isActive, true),
+        or(ilike(medications.name, searchPattern), ilike(medications.category, searchPattern))
+      ))
+      .orderBy(medications.name);
+  }
+
+  async getMedication(id: number): Promise<Medication | undefined> {
+    const [item] = await db.select().from(medications).where(eq(medications.id, id));
+    return item;
+  }
+
+  async createMedication(insertItem: InsertMedication): Promise<Medication> {
+    const [item] = await db.insert(medications).values(insertItem).returning();
+    return item;
+  }
+
+  async updateMedication(id: number, updateItem: Partial<InsertMedication>): Promise<Medication> {
+    const [item] = await db.update(medications).set(updateItem).where(eq(medications.id, id)).returning();
+    return item;
+  }
+
+  async deleteMedication(id: number): Promise<void> {
+    await db.delete(medications).where(eq(medications.id, id));
   }
 }
 

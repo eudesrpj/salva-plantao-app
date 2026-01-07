@@ -572,6 +572,39 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // --- Medications Library ---
+  app.get("/api/medications", isAuthenticated, checkActive, async (req, res) => {
+    const ageGroup = req.query.ageGroup as string | undefined;
+    const items = await storage.getMedications(ageGroup);
+    res.json(items);
+  });
+
+  app.get("/api/medications/search", isAuthenticated, checkActive, async (req, res) => {
+    const query = req.query.q as string || "";
+    const items = await storage.searchMedications(query);
+    res.json(items);
+  });
+
+  app.get("/api/medications/:id", isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.getMedication(Number(req.params.id));
+    res.json(item);
+  });
+
+  app.post("/api/medications", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.createMedication(req.body);
+    res.status(201).json(item);
+  });
+
+  app.put("/api/medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.updateMedication(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteMedication(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // --- Patient History ---
   app.get("/api/patient-history", isAuthenticated, checkActive, async (req, res) => {
     const items = await storage.getPatientHistory(getUserId(req));

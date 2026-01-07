@@ -10,6 +10,30 @@ import { users } from "./models/auth";
 
 // --- App Specific Tables ---
 
+// Medications Library (Reusable medication templates)
+export const medications = pgTable("medications", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(), // Ex: Dipirona 500mg
+  presentation: text("presentation"), // Ex: Comprimido, Gotas, Ampola
+  dose: text("dose"), // Default dose
+  dosePerKg: text("dose_per_kg"), // For pediatric
+  maxDose: text("max_dose"),
+  interval: text("interval"), // 6/6h, 8/8h, etc.
+  duration: text("duration"),
+  route: text("route"), // VO, IV, IM, SC
+  quantity: text("quantity"), // 1 caixa, 20 comprimidos
+  timing: text("timing"), // jejum, com alimentação
+  observations: text("observations"),
+  ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
+  category: text("category"), // Analgésicos, Antibióticos, etc.
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMedicationSchema = createInsertSchema(medications).omit({ id: true, createdAt: true });
+export type Medication = typeof medications.$inferSelect;
+export type InsertMedication = z.infer<typeof insertMedicationSchema>;
+
 // Pathologies (Base structure for prescriptions)
 export const pathologies = pgTable("pathologies", {
   id: serial("id").primaryKey(),
@@ -33,7 +57,8 @@ export type InsertPathology = z.infer<typeof insertPathologySchema>;
 export const pathologyMedications = pgTable("pathology_medications", {
   id: serial("id").primaryKey(),
   pathologyId: integer("pathology_id").notNull().references(() => pathologies.id),
-  medication: text("medication").notNull(),
+  medicationId: integer("medication_id").references(() => medications.id), // Reference to library
+  medication: text("medication").notNull(), // Inline name (or copy from library)
   dose: text("dose"),
   dosePerKg: text("dose_per_kg"), // For pediatric: mg/kg
   maxDose: text("max_dose"), // Maximum dose for safety
