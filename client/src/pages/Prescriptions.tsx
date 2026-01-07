@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill } from "lucide-react";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { PreviewGate, usePreviewMode } from "@/components/PreviewGate";
+import { PreviewGate } from "@/components/PreviewGate";
 import type { Prescription, Pathology, PathologyMedication } from "@shared/schema";
 
 const INTERVALS = ["6/6h", "8/8h", "12/12h", "1x/dia", "2x/dia", "3x/dia", "Dose única", "SOS"];
