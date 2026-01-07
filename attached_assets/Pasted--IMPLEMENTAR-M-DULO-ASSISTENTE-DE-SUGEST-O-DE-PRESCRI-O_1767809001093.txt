@@ -1,0 +1,421 @@
+🟦 IMPLEMENTAR MÓDULO — “ASSISTENTE DE SUGESTÃO DE PRESCRIÇÃO (IA DO SISTEMA)”
+
+Quero que você implemente no aplicativo um módulo chamado “Assistente de Sugestão de Prescrição (IA do Sistema)”, que funcione como uma inteligência interna simples, leve e estável, sem integração com APIs externas de IA.
+
+Este módulo deve sugerir modelos de prescrição já existentes no sistema, com base nos dados cadastrados e revisados, ajudando o usuário a encontrar a prescrição adequada com mais rapidez, sem criar medicamentos ou doses automaticamente.
+
+A lógica deve usar apenas os modelos cadastrados no banco interno do app.
+
+🎯 Objetivo do módulo
+
+Ajudar o médico a encontrar rapidamente modelos de prescrição adequados, sugerindo opções com base nas informações inseridas, usando somente os modelos e prescrições já cadastrados no sistema, sem inventar condutas novas.
+
+O usuário sempre deverá revisar e confirmar a prescrição antes de salvar ou imprimir.
+
+🗂 1) Fonte de dados para as sugestões
+
+Usar como base:
+
+modelos oficiais de prescrição
+
+modelos personalizados criados por usuários
+
+prescrições favoritas
+
+modelos pediátricos e adultos já cadastrados
+
+Cada modelo deve considerar:
+
+diagnóstico / patologia / indicação
+
+faixa etária (adulto ou pediátrico)
+
+idade mínima / máxima (se aplicável)
+
+peso mínimo / máximo (se aplicável)
+
+forma farmacêutica (comprimido, gotas, xarope etc.)
+
+posologia
+
+orientações / sinais de alarme (se houver)
+
+Nenhum dado deve ser gerado automaticamente — apenas reutilizar o que já existe.
+
+🧩 2) Campos e interface do usuário
+
+Na tela de Prescrição, adicionar uma seção chamada:
+
+“Assistente de Sugestão de Prescrição (IA do Sistema)”
+
+Subtítulo:
+
+“Sugestões baseadas nos modelos cadastrados no app. Revise antes de prescrever.”
+
+Campos de entrada:
+
+Diagnóstico / Patologia (campo texto)
+
+Faixa etária (select):
+
+Adulto
+
+Pediátrico
+
+Idade do paciente (opcional)
+
+Peso do paciente (opcional)
+
+Botão principal:
+🔎 “Buscar sugestões”
+
+⚙️ 3) Lógica de sugestão
+
+Quando o usuário clicar em Buscar sugestões, o sistema deve:
+
+Buscar os modelos cadastrados que combinem com:
+
+diagnóstico informado
+
+faixa etária
+
+idade (se fornecida)
+
+peso (se fornecido)
+
+Ordenar por relevância
+
+Exibir lista de sugestões com:
+
+nome do modelo
+
+medicação principal
+
+forma farmacêutica
+
+resumo da posologia
+
+botão: “Usar esta sugestão”
+
+Ao clicar em Usar esta sugestão:
+
+carregar a prescrição como rascunho editável
+
+permitir que o usuário revise, edite e confirme
+
+Nada deve ser aplicado automaticamente.
+
+📝 4) Ações após selecionar uma sugestão
+
+Mensagem no topo:
+
+“Sugestão carregada como rascunho. Revise antes de confirmar.”
+
+Botões disponíveis:
+
+Editar e confirmar
+
+Salvar como favorito
+
+Cancelar
+
+🔒 5) Regras de segurança do módulo
+
+Não criar medicamentos novos automaticamente
+
+Não gerar doses novas
+
+Não usar ChatGPT, API externa ou IA real
+
+Apenas sugerir modelos já cadastrados
+
+Médico sempre revisa e confirma antes de prescrever
+
+Se o módulo falhar, a tela de prescrição deve continuar funcionando normalmente.
+
+⚡ 6) Performance e estabilidade
+
+Código leve e isolado
+
+Não adicionar bibliotecas pesadas
+
+Não afetar outras partes do app
+
+Se necessário, executar pesquisa local com cache de resultados
+
+🛡 7) Aviso de segurança visível ao usuário
+
+Adicionar texto abaixo das sugestões:
+
+“As sugestões são baseadas nos modelos cadastrados no sistema e devem ser revisadas pelo médico antes da prescrição.”
+
+🧱 8) Integração com fluxo atual
+
+usuário escolhe sugestão
+
+edita se necessário
+
+pode salvar, favoritar ou imprimir
+
+nada deve acontecer sem confirmação manual
+
+🚫 9) Restrições importantes
+
+NÃO integrar com API externa de IA
+
+NÃO inventar prescrições
+
+NÃO alterar modelos oficiais automaticamente
+
+NÃO impactar o desempenho do app
+
+Este módulo é apenas um assistente interno de apoio, não uma IA clínica autônoma.
+🔟 INTEGRAÇÃO DA MINHA CONTA DO CHATGPT NO PAINEL DO ADMINISTRADOR (USO INTERNO PARA CONTEÚDO)
+
+Quero que você adicione, no painel do administrador, um módulo de integração com a minha conta do ChatGPT (API da OpenAI), apenas para uso interno do admin, com o objetivo de:
+
+acelerar o cadastro de medicações
+
+acelerar a criação de modelos de prescrição
+
+ajudar a gerar resumos, checklists, orientações e demais conteúdos textuais usados no app
+
+MAS sempre mantendo:
+
+revisão manual obrigatória
+
+possibilidade de fazer tudo manualmente, sem IA
+
+total autonomia do administrador.
+
+1. Configuração da chave de API no painel do admin
+
+Criar uma seção no painel do admin chamada:
+
+“Configurações de IA (Admin)”
+
+Nessa seção, permitir:
+
+cadastrar, editar e remover a chave de API do ChatGPT / OpenAI
+
+armazenar essa chave apenas no backend, em local seguro (ex.: variável de ambiente)
+
+NUNCA expor a chave no frontend
+
+Se não houver chave ativa, todas as funções de IA do admin devem:
+
+ficar desativadas
+
+exibir mensagem clara, por exemplo:
+
+“Configure a chave de API do ChatGPT para usar o assistente de conteúdo.”
+
+Adicionar também um botão/alternativa para desativar temporariamente a IA, mesmo com chave configurada.
+
+2. Módulo “Assistente IA do Admin”
+
+No painel do administrador, criar uma área chamada:
+
+“Assistente IA do Admin”
+
+Esse módulo terá abas ou opções para auxiliar em:
+
+Cadastro de medicações
+
+Criação de modelos de prescrição
+
+Criação de resumos e checklists
+
+Outros textos do app (orientações, avisos, explicações, etc.)
+
+2.1 Assistente para medicações e prescrições
+
+Fluxo desejado:
+
+Admin escolhe:
+
+“Gerar medicação”
+
+ou “Gerar modelo de prescrição”
+
+Informa dados básicos, por exemplo:
+
+Nome da medicação ou patologia
+
+Faixa etária (adulto/pediátrico)
+
+Via (oral, IV, IM etc.)
+
+Indicação principal
+
+O sistema envia esses dados para o ChatGPT via API, com um prompt bem definido, pedindo resposta estruturada (ex.: JSON ou campos claros), contendo:
+
+nome da medicação
+
+forma farmacêutica
+
+dose (por kg ou fixa)
+
+frequência (8/8h, 12/12h, etc.)
+
+duração do tratamento
+
+principais contraindicações
+
+orientações e sinais de alarme (se for o caso)
+
+A resposta da IA NÃO deve ser salva diretamente no banco.
+Em vez disso:
+
+exibir tela de pré-visualização, com os campos preenchidos
+
+permitir que o admin revise, edite, corrija e adapte tudo
+
+Só depois da revisão, o admin clica em:
+
+“Salvar medicação”
+
+ou “Salvar modelo de prescrição”
+
+Os dados são então salvos nas mesmas tabelas já usadas no sistema.
+
+Isso alimenta automaticamente:
+
+calculadoras
+
+modelos oficiais
+
+assistente de sugestão de prescrição
+
+prescrições favoritas, se for o caso.
+
+2.2 Assistente para resumos, checklists e conteúdos textuais
+
+Dentro do “Assistente IA do Admin”, criar opção para:
+
+“Gerar resumos e checklists”
+
+Fluxo:
+
+Admin informa:
+
+tema (ex.: “bronquiolite”, “IAM com supra”, “triagem neonatal”)
+
+tipo de conteúdo desejado:
+
+resumo teórico
+
+checklist
+
+passo a passo
+
+orientações para paciente
+
+nível de detalhe (curto, moderado ou detalhado)
+
+O sistema manda isso para o ChatGPT via API, com um prompt pedindo:
+
+resumo em formato estruturado
+
+checklist em forma de tópicos
+
+textos organizados para uso no app (sem formatação exagerada)
+
+A resposta também deve vir para uma tela de pré-visualização.
+O admin pode:
+
+editar
+
+cortar
+
+adaptar à realidade SUS / protocolo local
+
+Só depois da revisão manual, o admin clica:
+
+“Salvar como resumo do app”
+
+“Salvar como checklist”
+
+ou outra categoria interna correspondente
+
+3. Regras gerais de segurança e controle
+
+Nenhuma resposta da IA deve ser salva ou disponibilizada ao usuário final sem revisão manual do administrador.
+
+Exibir nesta área um aviso fixo como:
+
+“A IA auxilia apenas na geração de rascunhos. Todas as doses, condutas e textos devem ser revisados antes de salvar.”
+
+Se a API estiver fora do ar, passar do limite ou falhar:
+
+mostrar mensagem de erro apenas nos módulos de IA do admin
+
+o cadastro manual de medicações, prescrições, checklists e resumos deve continuar funcionando normalmente.
+
+O admin deve ter sempre a opção de:
+
+cadastrar tudo manualmente, sem usar IA
+
+editar qualquer item gerado pela IA posteriormente.
+
+1️⃣1️⃣ GESTÃO DE ÍCONES DO APP NO PAINEL DO ADMINISTRADOR
+
+Adicionar no painel do administrador uma seção para gerenciar o ícone e identidade visual do app, incluindo como o app aparece:
+
+na tela do celular
+
+como PWA (web instalável)
+
+em tablet / iPad
+
+no navegador (favicon)
+
+1. Seção “Identidade Visual / Ícones do App”
+
+Criar no painel do admin:
+
+“Configurações de Ícones e Aparência”
+
+Nessa seção, permitir:
+
+upload de um ícone principal do app (ex.: PNG quadrado em alta resolução)
+
+opcionalmente, upload de variações específicas:
+
+ícone 512x512 (PWA / Android)
+
+ícone 192x192 (PWA)
+
+ícones menores (32x32, 16x16) para favicon
+
+campo para definir:
+
+nome exibido do app
+
+cor principal (theme color) para PWA / navegador
+
+Sempre que o admin salvar essas configurações:
+
+atualizar os arquivos e configurações necessários para:
+
+manifest.json (PWA)
+
+favicon do site
+
+ícone utilizado em telas de instalação / atalho no celular
+
+Se não for possível gerar automaticamente todas as variações de ícone por código:
+
+ao menos permitir o upload manual de tamanhos principais
+
+salvar os caminhos corretos e referenciar nos arquivos de configuração de front.
+
+2. Regras de uso
+
+Se nenhum ícone tiver sido configurado, usar um ícone padrão do sistema.
+
+Validar tamanho e formato dos arquivos enviados (ex.: aceitar apenas PNG/SVG, com tamanho máximo razoável).
+
+Garantir que a alteração de ícone não quebre o build do frontend:
+
+se ocorrer erro na atualização de ícone, manter o ícone antigo e exibir mensagem de erro no painel do admin.

@@ -151,6 +151,26 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // --- Prescription Suggestions (Internal AI - no external API) ---
+  app.get("/api/prescriptions/suggestions", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const diagnosis = req.query.diagnosis as string | undefined;
+      const ageGroup = req.query.ageGroup as string | undefined;
+      const userId = getUserId(req);
+      
+      const suggestions = await storage.searchPrescriptionSuggestions({
+        diagnosis,
+        ageGroup,
+        userId
+      });
+      
+      res.json(suggestions);
+    } catch (err) {
+      console.error("Error getting prescription suggestions:", err);
+      res.status(500).json({ message: "Erro ao buscar sugestões" });
+    }
+  });
+
   // --- Protocols ---
   app.get(api.protocols.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;

@@ -188,6 +188,13 @@ export interface IStorage {
   createPrescriptionFavorite(item: InsertPrescriptionFavorite): Promise<PrescriptionFavorite>;
   updatePrescriptionFavorite(id: number, item: Partial<InsertPrescriptionFavorite>): Promise<PrescriptionFavorite>;
   deletePrescriptionFavorite(id: number): Promise<void>;
+
+  // Prescription Suggestions (Internal AI - no external API)
+  searchPrescriptionSuggestions(params: {
+    diagnosis?: string;
+    ageGroup?: string;
+    userId?: string;
+  }): Promise<Array<Prescription & { relevanceScore: number }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -934,6 +941,73 @@ export class DatabaseStorage implements IStorage {
 
   async deletePrescriptionFavorite(id: number): Promise<void> {
     await db.delete(prescriptionFavorites).where(eq(prescriptionFavorites.id, id));
+  }
+
+  // Prescription Suggestions (Internal AI - uses existing data only)
+  async searchPrescriptionSuggestions(params: {
+    diagnosis?: string;
+    ageGroup?: string;
+    userId?: string;
+  }): Promise<Array<Prescription & { relevanceScore: number }>> {
+    const { diagnosis, ageGroup, userId } = params;
+    
+    // Build base conditions for access control
+    const accessConditions = [];
+    if (userId) {
+      accessConditions.push(or(eq(prescriptions.isPublic, true), eq(prescriptions.userId, userId)));
+    } else {
+      accessConditions.push(eq(prescriptions.isPublic, true));
+    }
+    
+    // Filter by age group if provided
+    if (ageGroup) {
+      accessConditions.push(eq(prescriptions.ageGroup, ageGroup));
+    }
+    
+    // Get all accessible prescriptions
+    const allPrescriptions = await db.select().from(prescriptions)
+      .where(and(...accessConditions))
+      .orderBy(desc(prescriptions.createdAt));
+    
+    // If no diagnosis search term, return all with neutral score
+    if (!diagnosis || diagnosis.trim() === "") {
+      return allPrescriptions.map(p => ({ ...p, relevanceScore: 50 }));
+    }
+    
+    // Score and rank by relevance to diagnosis
+    const searchTerms = diagnosis.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+    
+    const scored = allPrescriptions.map(p => {
+      let score = 0;
+      const titleLower = (p.title || "").toLowerCase();
+      const categoryLower = (p.category || "").toLowerCase();
+      const medicationLower = (p.medication || "").toLowerCase();
+      const specialtyLower = (p.specialty || "").toLowerCase();
+      const tagsLower = (p.tags || []).map(t => t.toLowerCase());
+      
+      for (const term of searchTerms) {
+        // Exact match in title (highest weight)
+        if (titleLower.includes(term)) score += 40;
+        // Category match
+        if (categoryLower.includes(term)) score += 30;
+        // Medication match
+        if (medicationLower.includes(term)) score += 25;
+        // Specialty match
+        if (specialtyLower.includes(term)) score += 20;
+        // Tags match
+        if (tagsLower.some(tag => tag.includes(term))) score += 15;
+      }
+      
+      // Bonus for official/public prescriptions
+      if (p.isPublic) score += 10;
+      
+      return { ...p, relevanceScore: Math.min(score, 100) };
+    });
+    
+    // Filter out zero-score results and sort by relevance
+    return scored
+      .filter(p => p.relevanceScore > 0)
+      .sort((a, b) => b.relevanceScore - a.relevanceScore);
   }
 }
 

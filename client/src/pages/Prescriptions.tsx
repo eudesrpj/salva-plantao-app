@@ -15,6 +15,7 @@ import { QuickPrintButton, SUSPrescriptionPrint } from "@/components/SUSPrescrip
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { PreviewGate } from "@/components/PreviewGate";
+import { PrescriptionSuggestionAssistant } from "@/components/PrescriptionSuggestionAssistant";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Prescription, Pathology, PathologyMedication, Medication, PrescriptionFavorite } from "@shared/schema";
 
@@ -29,8 +30,20 @@ export default function Prescriptions() {
   const [mainTab, setMainTab] = useState<"oficiais" | "minhas" | "patologias">("patologias");
   const [ageGroup, setAgeGroup] = useState<"adulto" | "pediatrico">("adulto");
   const [searchQuery, setSearchQuery] = useState("");
+  const [draftPrescription, setDraftPrescription] = useState<Prescription | null>(null);
+  const [showDraftDialog, setShowDraftDialog] = useState(false);
   const { user } = useAuth();
+  const { toast } = useToast();
   const isAdmin = user?.role === "admin";
+
+  const handleSuggestionSelect = (prescription: Prescription) => {
+    setDraftPrescription(prescription);
+    setShowDraftDialog(true);
+    toast({
+      title: "Sugestão carregada",
+      description: "Revise os dados antes de confirmar.",
+    });
+  };
 
   const { data: prescriptions, isLoading } = useQuery<Prescription[]>({
     queryKey: ["/api/prescriptions", ageGroup],
@@ -115,6 +128,23 @@ export default function Prescriptions() {
         />
       </div>
 
+      <PrescriptionSuggestionAssistant 
+        currentAgeGroup={ageGroup}
+        onSelectSuggestion={handleSuggestionSelect}
+      />
+
+      {draftPrescription && (
+        <DraftPrescriptionDialog
+          draft={draftPrescription}
+          open={showDraftDialog}
+          onOpenChange={setShowDraftDialog}
+          onClose={() => {
+            setDraftPrescription(null);
+            setShowDraftDialog(false);
+          }}
+        />
+      )}
+
       {mainTab === "patologias" ? (
         <PathologiesView ageGroup={ageGroup} searchQuery={searchQuery} isAdmin={isAdmin} />
       ) : mainTab === "minhas" ? (
@@ -148,6 +178,201 @@ export default function Prescriptions() {
         </div>
       )}
     </div>
+  );
+}
+
+function DraftPrescriptionDialog({ 
+  draft, 
+  open, 
+  onOpenChange, 
+  onClose 
+}: { 
+  draft: Prescription; 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [formData, setFormData] = useState({
+    title: draft.title || "",
+    medication: draft.medication || "",
+    dose: draft.dose || "",
+    pharmaceuticalForm: draft.pharmaceuticalForm || "",
+    interval: draft.interval || "",
+    duration: draft.duration || "",
+    route: draft.route || "",
+    timing: draft.timing || "",
+    quantity: draft.quantity || "",
+    patientNotes: draft.patientNotes || "",
+    orientations: draft.orientations || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/prescription-favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          originalPrescriptionId: draft.id,
+        }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Falha ao salvar");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescription-favorites"] });
+      toast({ title: "Salvo!", description: "Prescrição salva como favorito." });
+      onClose();
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao salvar prescrição.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Edit className="h-5 w-5" />
+            Sugestão Carregada como Rascunho
+          </DialogTitle>
+        </DialogHeader>
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 mb-4">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            Revise e edite os dados conforme necessário antes de confirmar.
+          </p>
+        </div>
+        <div className="grid gap-4">
+          <div>
+            <label className="text-sm font-medium">Título</label>
+            <Input
+              value={formData.title}
+              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+              data-testid="input-draft-title"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Medicamento</label>
+              <Input
+                value={formData.medication}
+                onChange={(e) => setFormData(prev => ({ ...prev, medication: e.target.value }))}
+                data-testid="input-draft-medication"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Dose</label>
+              <Input
+                value={formData.dose}
+                onChange={(e) => setFormData(prev => ({ ...prev, dose: e.target.value }))}
+                data-testid="input-draft-dose"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Forma Farmacêutica</label>
+              <Select 
+                value={formData.pharmaceuticalForm} 
+                onValueChange={(v) => setFormData(prev => ({ ...prev, pharmaceuticalForm: v }))}
+              >
+                <SelectTrigger data-testid="select-draft-form">
+                  <SelectValue placeholder="Selecionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Comprimido">Comprimido</SelectItem>
+                  <SelectItem value="Gotas">Gotas</SelectItem>
+                  <SelectItem value="Xarope">Xarope</SelectItem>
+                  <SelectItem value="Solução/Ampola">Solução/Ampola</SelectItem>
+                  <SelectItem value="Cápsula">Cápsula</SelectItem>
+                  <SelectItem value="Pomada">Pomada</SelectItem>
+                  <SelectItem value="Suspensão">Suspensão</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Intervalo</label>
+              <Select 
+                value={formData.interval} 
+                onValueChange={(v) => setFormData(prev => ({ ...prev, interval: v }))}
+              >
+                <SelectTrigger data-testid="select-draft-interval">
+                  <SelectValue placeholder="Selecionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVALS.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium">Via</label>
+              <Select 
+                value={formData.route} 
+                onValueChange={(v) => setFormData(prev => ({ ...prev, route: v }))}
+              >
+                <SelectTrigger data-testid="select-draft-route">
+                  <SelectValue placeholder="Selecionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROUTES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Duração</label>
+              <Select 
+                value={formData.duration} 
+                onValueChange={(v) => setFormData(prev => ({ ...prev, duration: v }))}
+              >
+                <SelectTrigger data-testid="select-draft-duration">
+                  <SelectValue placeholder="Selecionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Quantidade</label>
+              <Input
+                value={formData.quantity}
+                onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
+                placeholder="Ex: 1 caixa"
+                data-testid="input-draft-quantity"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Orientações / Sinais de Alarme</label>
+            <Textarea
+              value={formData.orientations}
+              onChange={(e) => setFormData(prev => ({ ...prev, orientations: e.target.value }))}
+              placeholder="Orientações ao paciente..."
+              className="min-h-[80px]"
+              data-testid="input-draft-orientations"
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 mt-4">
+          <Button variant="outline" onClick={onClose} data-testid="button-draft-cancel">
+            Cancelar
+          </Button>
+          <Button 
+            onClick={() => saveMutation.mutate()} 
+            disabled={saveMutation.isPending}
+            data-testid="button-draft-save"
+          >
+            {saveMutation.isPending ? "Salvando..." : "Salvar como Favorito"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
