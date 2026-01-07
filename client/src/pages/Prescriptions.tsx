@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill } from "lucide-react";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { PreviewGate, usePreviewMode } from "@/components/PreviewGate";
 import type { Prescription, Pathology, PathologyMedication } from "@shared/schema";
 
 const INTERVALS = ["6/6h", "8/8h", "12/12h", "1x/dia", "2x/dia", "3x/dia", "Dose única", "SOS"];
@@ -348,7 +349,7 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
             {isLoading ? (
               <div className="py-4 text-center text-muted-foreground">Carregando medicações...</div>
             ) : medications && medications.length > 0 ? (
-              <>
+              <PreviewGate>
                 <div className="space-y-3 py-3">
                   {medications.map((med, idx) => (
                     <div key={med.id} className="p-3 bg-background rounded-md border flex items-start justify-between gap-3">
@@ -376,7 +377,7 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
                     <Copy className="h-4 w-4" /> Copiar Prescrição Completa (Padrão SUS)
                   </Button>
                 </div>
-              </>
+              </PreviewGate>
             ) : (
               <div className="py-4 text-center text-muted-foreground">
                 Nenhuma medicação cadastrada para esta patologia.

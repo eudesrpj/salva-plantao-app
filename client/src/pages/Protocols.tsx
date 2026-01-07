@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Search, Plus, Trash2, Lock, ClipboardList, Baby, User, ChevronRight, AlertTriangle, Zap } from "lucide-react";
 import { PageLoader } from "@/components/ui/loading-spinner";
+import { PreviewGate } from "@/components/PreviewGate";
 import type { Protocol } from "@shared/schema";
 
 const SPECIALTIES = ["Cardiologia", "Pneumologia", "Neurologia", "Gastroenterologia", "Infectologia", "Pediatria", "Emergência", "Clínica Geral", "Outros"];
@@ -195,48 +196,50 @@ function ProtocolDetailCard({ protocol, isAdmin, onClose }: { protocol: Protocol
         {protocol.specialty && <Badge variant="outline">{protocol.specialty}</Badge>}
       </div>
 
-      {content?.steps && (
-        <div className="space-y-3">
-          <h4 className="font-bold text-slate-700">Etapas</h4>
-          <ol className="space-y-2">
-            {content.steps.map((step: string, i: number) => (
-              <li key={i} className="flex gap-3 text-sm">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold">
-                  {i + 1}
-                </span>
-                <span className="text-slate-700">{step}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+      <PreviewGate>
+        {content?.steps && (
+          <div className="space-y-3">
+            <h4 className="font-bold text-slate-700">Etapas</h4>
+            <ol className="space-y-2">
+              {content.steps.map((step: string, i: number) => (
+                <li key={i} className="flex gap-3 text-sm">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold">
+                    {i + 1}
+                  </span>
+                  <span className="text-slate-700">{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
 
-      {content?.criteria && (
-        <div className="space-y-2">
-          <h4 className="font-bold text-slate-700">Critérios</h4>
-          <ul className="text-sm text-slate-600 space-y-1">
-            {content.criteria.map((c: string, i: number) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="text-primary">-</span>
-                {c}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {content?.criteria && (
+          <div className="space-y-2">
+            <h4 className="font-bold text-slate-700">Critérios</h4>
+            <ul className="text-sm text-slate-600 space-y-1">
+              {content.criteria.map((c: string, i: number) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="text-primary">-</span>
+                  {c}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {content?.redFlags && (
-        <div className="bg-red-50 border border-red-100 rounded-lg p-3">
-          <h4 className="font-bold text-red-700 flex items-center gap-2 mb-2">
-            <AlertTriangle className="h-4 w-4" /> Red Flags
-          </h4>
-          <ul className="text-sm text-red-600 space-y-1">
-            {content.redFlags.map((rf: string, i: number) => (
-              <li key={i}>- {rf}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {content?.redFlags && (
+          <div className="bg-red-50 border border-red-100 rounded-lg p-3">
+            <h4 className="font-bold text-red-700 flex items-center gap-2 mb-2">
+              <AlertTriangle className="h-4 w-4" /> Red Flags
+            </h4>
+            <ul className="text-sm text-red-600 space-y-1">
+              {content.redFlags.map((rf: string, i: number) => (
+                <li key={i}>- {rf}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </PreviewGate>
     </Card>
   );
 }

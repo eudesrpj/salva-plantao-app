@@ -11,6 +11,7 @@ import { FloatingCalculator } from "@/components/FloatingCalculator";
 import { PediatricCalculator, PediatricCalculatorButton } from "@/components/PediatricCalculator";
 import { CreatorFooter } from "@/components/CreatorFooter";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { PreviewBanner } from "@/components/PreviewGate";
 
 // Page Imports
 import Landing from "@/pages/Landing";
@@ -39,6 +40,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-background">
       <DesktopSidebar />
       <div className="flex-1 md:pl-64 flex flex-col min-h-screen">
+        <PreviewBanner />
         <main className="flex-1 pb-20 md:pb-0">
           {children}
         </main>

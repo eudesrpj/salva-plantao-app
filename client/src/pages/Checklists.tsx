@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea"; // Using Textarea for JSON input for MVP
+import { Textarea } from "@/components/ui/textarea";
 import { Search, Plus, Trash2, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoader } from "@/components/ui/loading-spinner";
+import { PreviewGate } from "@/components/PreviewGate";
 
 export default function Checklists() {
   const { data: checklists, isLoading } = useChecklists();
@@ -92,17 +93,19 @@ export default function Checklists() {
               </Button>
             </CardHeader>
             <CardContent>
-               <ul className="space-y-2">
-                 {(item.content as any).items?.slice(0, 5).map((line: string, i: number) => (
+              <PreviewGate>
+                <ul className="space-y-2">
+                  {(item.content as any).items?.slice(0, 5).map((line: string, i: number) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
                       <CheckCircle2 className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
                       {line}
                     </li>
-                 ))}
-                 {(item.content as any).items?.length > 5 && (
+                  ))}
+                  {(item.content as any).items?.length > 5 && (
                     <p className="text-xs text-slate-400 pl-6">+ mais {(item.content as any).items.length - 5} itens</p>
-                 )}
-               </ul>
+                  )}
+                </ul>
+              </PreviewGate>
             </CardContent>
           </Card>
         ))}
