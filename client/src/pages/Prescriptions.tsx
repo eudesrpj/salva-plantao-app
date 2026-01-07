@@ -15,6 +15,8 @@ import type { Prescription } from "@shared/schema";
 
 const INTERVALS = ["6/6h", "8/8h", "12/12h", "1x/dia", "2x/dia", "3x/dia", "Dose única", "SOS"];
 const DURATIONS = ["3 dias", "5 dias", "7 dias", "10 dias", "14 dias", "Uso contínuo", "Uso indeterminado"];
+const ROUTES = ["VO", "IV", "IM", "SC", "Tópico", "Retal", "Sublingual", "Inalatório"];
+const TIMINGS = ["Jejum", "Com alimentação", "Antes de dormir", "Longe das refeições"];
 const CATEGORIES = ["Analgesia", "Antibióticos", "Anti-inflamatórios", "Antieméticos", "Cardiovascular", "Neurologia", "Gastro", "Outros"];
 
 export default function Prescriptions() {
@@ -127,9 +129,20 @@ function PrescriptionCard({ prescription, isAdmin, userId }: { prescription: Pre
   });
 
   const copyToClipboard = () => {
-    const text = prescription.medication 
-      ? `${prescription.medication} ${prescription.dose}, ${prescription.interval}, por ${prescription.duration}${prescription.patientNotes ? `\nObs: ${prescription.patientNotes}` : ""}`
-      : prescription.content || prescription.title;
+    let text = "";
+    if (prescription.medication) {
+      const parts = [
+        `${prescription.medication}`,
+        prescription.quantity ? `${prescription.quantity}` : null,
+        "",
+        prescription.dose ? `Tomar ${prescription.dose}, ${prescription.route || "VO"}, ${prescription.interval || ""} por ${prescription.duration || ""}` : null,
+        prescription.timing ? `Uso: ${prescription.timing}` : null,
+        prescription.patientNotes ? `Observações: ${prescription.patientNotes}` : null,
+      ].filter(Boolean);
+      text = parts.join("\n");
+    } else {
+      text = prescription.content || prescription.title;
+    }
     navigator.clipboard.writeText(text);
     toast({ title: "Copiado!", description: "Prescrição copiada para a área de transferência." });
   };
@@ -209,6 +222,8 @@ function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: 
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
+    const route = formData.get("route") as string;
+    const timing = formData.get("timing") as string;
     const data = {
       title: formData.get("title") as string,
       medication: formData.get("medication") as string,
@@ -216,10 +231,12 @@ function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: 
       interval: formData.get("interval") as string,
       quantity: formData.get("quantity") as string,
       duration: formData.get("duration") as string,
+      route: route || "VO",
+      timing: timing || null,
       patientNotes: formData.get("patientNotes") as string,
       category: formData.get("category") as string,
       ageGroup,
-      content: `${formData.get("medication")} ${formData.get("dose")}, ${formData.get("interval")}, por ${formData.get("duration")}`,
+      content: `${formData.get("medication")} ${formData.get("dose")}, ${route || "VO"}, ${formData.get("interval")}, por ${formData.get("duration")}`,
       isPublic: isAdmin && formData.get("isPublic") === "on",
       isLocked: isAdmin && formData.get("isLocked") === "on",
     };
@@ -282,6 +299,32 @@ function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: 
                 </SelectTrigger>
                 <SelectContent>
                   {DURATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Via</label>
+              <Select name="route" defaultValue="VO">
+                <SelectTrigger data-testid="select-route">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROUTES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Horário/Alimentação</label>
+              <Select name="timing" defaultValue="">
+                <SelectTrigger data-testid="select-timing">
+                  <SelectValue placeholder="Opcional" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Nenhum</SelectItem>
+                  {TIMINGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

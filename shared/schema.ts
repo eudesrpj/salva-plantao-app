@@ -10,6 +10,76 @@ import { users } from "./models/auth";
 
 // --- App Specific Tables ---
 
+// Pathologies (Base structure for prescriptions)
+export const pathologies = pgTable("pathologies", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
+  category: text("category"), // Emergência, Clínica, Pediatria, etc.
+  specialty: text("specialty"),
+  tags: text("tags").array(),
+  isPublic: boolean("is_public").default(false),
+  isLocked: boolean("is_locked").default(false),
+  userId: text("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPathologySchema = createInsertSchema(pathologies).omit({ id: true, createdAt: true });
+export type Pathology = typeof pathologies.$inferSelect;
+export type InsertPathology = z.infer<typeof insertPathologySchema>;
+
+// Pathology Medications (Multiple medications per pathology)
+export const pathologyMedications = pgTable("pathology_medications", {
+  id: serial("id").primaryKey(),
+  pathologyId: integer("pathology_id").notNull().references(() => pathologies.id),
+  medication: text("medication").notNull(),
+  dose: text("dose"),
+  dosePerKg: text("dose_per_kg"), // For pediatric: mg/kg
+  maxDose: text("max_dose"), // Maximum dose for safety
+  interval: text("interval"), // 6/6h, 8/8h, etc.
+  duration: text("duration"),
+  route: text("route"), // VO, IV, IM, SC
+  quantity: text("quantity"), // 1 caixa, 20 comprimidos
+  timing: text("timing"), // jejum, com alimentação
+  observations: text("observations"),
+  order: integer("order").default(0),
+});
+
+export const insertPathologyMedicationSchema = createInsertSchema(pathologyMedications).omit({ id: true });
+export type PathologyMedication = typeof pathologyMedications.$inferSelect;
+export type InsertPathologyMedication = z.infer<typeof insertPathologyMedicationSchema>;
+
+// Patient Prescription History
+export const patientHistory = pgTable("patient_history", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  patientName: text("patient_name").notNull(),
+  patientId: text("patient_id"), // Optional: prontuário, CPF
+  prescriptionData: jsonb("prescription_data").notNull(), // Full prescription snapshot
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPatientHistorySchema = createInsertSchema(patientHistory).omit({ id: true, createdAt: true });
+export type PatientHistory = typeof patientHistory.$inferSelect;
+export type InsertPatientHistory = z.infer<typeof insertPatientHistorySchema>;
+
+// Pediatric Calculator Settings (Admin configurable)
+export const calculatorSettings = pgTable("calculator_settings", {
+  id: serial("id").primaryKey(),
+  medication: text("medication").notNull(),
+  dosePerKg: text("dose_per_kg").notNull(),
+  maxDose: text("max_dose"),
+  unit: text("unit").default("mg"),
+  interval: text("interval"),
+  notes: text("notes"),
+  isActive: boolean("is_active").default(true),
+});
+
+export const insertCalculatorSettingSchema = createInsertSchema(calculatorSettings).omit({ id: true });
+export type CalculatorSetting = typeof calculatorSettings.$inferSelect;
+export type InsertCalculatorSetting = z.infer<typeof insertCalculatorSettingSchema>;
+
 // Prescriptions (Updated with structured fields)
 export const prescriptions = pgTable("prescriptions", {
   id: serial("id").primaryKey(),
@@ -20,6 +90,8 @@ export const prescriptions = pgTable("prescriptions", {
   interval: text("interval"), // 6/6h, 8/8h, 12/12h, 1x/dia
   quantity: text("quantity"), // comprimidos, gotas, ml, frascos
   duration: text("duration"), // 3, 5, 7, 10 dias, uso indeterminado
+  route: text("route"), // VO, IV, IM, SC, Tópico
+  timing: text("timing"), // Jejum, Com alimentação, Antes de dormir
   patientNotes: text("patient_notes"), // Observações do paciente
   ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
   category: text("category"),
@@ -309,3 +381,14 @@ export type UpdateGoalRequest = Partial<InsertGoal>;
 
 export type CreateDoctorProfileRequest = InsertDoctorProfile;
 export type UpdateDoctorProfileRequest = Partial<InsertDoctorProfile>;
+
+export type CreatePathologyRequest = InsertPathology;
+export type UpdatePathologyRequest = Partial<InsertPathology>;
+
+export type CreatePathologyMedicationRequest = InsertPathologyMedication;
+export type UpdatePathologyMedicationRequest = Partial<InsertPathologyMedication>;
+
+export type CreatePatientHistoryRequest = InsertPatientHistory;
+
+export type CreateCalculatorSettingRequest = InsertCalculatorSetting;
+export type UpdateCalculatorSettingRequest = Partial<InsertCalculatorSetting>;

@@ -1,0 +1,198 @@
+PROMPT COMPLETO — MODELO ATUALIZADO DO APLICATIVO (COM TODAS AS FUNÇÕES E MELHORIAS)
+
+Quero que você atualize o aplicativo seguindo as especificações abaixo. O app deve ser organizado por patologias, com criação de prescrições completas, estruturadas e padronizadas, tanto para Adulto quanto para Pediátrico.
+
+O sistema possui dois perfis: ADMIN (Dr. Eudes / desenvolvedor) e USUÁRIO.
+
+1️⃣ — Estrutura por Patologias
+
+A tela principal deve exibir uma lista de patologias.
+
+Ao abrir uma patologia, o usuário deve poder:
+
+adicionar um ou vários medicamentos para o mesmo caso
+
+inserir orientações específicas para cada medicamento
+
+Cada medicamento é inserido individualmente, mas podendo haver múltiplos por patologia.
+
+O app deve vir com um pacote inicial contendo:
+
+50 patologias mais frequentes
+
+versões Adulto e Pediátrico
+
+com medicações e doses usuais já preenchidas
+
+O ADMIN pode editar, atualizar e melhorar os modelos existentes.
+
+2️⃣ — Prescrição Estruturada (cópia organizada e padronizada)
+
+Quando o usuário copiar a prescrição para outro local, o texto deve sair limpo, organizado e legível, no seguinte formato:
+
+Nome do medicamento
+
+Quantidade total
+(ex.: 1 caixa, 20 comprimidos, 1 frasco, 10 ampolas)
+
+Modo de uso (linha abaixo):
+
+“Tomar 1 comprimido a cada 6 horas por X dias”
+
+via de administração
+
+jejum / com alimentação (quando aplicável)
+
+observações clínicas
+
+Criar campos rápidos configuráveis:
+
+dose
+
+intervalo
+
+duração
+
+via
+
+quantidade
+
+observações do paciente
+
+O ADMIN pode aplicar orientações-modelo para vários medicamentos.
+
+3️⃣ — Correções de Bugs e Estabilidade
+
+Implementar ajustes prioritários:
+
+Agenda / Plantão
+
+corrigir o erro onde o plantão não está sendo salvo
+
+garantir gravação correta e exibição na agenda
+
+Prescrições
+
+corrigir falhas de formatação na cópia
+
+evitar texto quebrado ou desalinhado
+
+manter padrão estruturado
+
+4️⃣ — Calculadora Pediátrica Flutuante
+
+Criar uma calculadora pediátrica integrada à aba Pediatria
+
+Deve permitir:
+
+cálculo por peso
+
+ajuste manual de parâmetros
+
+atualização das doses pelo ADMIN
+
+Exibir como botão flutuante:
+
+cor diferenciada
+
+ícone lúdico (ex.: dinossauro)
+
+sem atrapalhar a navegação
+
+5️⃣ — Personalização de Layout pelo ADMIN
+
+O ADMIN deve poder:
+
+alterar cores
+
+trocar fundo
+
+reposicionar elementos
+
+ajustar botões e organização visual
+
+manter estrutura funcional intacta
+
+O layout deve ser editável e modular.
+
+6️⃣ — Assinatura do Criador
+
+Adicionar rodapé padrão:
+
+Criado por Dr. Eudes Rodrigues
+
+Formato discreto, profissional e autenticado.
+
+7️⃣ — Perfis e Permissões
+
+Usuário pode:
+
+usar e criar prescrições
+
+utilizar patologias e medicamentos cadastrados
+
+ADMIN pode:
+
+editar modelos globais
+
+atualizar patologias e doses
+
+configurar calculadora e layout
+
+gerenciar conteúdo oficial
+
+🌟 FUNCIONALIDADES DIFERENCIAIS (OBRIGATÓRIAS NO PROJETO)
+
+Implementar também os seguintes recursos:
+
+🔎 Busca inteligente
+
+por patologia, medicamento, dose ou palavra-chave
+
+⭐ Favoritos / itens mais usados
+
+permitir salvar patologias e prescrições frequentes
+
+🗂️ Duplicação rápida de modelos
+
+criar novas prescrições a partir de modelos existentes
+
+👶 Modo pediátrico com alerta de dose fora do peso
+
+exibir aviso de segurança ao detectar valor fora do padrão
+
+🧾 Histórico de prescrições por paciente
+
+registro organizado e consultável
+
+📤 Exportar prescrição em PDF e compartilhar
+
+modelo limpo e profissional para envio
+
+🏷️ Tags de organização
+
+ex.: dor, emergência, pediatria, clínica, antibiótico
+
+🛡️ Avisos básicos de segurança
+
+dose incomum / via incompatível / duplicidade
+
+🧩 Templates reutilizáveis
+
+permitir criação de biblioteca própria de modelos
+
+☁️ Backup em nuvem vinculado à conta
+
+evitar perda de dados
+
+🎯 Objetivo Final do Sistema
+
+Organizar prescrições por patologia
+
+Tornar a criação rápida, completa e padronizada
+
+Melhorar segurança clínica
+
+Facilitar edição e expansão pelo ADMIN
+
+Garantir estabilidade e experiência profissional

@@ -119,13 +119,14 @@ function ShiftDialog({ shift, date }: { shift?: any, date?: Date }) {
     if (!selectedDate) return toast({ title: "Data obrigatória", variant: "destructive" });
 
     const formData = new FormData(e.currentTarget);
+    const valueStr = formData.get("value") as string;
     const data = {
-      date: selectedDate.toISOString(),
+      date: selectedDate as Date,
       location: formData.get("location") as string,
       type: formData.get("type") as string,
       startTime: formData.get("startTime") as string,
       endTime: formData.get("endTime") as string,
-      value: Number(formData.get("value")),
+      value: valueStr || "0",
       isPaid: false
     };
 

@@ -505,6 +505,114 @@ export async function registerRoutes(
     }
   });
 
+  // --- Pathologies ---
+  app.get("/api/pathologies", isAuthenticated, checkActive, async (req, res) => {
+    const ageGroup = req.query.ageGroup as string | undefined;
+    const items = await storage.getPathologies(getUserId(req), ageGroup);
+    res.json(items);
+  });
+
+  app.get("/api/pathologies/search", isAuthenticated, checkActive, async (req, res) => {
+    const query = req.query.q as string || "";
+    const items = await storage.searchPathologies(query, getUserId(req));
+    res.json(items);
+  });
+
+  app.get("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.getPathology(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Not found" });
+    res.json(item);
+  });
+
+  app.get("/api/pathologies/:id/medications", isAuthenticated, checkActive, async (req, res) => {
+    const items = await storage.getPathologyMedications(Number(req.params.id));
+    res.json(items);
+  });
+
+  app.post("/api/pathologies", isAuthenticated, checkActive, async (req, res) => {
+    const userId = getUserId(req);
+    const { isPublic, isLocked, ...data } = req.body;
+    const user = await authStorage.getUser(userId);
+    const item = await storage.createPathology({
+      ...data,
+      isPublic: user?.role === "admin" ? isPublic : false,
+      isLocked: user?.role === "admin" ? isLocked : false,
+      userId
+    });
+    res.status(201).json(item);
+  });
+
+  app.put("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.updatePathology(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+    await storage.deletePathology(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.post("/api/pathologies/:id/medications", isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.createPathologyMedication({
+      ...req.body,
+      pathologyId: Number(req.params.id)
+    });
+    res.status(201).json(item);
+  });
+
+  app.put("/api/pathology-medications/:id", isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.updatePathologyMedication(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/pathology-medications/:id", isAuthenticated, checkActive, async (req, res) => {
+    await storage.deletePathologyMedication(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Patient History ---
+  app.get("/api/patient-history", isAuthenticated, checkActive, async (req, res) => {
+    const items = await storage.getPatientHistory(getUserId(req));
+    res.json(items);
+  });
+
+  app.get("/api/patient-history/search", isAuthenticated, checkActive, async (req, res) => {
+    const patientName = req.query.name as string || "";
+    const items = await storage.searchPatientHistory(getUserId(req), patientName);
+    res.json(items);
+  });
+
+  app.post("/api/patient-history", isAuthenticated, checkActive, async (req, res) => {
+    const item = await storage.createPatientHistory({ ...req.body, userId: getUserId(req) });
+    res.status(201).json(item);
+  });
+
+  app.delete("/api/patient-history/:id", isAuthenticated, checkActive, async (req, res) => {
+    await storage.deletePatientHistory(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Calculator Settings ---
+  app.get("/api/calculator-settings", isAuthenticated, checkActive, async (req, res) => {
+    const items = await storage.getCalculatorSettings();
+    res.json(items);
+  });
+
+  app.post("/api/calculator-settings", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.createCalculatorSetting(req.body);
+    res.status(201).json(item);
+  });
+
+  app.put("/api/calculator-settings/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.updateCalculatorSetting(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/calculator-settings/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteCalculatorSetting(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // --- Seed Data ---
   await seedDatabase();
 

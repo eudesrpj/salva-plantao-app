@@ -1,6 +1,7 @@
 import { 
   prescriptions, checklists, shifts, notes, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
   protocols, flashcards, favorites, adminSettings, doctorProfiles, interconsultMessages, usageStats,
+  pathologies, pathologyMedications, patientHistory, calculatorSettings,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -16,7 +17,11 @@ import {
   type AdminSetting, type InsertAdminSetting,
   type DoctorProfile, type InsertDoctorProfile, type UpdateDoctorProfileRequest,
   type InterconsultMessage, type InsertInterconsultMessage,
-  type UsageStat, type InsertUsageStat
+  type UsageStat, type InsertUsageStat,
+  type Pathology, type InsertPathology, type UpdatePathologyRequest,
+  type PathologyMedication, type InsertPathologyMedication, type UpdatePathologyMedicationRequest,
+  type PatientHistory, type InsertPatientHistory,
+  type CalculatorSetting, type InsertCalculatorSetting, type UpdateCalculatorSettingRequest
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -107,6 +112,32 @@ export interface IStorage {
   // Goals
   getGoal(userId: string, month: string): Promise<Goal | undefined>;
   setGoal(item: InsertGoal): Promise<Goal>;
+
+  // Pathologies
+  getPathologies(userId?: string, ageGroup?: string): Promise<Pathology[]>;
+  searchPathologies(query: string, userId?: string): Promise<Pathology[]>;
+  getPathology(id: number): Promise<Pathology | undefined>;
+  createPathology(item: InsertPathology): Promise<Pathology>;
+  updatePathology(id: number, item: UpdatePathologyRequest): Promise<Pathology>;
+  deletePathology(id: number): Promise<void>;
+
+  // Pathology Medications
+  getPathologyMedications(pathologyId: number): Promise<PathologyMedication[]>;
+  createPathologyMedication(item: InsertPathologyMedication): Promise<PathologyMedication>;
+  updatePathologyMedication(id: number, item: UpdatePathologyMedicationRequest): Promise<PathologyMedication>;
+  deletePathologyMedication(id: number): Promise<void>;
+
+  // Patient History
+  getPatientHistory(userId: string): Promise<PatientHistory[]>;
+  searchPatientHistory(userId: string, patientName: string): Promise<PatientHistory[]>;
+  createPatientHistory(item: InsertPatientHistory): Promise<PatientHistory>;
+  deletePatientHistory(id: number): Promise<void>;
+
+  // Calculator Settings
+  getCalculatorSettings(): Promise<CalculatorSetting[]>;
+  createCalculatorSetting(item: InsertCalculatorSetting): Promise<CalculatorSetting>;
+  updateCalculatorSetting(id: number, item: UpdateCalculatorSettingRequest): Promise<CalculatorSetting>;
+  deleteCalculatorSetting(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -547,6 +578,105 @@ export class DatabaseStorage implements IStorage {
     }
     const [item] = await db.insert(goals).values(insertItem).returning();
     return item;
+  }
+
+  // Pathologies
+  async getPathologies(userId?: string, ageGroup?: string): Promise<Pathology[]> {
+    const conditions = [];
+    if (userId) {
+      conditions.push(or(eq(pathologies.isPublic, true), eq(pathologies.userId, userId)));
+    } else {
+      conditions.push(eq(pathologies.isPublic, true));
+    }
+    if (ageGroup) {
+      conditions.push(eq(pathologies.ageGroup, ageGroup));
+    }
+    return await db.select().from(pathologies).where(and(...conditions)).orderBy(pathologies.name);
+  }
+
+  async searchPathologies(query: string, userId?: string): Promise<Pathology[]> {
+    const searchPattern = `%${query}%`;
+    const conditions = [or(ilike(pathologies.name, searchPattern), ilike(pathologies.category, searchPattern))];
+    if (userId) {
+      conditions.push(or(eq(pathologies.isPublic, true), eq(pathologies.userId, userId)));
+    }
+    return await db.select().from(pathologies).where(and(...conditions)).orderBy(pathologies.name);
+  }
+
+  async getPathology(id: number): Promise<Pathology | undefined> {
+    const [item] = await db.select().from(pathologies).where(eq(pathologies.id, id));
+    return item;
+  }
+
+  async createPathology(insertItem: InsertPathology): Promise<Pathology> {
+    const [item] = await db.insert(pathologies).values(insertItem).returning();
+    return item;
+  }
+
+  async updatePathology(id: number, updateItem: UpdatePathologyRequest): Promise<Pathology> {
+    const [item] = await db.update(pathologies).set(updateItem).where(eq(pathologies.id, id)).returning();
+    return item;
+  }
+
+  async deletePathology(id: number): Promise<void> {
+    await db.delete(pathologyMedications).where(eq(pathologyMedications.pathologyId, id));
+    await db.delete(pathologies).where(eq(pathologies.id, id));
+  }
+
+  // Pathology Medications
+  async getPathologyMedications(pathologyId: number): Promise<PathologyMedication[]> {
+    return await db.select().from(pathologyMedications).where(eq(pathologyMedications.pathologyId, pathologyId)).orderBy(pathologyMedications.order);
+  }
+
+  async createPathologyMedication(insertItem: InsertPathologyMedication): Promise<PathologyMedication> {
+    const [item] = await db.insert(pathologyMedications).values(insertItem).returning();
+    return item;
+  }
+
+  async updatePathologyMedication(id: number, updateItem: UpdatePathologyMedicationRequest): Promise<PathologyMedication> {
+    const [item] = await db.update(pathologyMedications).set(updateItem).where(eq(pathologyMedications.id, id)).returning();
+    return item;
+  }
+
+  async deletePathologyMedication(id: number): Promise<void> {
+    await db.delete(pathologyMedications).where(eq(pathologyMedications.id, id));
+  }
+
+  // Patient History
+  async getPatientHistory(userId: string): Promise<PatientHistory[]> {
+    return await db.select().from(patientHistory).where(eq(patientHistory.userId, userId)).orderBy(desc(patientHistory.createdAt));
+  }
+
+  async searchPatientHistory(userId: string, patientName: string): Promise<PatientHistory[]> {
+    return await db.select().from(patientHistory).where(and(eq(patientHistory.userId, userId), ilike(patientHistory.patientName, `%${patientName}%`))).orderBy(desc(patientHistory.createdAt));
+  }
+
+  async createPatientHistory(insertItem: InsertPatientHistory): Promise<PatientHistory> {
+    const [item] = await db.insert(patientHistory).values(insertItem).returning();
+    return item;
+  }
+
+  async deletePatientHistory(id: number): Promise<void> {
+    await db.delete(patientHistory).where(eq(patientHistory.id, id));
+  }
+
+  // Calculator Settings
+  async getCalculatorSettings(): Promise<CalculatorSetting[]> {
+    return await db.select().from(calculatorSettings).where(eq(calculatorSettings.isActive, true)).orderBy(calculatorSettings.medication);
+  }
+
+  async createCalculatorSetting(insertItem: InsertCalculatorSetting): Promise<CalculatorSetting> {
+    const [item] = await db.insert(calculatorSettings).values(insertItem).returning();
+    return item;
+  }
+
+  async updateCalculatorSetting(id: number, updateItem: UpdateCalculatorSettingRequest): Promise<CalculatorSetting> {
+    const [item] = await db.update(calculatorSettings).set(updateItem).where(eq(calculatorSettings.id, id)).returning();
+    return item;
+  }
+
+  async deleteCalculatorSetting(id: number): Promise<void> {
+    await db.delete(calculatorSettings).where(eq(calculatorSettings.id, id));
   }
 }
 
