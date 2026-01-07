@@ -53,7 +53,48 @@ export const insertPathologySchema = createInsertSchema(pathologies).omit({ id: 
 export type Pathology = typeof pathologies.$inferSelect;
 export type InsertPathology = z.infer<typeof insertPathologySchema>;
 
-// Pathology Medications (Multiple medications per pathology)
+// Official Prescription Models (Admin created, linked to pathologies)
+export const prescriptionModels = pgTable("prescription_models", {
+  id: serial("id").primaryKey(),
+  pathologyId: integer("pathology_id").notNull().references(() => pathologies.id),
+  title: text("title").notNull(), // "Tratamento padrão", "Caso leve", "Caso grave"
+  description: text("description"),
+  orientations: text("orientations"), // Como tomar, cuidados, retorno
+  observations: text("observations"), // Sinais de alarme
+  ageGroup: text("age_group").default("adulto"), // adulto, pediatrico, ambos
+  order: integer("order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPrescriptionModelSchema = createInsertSchema(prescriptionModels).omit({ id: true, createdAt: true });
+export type PrescriptionModel = typeof prescriptionModels.$inferSelect;
+export type InsertPrescriptionModel = z.infer<typeof insertPrescriptionModelSchema>;
+
+// Prescription Model Medications (Multiple medications per prescription model)
+export const prescriptionModelMedications = pgTable("prescription_model_medications", {
+  id: serial("id").primaryKey(),
+  prescriptionModelId: integer("prescription_model_id").notNull().references(() => prescriptionModels.id),
+  medicationId: integer("medication_id").references(() => medications.id), // Reference to library
+  medication: text("medication").notNull(), // Inline name (or copy from library)
+  pharmaceuticalForm: text("pharmaceutical_form"), // Comprimido, Gotas, Xarope, Ampola
+  dose: text("dose"),
+  dosePerKg: text("dose_per_kg"), // For pediatric: mg/kg
+  maxDose: text("max_dose"), // Maximum dose for safety
+  interval: text("interval"), // 6/6h, 8/8h, etc.
+  duration: text("duration"),
+  route: text("route"), // VO, IV, IM, SC
+  quantity: text("quantity"), // 1 caixa, 20 comprimidos
+  timing: text("timing"), // jejum, com alimentação
+  observations: text("observations"),
+  order: integer("order").default(0),
+});
+
+export const insertPrescriptionModelMedicationSchema = createInsertSchema(prescriptionModelMedications).omit({ id: true });
+export type PrescriptionModelMedication = typeof prescriptionModelMedications.$inferSelect;
+export type InsertPrescriptionModelMedication = z.infer<typeof insertPrescriptionModelMedicationSchema>;
+
+// Legacy: Pathology Medications (Multiple medications per pathology) - Keep for backward compatibility
 export const pathologyMedications = pgTable("pathology_medications", {
   id: serial("id").primaryKey(),
   pathologyId: integer("pathology_id").notNull().references(() => pathologies.id),
@@ -89,22 +130,35 @@ export const insertPatientHistorySchema = createInsertSchema(patientHistory).omi
 export type PatientHistory = typeof patientHistory.$inferSelect;
 export type InsertPatientHistory = z.infer<typeof insertPatientHistorySchema>;
 
-// Pediatric Calculator Settings (Admin configurable)
+// Unified Calculator Settings (Admin configurable)
 export const calculatorSettings = pgTable("calculator_settings", {
   id: serial("id").primaryKey(),
   medication: text("medication").notNull(),
-  dosePerKg: text("dose_per_kg").notNull(),
-  maxDose: text("max_dose"),
+  indication: text("indication"), // Indicação do medicamento
+  dosePerKg: text("dose_per_kg").notNull(), // mg/kg/dose ou mg/kg/dia
+  doseFormula: text("dose_formula").default("mg/kg/dose"), // mg/kg/dose, mg/kg/dia, dose_fixa
+  fixedDose: text("fixed_dose"), // For fixed dose medications
+  maxDosePerDose: text("max_dose_per_dose"), // Maximum per single dose
+  maxDosePerDay: text("max_dose_per_day"), // Maximum per day
+  maxDose: text("max_dose"), // Legacy field for backwards compatibility
   unit: text("unit").default("mg"),
   interval: text("interval"),
   notes: text("notes"),
+  ageGroup: text("age_group").default("ambos"), // pediatrico, adulto, ambos
+  calculatorMode: text("calculator_mode").default("pediatrico"), // pediatrico, adulto, emergencia, comum
+  usageMode: text("usage_mode").default("ambos"), // domiciliar, unidade, ambos
   pharmaceuticalForm: text("pharmaceutical_form"), // Comprimido, Gotas, Xarope, Solução/Ampola
+  availableForms: jsonb("available_forms"), // Array of { form, concentration, unit, conversionFactor }
   concentration: text("concentration"), // Ex: 500mg/ml, 100mg/5ml
+  route: text("route").default("VO"), // VO, IV, IM, SC, Tópico
+  availableRoutes: text("available_routes").array(), // [VO, IV, IM, SC]
+  dilutionInfo: text("dilution_info"), // For IV: "diluir em 100mL SF 0,9%"
   doseByAge: jsonb("dose_by_age"), // { "0-1": "2.5ml", "1-5": "5ml", "5-12": "10ml" }
   minAge: integer("min_age"), // Minimum age in months
   maxAge: integer("max_age"), // Maximum age in months
   minWeight: decimal("min_weight"), // Minimum weight in kg
   maxWeight: decimal("max_weight"), // Maximum weight in kg
+  category: text("category"), // Analgésico, Antibiótico, Sedativo, etc.
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

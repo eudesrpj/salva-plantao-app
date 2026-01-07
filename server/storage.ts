@@ -5,6 +5,7 @@ import {
   drugInteractions, medicationContraindications, prescriptionFavorites,
   evolutionModels, physicalExamTemplates, signsSymptoms, semiologicalSigns,
   medicalCertificates, attendanceDeclarations, medicalReferrals, referralDestinations, referralReasons,
+  prescriptionModels, prescriptionModelMedications,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -39,7 +40,9 @@ import {
   type AttendanceDeclaration, type InsertAttendanceDeclaration,
   type MedicalReferral, type InsertMedicalReferral,
   type ReferralDestination, type InsertReferralDestination,
-  type ReferralReason, type InsertReferralReason
+  type ReferralReason, type InsertReferralReason,
+  type PrescriptionModel, type InsertPrescriptionModel,
+  type PrescriptionModelMedication, type InsertPrescriptionModelMedication
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -1302,6 +1305,59 @@ export class DatabaseStorage implements IStorage {
 
   async deleteReferralReason(id: number): Promise<void> {
     await db.delete(referralReasons).where(eq(referralReasons.id, id));
+  }
+
+  // Prescription Models (Official admin-created models)
+  async getPrescriptionModels(pathologyId?: number): Promise<PrescriptionModel[]> {
+    if (pathologyId) {
+      return await db.select().from(prescriptionModels)
+        .where(and(eq(prescriptionModels.pathologyId, pathologyId), eq(prescriptionModels.isActive, true)))
+        .orderBy(prescriptionModels.order);
+    }
+    return await db.select().from(prescriptionModels)
+      .where(eq(prescriptionModels.isActive, true))
+      .orderBy(prescriptionModels.order);
+  }
+
+  async getPrescriptionModel(id: number): Promise<PrescriptionModel | undefined> {
+    const [item] = await db.select().from(prescriptionModels).where(eq(prescriptionModels.id, id));
+    return item;
+  }
+
+  async createPrescriptionModel(insertItem: InsertPrescriptionModel): Promise<PrescriptionModel> {
+    const [item] = await db.insert(prescriptionModels).values(insertItem).returning();
+    return item;
+  }
+
+  async updatePrescriptionModel(id: number, updateItem: Partial<InsertPrescriptionModel>): Promise<PrescriptionModel> {
+    const [item] = await db.update(prescriptionModels).set(updateItem).where(eq(prescriptionModels.id, id)).returning();
+    return item;
+  }
+
+  async deletePrescriptionModel(id: number): Promise<void> {
+    await db.delete(prescriptionModelMedications).where(eq(prescriptionModelMedications.prescriptionModelId, id));
+    await db.delete(prescriptionModels).where(eq(prescriptionModels.id, id));
+  }
+
+  // Prescription Model Medications
+  async getPrescriptionModelMedications(prescriptionModelId: number): Promise<PrescriptionModelMedication[]> {
+    return await db.select().from(prescriptionModelMedications)
+      .where(eq(prescriptionModelMedications.prescriptionModelId, prescriptionModelId))
+      .orderBy(prescriptionModelMedications.order);
+  }
+
+  async createPrescriptionModelMedication(insertItem: InsertPrescriptionModelMedication): Promise<PrescriptionModelMedication> {
+    const [item] = await db.insert(prescriptionModelMedications).values(insertItem).returning();
+    return item;
+  }
+
+  async updatePrescriptionModelMedication(id: number, updateItem: Partial<InsertPrescriptionModelMedication>): Promise<PrescriptionModelMedication> {
+    const [item] = await db.update(prescriptionModelMedications).set(updateItem).where(eq(prescriptionModelMedications.id, id)).returning();
+    return item;
+  }
+
+  async deletePrescriptionModelMedication(id: number): Promise<void> {
+    await db.delete(prescriptionModelMedications).where(eq(prescriptionModelMedications.id, id));
   }
 }
 

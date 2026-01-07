@@ -1,0 +1,387 @@
+AJUSTES NO APP SALVA PLANTÃO – PRESCRIÇÕES, CALCULADORA E IA DO ADMIN
+
+Quero que você faça as alterações abaixo sem quebrar o que já funciona e mantendo o padrão de código atual (stack TypeScript / React / Node).
+Priorize código limpo, tipado, organizado e fácil de manter.
+
+1) INTEGRAR CHATGPT APENAS NA CONTA DO ADMINISTRADOR
+
+Objetivo: usar o ChatGPT só no painel do administrador, para me ajudar a criar conteúdos (prescrições, medicações, resumos, checklists, textos do app) de forma rápida, mas sempre com revisão manual antes de salvar.
+
+1.1 Seção “Configurações de IA (Admin)”
+
+No painel do administrador:
+
+Criar uma seção: “Configurações de IA (Admin)”.
+
+Nessa seção, permitir:
+
+cadastrar/editar/remover a chave de API da OpenAI (ChatGPT);
+
+armazenar essa chave apenas no backend (não expor no frontend);
+
+se não houver chave configurada, desativar todos os recursos de IA do admin e exibir aviso, ex:
+
+“Configure a chave de API do ChatGPT para usar o assistente de conteúdo.”
+
+1.2 Módulo “Assistente IA do Admin”
+
+Ainda no painel do admin, criar uma área: “Assistente IA do Admin” com as seguintes funções:
+
+Gerar rascunhos de:
+
+medicações (nome, forma farmacêutica, dose, posologia, via, duração, contraindicações, orientações);
+
+modelos de prescrição;
+
+resumos;
+
+checklists;
+
+outros textos usados no app (ex.: textos de evolução padrão, orientações, sinais de alarme, etc.).
+
+Fluxo:
+
+Admin escolhe o tipo de conteúdo a gerar:
+
+“Medicação”
+
+“Modelo de prescrição”
+
+“Resumo”
+
+“Checklist”
+
+Admin preenche um pequeno formulário com o tema (ex.: “amoxicilina suspensão pediátrica para otite média”, “bronquiolite – resumo e checklist”, etc.).
+
+O backend envia isso para o ChatGPT via API (com um prompt interno bem estruturado, pedindo resposta em formato estruturado – JSON ou campos separados).
+
+A resposta NÃO é salva diretamente no banco:
+
+mostrar em uma tela de pré-visualização;
+
+permitir editar tudo (campos mapeados: nome, dose, posologia, orientações, etc.);
+
+Só depois da revisão, o admin clica em:
+
+“Salvar medicação”
+
+“Salvar modelo de prescrição”
+
+“Salvar resumo”
+
+“Salvar checklist”
+
+Esses dados são então armazenados nas tabelas já usadas pelo app (medicações, prescrições, textos, etc.) e passam a alimentar o resto do sistema.
+
+Importante:
+
+Essa integração via API é apenas para o admin.
+
+Não deve haver nenhuma integração de IA via API ligada ao perfil do usuário comum.
+
+Usuário normal continua acessando ChatGPT somente via webview/aba web, como já definido antes.
+
+2) ATUALIZAR ABA DE PRESCRIÇÕES – LISTA DE PATOLOGIAS + MODELOS INTERNOS
+
+Quero que a aba “Prescrições” seja reformulada para funcionar assim:
+
+2.1 Estrutura geral
+
+Na aba “Prescrições”, exibir uma lista de patologias (por exemplo, em cards ou linhas).
+
+Cada patologia terá dentro dela uma ou mais prescrições oficiais configuradas pelo admin.
+
+Exemplo de estrutura:
+
+Patologia: Bronquiolite
+
+Prescrição modelo 1
+
+Prescrição modelo 2
+
+Patologia: Pneumonia comunitária
+
+Prescrição modelo 1
+
+etc.
+
+Essas prescrições oficiais são definidas pelo admin no painel, e o usuário não altera o modelo base.
+
+2.2 Estrutura de uma prescrição dentro da patologia
+
+Cada prescrição deve ter:
+
+Lista de medicações, com campos estruturados:
+
+nome da medicação;
+
+dose;
+
+forma (comprimido, xarope, gotas, EV, etc.);
+
+via;
+
+frequência;
+
+duração;
+
+Campo de Orientações (ex.: como tomar, cuidados, retorno etc.);
+
+Campo de Observações / Sinais de alarme (ex.: quando procurar emergência).
+
+Esses campos devem ser editáveis pelo admin no painel, para cada modelo.
+
+2.3 Tela de pré-visualização para o usuário
+
+Quando o usuário escolher uma patologia e depois selecionar uma prescrição dentro dela:
+
+abrir uma tela de pré-visualização da prescrição, mostrando:
+
+todas as medicações estruturadas;
+
+orientações;
+
+observações/sinais de alarme.
+
+Nessa tela, o usuário pode:
+
+remover uma medicação da prescrição (ex.: desmarcar um item);
+
+editar temporariamente:
+
+dose,
+
+frequência,
+
+orientações,
+
+observações;
+
+Essas edições são locais, apenas para essa cópia.
+
+2.4 Ações disponíveis na pré-visualização
+
+Adicionar botões:
+
+“Copiar prescrição completa” (copia tudo para área de transferência em texto organizado para colar no prontuário);
+
+“Salvar em Minhas Prescrições”:
+
+salva essa versão editada como um modelo pessoal do usuário;
+
+ligada à conta dele;
+
+“Favoritar”:
+
+marca essa prescrição (original ou personalizada) como favorita para acesso rápido.
+
+Importante:
+
+As alterações feitas pelo usuário (na pré-visualização, em “Minhas prescrições” ou favoritos) NÃO alteram a prescrição oficial que foi criada pelo admin.
+
+As prescrições oficiais permanecem intactas na aba principal de prescrição (apenas o admin pode alterá-las).
+
+3) ADICIONAR FORMA DE CADASTRAR VÁRIAS PRESCRIÇÕES DE UMA VEZ (ADMIN)
+
+No painel do admin, criar uma opção para cadastrar várias prescrições de uma única vez no mesmo padrão de dados já usado hoje.
+
+Sugestão de fluxo (pode ser via IA ou manual):
+
+Criar uma tela “Cadastro em lote de prescrições” com:
+
+um campo de texto grande (textarea) ou upload de arquivo (ex.: CSV/JSON);
+
+ou integração com o “Assistente IA do Admin” para gerar múltiplas prescrições de uma vez.
+
+O sistema:
+
+parseia esse conteúdo;
+
+mapeia para a estrutura interna (patologia, medicações, orientações, observações);
+
+lista todas as novas prescrições em uma tela de pré-visualização em lote;
+
+O admin pode:
+
+marcar quais quer salvar;
+
+editar campos individualmente;
+
+confirmar o cadastro.
+
+A ideia é facilitar subir muitas prescrições prontas de uma vez, sem ter que cadastrar uma por uma.
+
+4) AJUSTES NA CALCULADORA – UNIFICAR E DEIXAR MAIS COMPLETA
+
+Atualmente existe uma calculadora pediátrica separada.
+Quero que:
+
+Remova a calculadora pediátrica independente (rota/tela separada);
+
+Use apenas uma calculadora unificada, mais completa, que inclua:
+
+doses pediátricas;
+
+doses de emergência;
+
+calculadora “comum”.
+
+4.1 Painel do admin – configuração da calculadora
+
+No painel do admin, criar uma seção:
+
+“Configurações da Calculadora de Doses”
+
+Nela, o admin deve poder:
+
+adicionar novas medicações à calculadora;
+
+para cada medicação, definir:
+
+nome;
+
+indicação;
+
+faixa etária (adulto, pediátrico, ambos);
+
+peso mínimo/máximo (se aplicável);
+
+fórmula de cálculo (mg/kg/dia, mg/kg/dose, dose fixa etc.);
+
+dose máxima por dose e por dia;
+
+formas/apresentações:
+
+comprimido (mg);
+
+gotas (mg/ml + quantas gotas/mL);
+
+xarope (mg/ml);
+
+EV (ampola, mg/mL, volume de diluição);
+
+SC, IM, etc.;
+
+se é para uso:
+
+domiciliar (casa);
+
+unidade (doses em serviço).
+
+Todas essas configurações devem ser salvas no banco, nada hardcoded.
+
+4.2 Tela da calculadora para o usuário
+
+Na aba da calculadora, organizar assim:
+
+Usuário escolhe o modo de cálculo:
+
+Pediátrico;
+
+Adulto;
+
+Emergência;
+
+Comum.
+
+Usuário escolhe:
+
+se a prescrição é para:
+
+Casa (uso domiciliar)
+
+Unidade (prescrição a ser feita na unidade: EV, SC, IM, etc.)
+
+Usuário informa:
+
+Peso (em kg) ou Idade (ou ambos, quando aplicável);
+
+seleciona a medicação (lista baseada no que foi configurado pelo admin);
+
+seleciona a forma:
+
+gotas;
+
+xarope;
+
+comprimido;
+
+endovenoso;
+
+diluído no soro;
+
+subcutâneo;
+
+intramuscular;
+
+outras formas cadastradas.
+
+A calculadora deve:
+
+usar os parâmetros cadastrados para aquela medicação (mg/kg, limite máximo etc.);
+
+calcular a dose correta;
+
+exibir o resultado de forma clara, por exemplo:
+
+mg por dose
+
+mg por dia (se aplicável)
+
+quantas gotas
+
+quantos mL
+
+quantos comprimidos
+
+volume total de diluição (para EV, SC, IM, etc.)
+
+A resposta deve ser exibida em formato de fácil leitura, algo como:
+
+“Dose calculada: 250 mg VO 8/8h (5 mL de xarope 50 mg/mL)”
+
+“Dose calculada: 0,1 mg/kg EV, total X mg, diluir em 100 mL SF 0,9%”
+
+Importante:
+
+Reaproveitar ao máximo a lógica que já existir hoje;
+
+Centralizar regras em um serviço/função bem tipado (ex.: calculateDose(...));
+
+Evitar lógica duplicada ou espalhada em vários componentes.
+
+5) RESUMO DOS PONTOS-CHAVE
+
+ChatGPT via API:
+
+Somente no painel do admin, para gerar rascunhos de conteúdos (medicações, prescrições, resumos, checklists etc.);
+
+Sempre com pré-visualização + revisão manual antes de salvar;
+
+Nunca expor a chave de API no frontend.
+
+Usuário comum:
+
+Continua usando ChatGPT apenas via aba web (webview) com prompts pré-estabelecidos;
+
+Usa a “IA do sistema” (assistente de sugestão de prescrição) baseada no banco interno, sem API externa.
+
+Prescrições:
+
+Aba de prescrições organizada por patologias;
+
+Dentro de cada patologia: modelos oficiais definidos pelo admin;
+
+Usuário abre pré-visualização, pode editar temporariamente, copiar, salvar em “Minhas prescrições” e favoritar;
+
+Modelo oficial nunca é alterado pelo usuário.
+
+Calculadora:
+
+Uma calculadora unificada, com modos pediátrico, emergência e comum;
+
+Admin configura parâmetros de dose e apresentações no painel;
+
+Usuário escolhe peso/idade, medicação, forma (gotas, xarope, comprimido, EV, SC, IM, etc.) e recebe o cálculo já em mg, ml, gotas, comprimidos, etc.;
+
+Tudo organizado para ser usado tanto em prescrição domiciliar quanto na unidade.

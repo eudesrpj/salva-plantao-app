@@ -46,6 +46,9 @@ Key database entities include: prescriptions, protocols, checklists, shifts, not
 - **Medication Contraindications**: Admin-configurable contraindications per medication
 - **Enhanced Pediatric Calculator**: Age input, pharmaceutical forms, concentration display, age/weight warnings
 - **Orientations Field**: "Orientações / Sinais de Alarme" field added to all prescriptions
+- **Prescription Models by Pathology**: Admin-created official prescription templates organized by pathology, with multiple medications, orientations, and clinical observations per model
+- **AI Assistant for Content Generation** (Admin only): Generates prescription model drafts using OpenAI, with preview/edit before saving - never auto-saves
+- **Enhanced Calculator Settings**: Extended database schema with dose formulas, usage modes (home/unit), multiple routes (IV/IM/SC), dilution info, and available pharmaceutical forms
 
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)

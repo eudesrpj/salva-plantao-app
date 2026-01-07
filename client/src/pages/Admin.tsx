@@ -36,12 +36,15 @@ export default function Admin() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-3xl grid-cols-6">
+        <TabsList className="grid w-full max-w-4xl grid-cols-7">
           <TabsTrigger value="users" className="gap-1">
             <Users className="h-4 w-4" /> Usuários
           </TabsTrigger>
           <TabsTrigger value="payment" className="gap-1">
             <CreditCard className="h-4 w-4" /> Pagamento
+          </TabsTrigger>
+          <TabsTrigger value="models" className="gap-1">
+            <FileText className="h-4 w-4" /> Modelos
           </TabsTrigger>
           <TabsTrigger value="ai-prompts" className="gap-1">
             <Bot className="h-4 w-4" /> IA
@@ -50,7 +53,7 @@ export default function Admin() {
             <Pill className="h-4 w-4" /> Interações
           </TabsTrigger>
           <TabsTrigger value="content" className="gap-1">
-            <FileText className="h-4 w-4" /> Conteúdo
+            <Settings className="h-4 w-4" /> Config
           </TabsTrigger>
           <TabsTrigger value="stats" className="gap-1">
             <BarChart3 className="h-4 w-4" /> Stats
@@ -63,6 +66,10 @@ export default function Admin() {
 
         <TabsContent value="payment">
           <PaymentSettingsTab />
+        </TabsContent>
+
+        <TabsContent value="models">
+          <PrescriptionModelsTab />
         </TabsContent>
 
         <TabsContent value="ai-prompts">
@@ -2566,5 +2573,524 @@ function NewProtocolDialog() {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface PathologyForModels {
+  id: number;
+  name: string;
+  category: string | null;
+  description: string | null;
+  ageGroup: string | null;
+}
+
+interface PrescriptionModel {
+  id: number;
+  pathologyId: number;
+  title: string;
+  description: string | null;
+  orientations: string | null;
+  observations: string | null;
+  ageGroup: string | null;
+  order: number;
+  isActive: boolean;
+}
+
+interface PrescriptionModelMedication {
+  id: number;
+  prescriptionModelId: number;
+  medication: string;
+  pharmaceuticalForm: string | null;
+  dose: string | null;
+  dosePerKg: string | null;
+  maxDose: string | null;
+  interval: string | null;
+  duration: string | null;
+  route: string | null;
+  quantity: string | null;
+  timing: string | null;
+  observations: string | null;
+  order: number;
+}
+
+function PrescriptionModelsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [selectedPathology, setSelectedPathology] = useState<number | null>(null);
+  const [selectedModel, setSelectedModel] = useState<PrescriptionModel | null>(null);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [medicationDialogOpen, setMedicationDialogOpen] = useState(false);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [generatedContent, setGeneratedContent] = useState<any>(null);
+
+  const { data: pathologies, isLoading: loadingPathologies } = useQuery<PathologyForModels[]>({
+    queryKey: ["/api/pathologies"],
+  });
+
+  const { data: models, isLoading: loadingModels } = useQuery<PrescriptionModel[]>({
+    queryKey: ["/api/prescription-models", selectedPathology],
+    queryFn: async () => {
+      const url = selectedPathology 
+        ? `/api/prescription-models?pathologyId=${selectedPathology}`
+        : "/api/prescription-models";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: true,
+  });
+
+  const { data: medications } = useQuery<PrescriptionModelMedication[]>({
+    queryKey: ["/api/prescription-models", selectedModel?.id, "medications"],
+    queryFn: async () => {
+      if (!selectedModel) return [];
+      const res = await fetch(`/api/prescription-models/${selectedModel.id}/medications`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!selectedModel,
+  });
+
+  const createModelMutation = useMutation({
+    mutationFn: async (data: Partial<PrescriptionModel>) => {
+      const res = await apiRequest("POST", "/api/admin/prescription-models", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/prescription-models"] });
+      toast({ title: "Modelo criado!" });
+      setModelDialogOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro ao criar modelo", variant: "destructive" });
+    },
+  });
+
+  const deleteModelMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/prescription-models/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/prescription-models"] });
+      toast({ title: "Modelo removido!" });
+      setSelectedModel(null);
+    },
+  });
+
+  const createMedicationMutation = useMutation({
+    mutationFn: async (data: Partial<PrescriptionModelMedication>) => {
+      const res = await apiRequest("POST", "/api/admin/prescription-model-medications", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/prescription-models", selectedModel?.id, "medications"] });
+      toast({ title: "Medicação adicionada!" });
+      setMedicationDialogOpen(false);
+    },
+  });
+
+  const deleteMedicationMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/prescription-model-medications/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/prescription-models", selectedModel?.id, "medications"] });
+      toast({ title: "Medicação removida!" });
+    },
+  });
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) {
+      toast({ title: "Digite uma descrição", variant: "destructive" });
+      return;
+    }
+    setAiGenerating(true);
+    try {
+      const res = await apiRequest("POST", "/api/ai/chat", {
+        message: `Gere uma prescrição médica completa para: ${aiPrompt}. 
+        Retorne em JSON com este formato exato:
+        {
+          "title": "Nome do modelo",
+          "description": "Descrição breve",
+          "orientations": "Orientações ao paciente",
+          "observations": "Observações clínicas",
+          "medications": [
+            {
+              "medication": "Nome do medicamento",
+              "pharmaceuticalForm": "Forma farmacêutica",
+              "dose": "Dose",
+              "interval": "Intervalo",
+              "duration": "Duração",
+              "route": "Via",
+              "observations": "Observações"
+            }
+          ]
+        }`,
+        mode: "quick",
+      });
+      const data = await res.json();
+      if (data.reply) {
+        try {
+          const jsonMatch = data.reply.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            setGeneratedContent(parsed);
+            toast({ title: "Conteúdo gerado!", description: "Revise antes de salvar." });
+          }
+        } catch {
+          toast({ title: "Erro ao processar resposta da IA", variant: "destructive" });
+        }
+      }
+    } catch {
+      toast({ title: "Erro ao gerar conteúdo", variant: "destructive" });
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const handleSaveGenerated = async () => {
+    if (!generatedContent || !selectedPathology) {
+      toast({ title: "Selecione uma patologia primeiro", variant: "destructive" });
+      return;
+    }
+    try {
+      const modelRes = await apiRequest("POST", "/api/admin/prescription-models", {
+        pathologyId: selectedPathology,
+        title: generatedContent.title,
+        description: generatedContent.description,
+        orientations: generatedContent.orientations,
+        observations: generatedContent.observations,
+        ageGroup: "adulto",
+        order: (models?.length || 0) + 1,
+        isActive: true,
+      });
+      const model = await modelRes.json();
+
+      if (generatedContent.medications) {
+        for (let i = 0; i < generatedContent.medications.length; i++) {
+          const med = generatedContent.medications[i];
+          await apiRequest("POST", "/api/admin/prescription-model-medications", {
+            prescriptionModelId: model.id,
+            medication: med.medication,
+            pharmaceuticalForm: med.pharmaceuticalForm,
+            dose: med.dose,
+            interval: med.interval,
+            duration: med.duration,
+            route: med.route,
+            observations: med.observations,
+            order: i + 1,
+          });
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: ["/api/prescription-models"] });
+      toast({ title: "Modelo salvo com sucesso!" });
+      setGeneratedContent(null);
+      setAiPrompt("");
+      setAiDialogOpen(false);
+    } catch {
+      toast({ title: "Erro ao salvar modelo", variant: "destructive" });
+    }
+  };
+
+  if (loadingPathologies) {
+    return <PageLoader text="Carregando patologias..." />;
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle>Modelos de Prescrição por Patologia</CardTitle>
+            <CardDescription>Crie modelos oficiais de prescrição organizados por patologia.</CardDescription>
+          </div>
+          <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-1" data-testid="button-ai-generate-model">
+                <Sparkles className="h-4 w-4" /> Gerar com IA
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" /> Assistente IA - Gerar Modelo de Prescrição
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Selecione a Patologia</label>
+                  <Select value={selectedPathology?.toString() || ""} onValueChange={(v) => setSelectedPathology(Number(v))}>
+                    <SelectTrigger data-testid="select-ai-pathology">
+                      <SelectValue placeholder="Escolha uma patologia" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pathologies?.map(p => (
+                        <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Descreva a Prescrição Desejada</label>
+                  <Textarea 
+                    value={aiPrompt} 
+                    onChange={(e) => setAiPrompt(e.target.value)} 
+                    placeholder="Ex: Tratamento para pneumonia adquirida na comunidade em adulto, sem alergia a medicamentos..."
+                    rows={3}
+                    data-testid="textarea-ai-prompt"
+                  />
+                </div>
+                <Button 
+                  onClick={handleAiGenerate} 
+                  disabled={aiGenerating || !selectedPathology}
+                  className="w-full gap-1"
+                  data-testid="button-generate-ai"
+                >
+                  {aiGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" /> Gerar Prescrição
+                    </>
+                  )}
+                </Button>
+
+                {generatedContent && (
+                  <div className="mt-4 p-4 border rounded-md bg-muted/50 space-y-3">
+                    <h4 className="font-semibold">{generatedContent.title}</h4>
+                    {generatedContent.description && (
+                      <p className="text-sm text-muted-foreground">{generatedContent.description}</p>
+                    )}
+                    {generatedContent.orientations && (
+                      <div>
+                        <span className="text-xs font-medium text-muted-foreground">Orientações:</span>
+                        <p className="text-sm">{generatedContent.orientations}</p>
+                      </div>
+                    )}
+                    {generatedContent.medications && (
+                      <div>
+                        <span className="text-xs font-medium text-muted-foreground">Medicações ({generatedContent.medications.length}):</span>
+                        <ul className="mt-1 space-y-1">
+                          {generatedContent.medications.map((med: any, i: number) => (
+                            <li key={i} className="text-sm flex items-start gap-2">
+                              <Pill className="h-3 w-3 mt-1 text-primary" />
+                              <span>{med.medication} - {med.dose} - {med.route} - {med.interval}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <Button onClick={handleSaveGenerated} className="w-full mt-4" data-testid="button-save-generated">
+                      Salvar Modelo Gerado
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="space-y-3">
+              <h4 className="font-medium text-sm text-muted-foreground">Patologias</h4>
+              <div className="space-y-1 max-h-[400px] overflow-y-auto">
+                {pathologies?.map(p => (
+                  <Button 
+                    key={p.id}
+                    variant={selectedPathology === p.id ? "secondary" : "ghost"}
+                    className="w-full justify-start text-left"
+                    onClick={() => {
+                      setSelectedPathology(p.id);
+                      setSelectedModel(null);
+                    }}
+                    data-testid={`button-pathology-${p.id}`}
+                  >
+                    {p.name}
+                    {p.category && <Badge variant="outline" className="ml-auto text-xs">{p.category}</Badge>}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm text-muted-foreground">Modelos</h4>
+                {selectedPathology && (
+                  <Dialog open={modelDialogOpen} onOpenChange={setModelDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="gap-1" data-testid="button-new-model">
+                        <Plus className="h-3 w-3" /> Novo
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Novo Modelo de Prescrição</DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.currentTarget);
+                        createModelMutation.mutate({
+                          pathologyId: selectedPathology,
+                          title: fd.get("title") as string,
+                          description: fd.get("description") as string,
+                          orientations: fd.get("orientations") as string,
+                          observations: fd.get("observations") as string,
+                          ageGroup: fd.get("ageGroup") as string || "adulto",
+                          order: (models?.length || 0) + 1,
+                          isActive: true,
+                        });
+                      }} className="space-y-4">
+                        <Input name="title" placeholder="Título do modelo" required data-testid="input-model-title" />
+                        <Textarea name="description" placeholder="Descrição" rows={2} data-testid="textarea-model-description" />
+                        <Textarea name="orientations" placeholder="Orientações ao paciente" rows={2} data-testid="textarea-model-orientations" />
+                        <Textarea name="observations" placeholder="Observações clínicas" rows={2} data-testid="textarea-model-observations" />
+                        <select name="ageGroup" className="w-full h-9 px-3 border rounded-md text-sm bg-background" data-testid="select-model-agegroup">
+                          <option value="adulto">Adulto</option>
+                          <option value="pediatrico">Pediátrico</option>
+                        </select>
+                        <Button type="submit" className="w-full" disabled={createModelMutation.isPending} data-testid="button-submit-model">
+                          {createModelMutation.isPending ? "Salvando..." : "Criar Modelo"}
+                        </Button>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+              {loadingModels ? (
+                <div className="py-4 text-center text-muted-foreground text-sm">Carregando...</div>
+              ) : selectedPathology ? (
+                <div className="space-y-1 max-h-[400px] overflow-y-auto">
+                  {models?.filter(m => m.pathologyId === selectedPathology).map(m => (
+                    <div key={m.id} className="flex items-center gap-1">
+                      <Button 
+                        variant={selectedModel?.id === m.id ? "secondary" : "ghost"}
+                        className="flex-1 justify-start text-left"
+                        onClick={() => setSelectedModel(m)}
+                        data-testid={`button-model-${m.id}`}
+                      >
+                        {m.title}
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => deleteModelMutation.mutate(m.id)}
+                        data-testid={`button-delete-model-${m.id}`}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  {models?.filter(m => m.pathologyId === selectedPathology).length === 0 && (
+                    <p className="text-sm text-muted-foreground py-4 text-center">Nenhum modelo cadastrado</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground py-4 text-center">Selecione uma patologia</p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm text-muted-foreground">Medicações do Modelo</h4>
+                {selectedModel && (
+                  <Dialog open={medicationDialogOpen} onOpenChange={setMedicationDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="gap-1" data-testid="button-new-medication">
+                        <Plus className="h-3 w-3" /> Adicionar
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Adicionar Medicação</DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.currentTarget);
+                        createMedicationMutation.mutate({
+                          prescriptionModelId: selectedModel.id,
+                          medication: fd.get("medication") as string,
+                          pharmaceuticalForm: fd.get("pharmaceuticalForm") as string,
+                          dose: fd.get("dose") as string,
+                          dosePerKg: fd.get("dosePerKg") as string,
+                          maxDose: fd.get("maxDose") as string,
+                          interval: fd.get("interval") as string,
+                          duration: fd.get("duration") as string,
+                          route: fd.get("route") as string,
+                          quantity: fd.get("quantity") as string,
+                          timing: fd.get("timing") as string,
+                          observations: fd.get("observations") as string,
+                          order: (medications?.length || 0) + 1,
+                        });
+                      }} className="space-y-3">
+                        <Input name="medication" placeholder="Nome do medicamento" required data-testid="input-med-name" />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input name="pharmaceuticalForm" placeholder="Forma farmacêutica" data-testid="input-med-form" />
+                          <Input name="dose" placeholder="Dose" data-testid="input-med-dose" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input name="dosePerKg" placeholder="Dose/kg (ped)" data-testid="input-med-dosepkg" />
+                          <Input name="maxDose" placeholder="Dose máxima" data-testid="input-med-maxdose" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input name="interval" placeholder="Intervalo" data-testid="input-med-interval" />
+                          <Input name="duration" placeholder="Duração" data-testid="input-med-duration" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input name="route" placeholder="Via (VO, IV...)" data-testid="input-med-route" />
+                          <Input name="quantity" placeholder="Quantidade" data-testid="input-med-qty" />
+                        </div>
+                        <Input name="timing" placeholder="Horário (jejum, etc)" data-testid="input-med-timing" />
+                        <Textarea name="observations" placeholder="Observações" rows={2} data-testid="textarea-med-obs" />
+                        <Button type="submit" className="w-full" disabled={createMedicationMutation.isPending} data-testid="button-submit-medication">
+                          {createMedicationMutation.isPending ? "Salvando..." : "Adicionar"}
+                        </Button>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+              {selectedModel ? (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {medications?.map(med => (
+                    <div key={med.id} className="p-2 border rounded-md bg-muted/30 flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm flex items-center gap-1">
+                          <Pill className="h-3 w-3" />
+                          {med.medication}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {[med.dose, med.route, med.interval, med.duration].filter(Boolean).join(" - ")}
+                        </div>
+                        {med.observations && (
+                          <div className="text-xs text-muted-foreground mt-1">{med.observations}</div>
+                        )}
+                      </div>
+                      <Button 
+                        size="icon" 
+                        variant="ghost"
+                        onClick={() => deleteMedicationMutation.mutate(med.id)}
+                        data-testid={`button-delete-med-${med.id}`}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  {medications?.length === 0 && (
+                    <p className="text-sm text-muted-foreground py-4 text-center">Nenhuma medicação</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground py-4 text-center">Selecione um modelo</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

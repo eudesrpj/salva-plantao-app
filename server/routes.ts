@@ -1266,7 +1266,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
         patientName: z.string().min(1).max(255),
         patientDocument: z.string().optional(),
         daysOff: z.number().min(1).max(365),
-        startDate: z.string().or(z.date()),
+        startDate: z.coerce.date(),
         reason: z.string().optional(),
       });
       const validated = schema.parse(req.body);
@@ -1296,7 +1296,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       const schema = z.object({
         patientName: z.string().min(1).max(255),
         patientDocument: z.string().optional(),
-        attendanceDate: z.string().or(z.date()),
+        attendanceDate: z.coerce.date(),
         period: z.string().min(1).max(50),
         startTime: z.string().optional(),
         endTime: z.string().optional(),
@@ -1328,7 +1328,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     try {
       const schema = z.object({
         patientName: z.string().min(1).max(255),
-        patientBirthDate: z.string().or(z.date()).nullable().optional(),
+        patientBirthDate: z.coerce.date().nullable().optional(),
         patientAge: z.string().optional(),
         patientSex: z.string().optional(),
         patientDocument: z.string().optional(),
@@ -1438,6 +1438,125 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
   app.delete("/api/admin/referral-reasons/:id", isAuthenticated, checkAdmin, async (req, res) => {
     await storage.deleteReferralReason(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Prescription Models (Admin) ---
+  app.get("/api/prescription-models", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const pathologyId = req.query.pathologyId ? Number(req.query.pathologyId) : undefined;
+    const items = await storage.getPrescriptionModels(pathologyId);
+    res.json(items);
+  });
+
+  app.get("/api/prescription-models/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const item = await storage.getPrescriptionModel(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Modelo não encontrado" });
+    res.json(item);
+  });
+
+  app.get("/api/prescription-models/:id/medications", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getPrescriptionModelMedications(Number(req.params.id));
+    res.json(items);
+  });
+
+  app.post("/api/admin/prescription-models", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        pathologyId: z.number(),
+        title: z.string().min(1).max(255),
+        description: z.string().optional(),
+        orientations: z.string().optional(),
+        observations: z.string().optional(),
+        ageGroup: z.string().optional(),
+        order: z.number().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createPrescriptionModel(validated);
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.patch("/api/admin/prescription-models/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        pathologyId: z.number().optional(),
+        title: z.string().min(1).max(255).optional(),
+        description: z.string().optional(),
+        orientations: z.string().optional(),
+        observations: z.string().optional(),
+        ageGroup: z.string().optional(),
+        order: z.number().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.updatePrescriptionModel(Number(req.params.id), validated);
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/admin/prescription-models/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deletePrescriptionModel(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Prescription Model Medications (Admin) ---
+  app.post("/api/admin/prescription-model-medications", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        prescriptionModelId: z.number(),
+        medicationId: z.number().optional(),
+        medication: z.string().min(1).max(255),
+        pharmaceuticalForm: z.string().optional(),
+        dose: z.string().optional(),
+        dosePerKg: z.string().optional(),
+        maxDose: z.string().optional(),
+        interval: z.string().optional(),
+        duration: z.string().optional(),
+        route: z.string().optional(),
+        quantity: z.string().optional(),
+        timing: z.string().optional(),
+        observations: z.string().optional(),
+        order: z.number().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.createPrescriptionModelMedication(validated);
+      res.status(201).json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.patch("/api/admin/prescription-model-medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        medication: z.string().min(1).max(255).optional(),
+        pharmaceuticalForm: z.string().optional(),
+        dose: z.string().optional(),
+        dosePerKg: z.string().optional(),
+        maxDose: z.string().optional(),
+        interval: z.string().optional(),
+        duration: z.string().optional(),
+        route: z.string().optional(),
+        quantity: z.string().optional(),
+        timing: z.string().optional(),
+        observations: z.string().optional(),
+        order: z.number().optional(),
+      });
+      const validated = schema.parse(req.body);
+      const item = await storage.updatePrescriptionModelMedication(Number(req.params.id), validated);
+      res.json(item);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Dados inválidos" });
+    }
+  });
+
+  app.delete("/api/admin/prescription-model-medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deletePrescriptionModelMedication(Number(req.params.id));
     res.status(204).send();
   });
 

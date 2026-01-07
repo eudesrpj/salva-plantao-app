@@ -982,8 +982,38 @@ function UserPathologyCard({ pathology, isExpanded, onToggle, ageGroup }: { path
   );
 }
 
+interface PrescriptionModel {
+  id: number;
+  pathologyId: number;
+  title: string;
+  description: string | null;
+  orientations: string | null;
+  observations: string | null;
+  ageGroup: string | null;
+  order: number;
+  isActive: boolean;
+}
+
+interface PrescriptionModelMedication {
+  id: number;
+  prescriptionModelId: number;
+  medication: string;
+  pharmaceuticalForm: string | null;
+  dose: string | null;
+  dosePerKg: string | null;
+  maxDose: string | null;
+  interval: string | null;
+  duration: string | null;
+  route: string | null;
+  quantity: string | null;
+  timing: string | null;
+  observations: string | null;
+  order: number;
+}
+
 function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Pathology; isExpanded: boolean; onToggle: () => void }) {
   const { toast } = useToast();
+  const [selectedModel, setSelectedModel] = useState<number | null>(null);
 
   const { data: medications, isLoading } = useQuery<PathologyMedication[]>({
     queryKey: ["/api/pathologies", pathology.id, "medications"],
@@ -994,6 +1024,62 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
     },
     enabled: isExpanded,
   });
+
+  const { data: prescriptionModels } = useQuery<PrescriptionModel[]>({
+    queryKey: ["/api/prescription-models", pathology.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/prescription-models?pathologyId=${pathology.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: isExpanded,
+  });
+
+  const { data: modelMedications } = useQuery<PrescriptionModelMedication[]>({
+    queryKey: ["/api/prescription-models", selectedModel, "medications"],
+    queryFn: async () => {
+      if (!selectedModel) return [];
+      const res = await fetch(`/api/prescription-models/${selectedModel}/medications`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: !!selectedModel,
+  });
+
+  const currentModel = prescriptionModels?.find(m => m.id === selectedModel);
+
+  const copyModelPrescription = () => {
+    if (!modelMedications || modelMedications.length === 0 || !currentModel) return;
+    
+    const header = `PRESCRIÇÃO - ${currentModel.title.toUpperCase()}`;
+    const separator = "=".repeat(40);
+    
+    const formattedMeds = modelMedications.map((m, idx) => {
+      const parts = [
+        `${idx + 1}) ${m.medication}`,
+        m.quantity ? `   Quantidade: ${m.quantity}` : null,
+        m.dose ? `   Posologia: Tomar ${m.dose}${m.dosePerKg ? ` (${m.dosePerKg}/kg)` : ""}, ${m.route || "VO"}${m.interval ? `, de ${m.interval}` : ""}${m.duration ? `, por ${m.duration}` : ""}` : null,
+        m.timing ? `   Horário: ${m.timing}` : null,
+        m.observations ? `   Obs: ${m.observations}` : null,
+      ].filter(Boolean);
+      return parts.join("\n");
+    });
+    
+    const text = [
+      separator,
+      header,
+      separator,
+      "",
+      ...formattedMeds,
+      "",
+      currentModel.orientations ? `ORIENTAÇÕES: ${currentModel.orientations}` : null,
+      currentModel.observations ? `OBSERVAÇÕES: ${currentModel.observations}` : null,
+      separator,
+    ].filter(Boolean).join("\n");
+    
+    navigator.clipboard.writeText(text);
+    toast({ title: "Prescrição copiada!", description: "Formato padrão SUS pronto para colar." });
+  };
 
   const copyAllMedications = () => {
     if (!medications || medications.length === 0) return;
@@ -1050,60 +1136,163 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
           <div className="px-4 pb-4 border-t bg-muted/20">
             {isLoading ? (
               <div className="py-4 text-center text-muted-foreground">Carregando medicações...</div>
-            ) : medications && medications.length > 0 ? (
-              <PreviewGate>
-                <div className="space-y-3 py-3">
-                  {medications.map((med, idx) => (
-                    <div key={med.id} className="p-3 bg-background rounded-md border flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Pill className="h-4 w-4 text-primary" />
-                          <span className="font-medium">{idx + 1}) {med.medication}</span>
-                          {med.maxDose && <Badge variant="outline" className="text-xs">Max: {med.maxDose}</Badge>}
-                        </div>
-                        <div className="text-sm text-slate-600 space-y-0.5 ml-6">
-                          {med.quantity && <p><strong>Quantidade:</strong> {med.quantity}</p>}
-                          {med.dose && <p><strong>Posologia:</strong> Tomar {med.dose}{med.dosePerKg && ` (${med.dosePerKg}/kg)`}, {ROUTE_NAMES[med.route || "VO"] || med.route}{med.interval && `, de ${med.interval}`}{med.duration && `, por ${med.duration}`}</p>}
-                          {med.timing && <p><strong>Horário:</strong> {med.timing}</p>}
-                          {med.observations && <p className="text-slate-500 italic">Obs: {med.observations}</p>}
-                        </div>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} title="Copiar este medicamento">
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <SaveToFavoritesButton medication={med} pathologyName={pathology.name} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="pt-2 border-t flex gap-2">
-                  <Button onClick={copyAllMedications} className="flex-1 gap-2" data-testid="button-copy-prescription-sus">
-                    <Copy className="h-4 w-4" /> Copiar (Padrão SUS)
-                  </Button>
-                  <SUSPrescriptionPrint
-                    prescriptions={medications.map(med => ({
-                      medication: med.medication,
-                      dose: med.dose || "",
-                      quantity: med.quantity || "",
-                      interval: med.interval || "",
-                      duration: med.duration || "",
-                      route: med.route || "",
-                      timing: med.timing || "",
-                      orientations: med.observations || "",
-                    }))}
-                    trigger={
-                      <Button variant="outline" className="gap-2" data-testid="button-print-pathology-prescription">
-                        <Printer className="h-4 w-4" /> Imprimir
-                      </Button>
-                    }
-                  />
-                </div>
-              </PreviewGate>
             ) : (
-              <div className="py-4 text-center text-muted-foreground">
-                Nenhuma medicação cadastrada para esta patologia.
-              </div>
+              <PreviewGate>
+                {prescriptionModels && prescriptionModels.length > 0 && (
+                  <div className="py-3 space-y-3">
+                    <h4 className="font-medium text-sm text-muted-foreground flex items-center gap-2">
+                      <FileText className="h-4 w-4" /> Modelos de Prescrição Oficiais
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {prescriptionModels.map(model => (
+                        <Button
+                          key={model.id}
+                          variant={selectedModel === model.id ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setSelectedModel(selectedModel === model.id ? null : model.id)}
+                          data-testid={`button-model-${model.id}`}
+                        >
+                          {model.title}
+                        </Button>
+                      ))}
+                    </div>
+                    
+                    {selectedModel && currentModel && (
+                      <div className="mt-3 p-4 bg-background rounded-md border space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h5 className="font-semibold">{currentModel.title}</h5>
+                          <Button size="icon" variant="ghost" onClick={() => setSelectedModel(null)}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {currentModel.description && (
+                          <p className="text-sm text-muted-foreground">{currentModel.description}</p>
+                        )}
+                        
+                        {modelMedications && modelMedications.length > 0 && (
+                          <div className="space-y-2">
+                            {modelMedications.map((med, idx) => (
+                              <div key={med.id} className="p-2 bg-muted/30 rounded-md">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Pill className="h-4 w-4 text-primary" />
+                                  <span className="font-medium text-sm">{idx + 1}) {med.medication}</span>
+                                  {med.pharmaceuticalForm && <Badge variant="outline" className="text-xs">{med.pharmaceuticalForm}</Badge>}
+                                </div>
+                                <div className="text-xs text-muted-foreground ml-6">
+                                  {[med.dose, med.route, med.interval, med.duration].filter(Boolean).join(" - ")}
+                                  {med.observations && <span className="block italic mt-0.5">{med.observations}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {currentModel.orientations && (
+                          <div className="p-2 bg-blue-50 dark:bg-blue-950/30 rounded-md">
+                            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">Orientações:</p>
+                            <p className="text-sm text-blue-600 dark:text-blue-400">{currentModel.orientations}</p>
+                          </div>
+                        )}
+                        
+                        {currentModel.observations && (
+                          <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded-md">
+                            <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Observações Clínicas:</p>
+                            <p className="text-sm text-amber-600 dark:text-amber-400">{currentModel.observations}</p>
+                          </div>
+                        )}
+                        
+                        <div className="flex gap-2 pt-2 border-t">
+                          <Button onClick={copyModelPrescription} className="flex-1 gap-2" data-testid="button-copy-model-prescription">
+                            <Copy className="h-4 w-4" /> Copiar Modelo
+                          </Button>
+                          {modelMedications && modelMedications.length > 0 && (
+                            <SUSPrescriptionPrint
+                              prescriptions={modelMedications.map(med => ({
+                                medication: med.medication,
+                                dose: med.dose || "",
+                                quantity: med.quantity || "",
+                                interval: med.interval || "",
+                                duration: med.duration || "",
+                                route: med.route || "",
+                                timing: med.timing || "",
+                                orientations: med.observations || "",
+                              }))}
+                              trigger={
+                                <Button variant="outline" className="gap-2" data-testid="button-print-model-prescription">
+                                  <Printer className="h-4 w-4" /> Imprimir
+                                </Button>
+                              }
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {medications && medications.length > 0 && (
+                  <>
+                    {prescriptionModels && prescriptionModels.length > 0 && (
+                      <h4 className="font-medium text-sm text-muted-foreground flex items-center gap-2 mt-4 pt-4 border-t">
+                        <Pill className="h-4 w-4" /> Medicações Avulsas
+                      </h4>
+                    )}
+                    <div className="space-y-3 py-3">
+                      {medications.map((med, idx) => (
+                        <div key={med.id} className="p-3 bg-background rounded-md border flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Pill className="h-4 w-4 text-primary" />
+                              <span className="font-medium">{idx + 1}) {med.medication}</span>
+                              {med.maxDose && <Badge variant="outline" className="text-xs">Max: {med.maxDose}</Badge>}
+                            </div>
+                            <div className="text-sm text-slate-600 space-y-0.5 ml-6">
+                              {med.quantity && <p><strong>Quantidade:</strong> {med.quantity}</p>}
+                              {med.dose && <p><strong>Posologia:</strong> Tomar {med.dose}{med.dosePerKg && ` (${med.dosePerKg}/kg)`}, {ROUTE_NAMES[med.route || "VO"] || med.route}{med.interval && `, de ${med.interval}`}{med.duration && `, por ${med.duration}`}</p>}
+                              {med.timing && <p><strong>Horário:</strong> {med.timing}</p>}
+                              {med.observations && <p className="text-slate-500 italic">Obs: {med.observations}</p>}
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} title="Copiar este medicamento">
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <SaveToFavoritesButton medication={med} pathologyName={pathology.name} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="pt-2 border-t flex gap-2">
+                      <Button onClick={copyAllMedications} className="flex-1 gap-2" data-testid="button-copy-prescription-sus">
+                        <Copy className="h-4 w-4" /> Copiar (Padrão SUS)
+                      </Button>
+                      <SUSPrescriptionPrint
+                        prescriptions={medications.map(med => ({
+                          medication: med.medication,
+                          dose: med.dose || "",
+                          quantity: med.quantity || "",
+                          interval: med.interval || "",
+                          duration: med.duration || "",
+                          route: med.route || "",
+                          timing: med.timing || "",
+                          orientations: med.observations || "",
+                        }))}
+                        trigger={
+                          <Button variant="outline" className="gap-2" data-testid="button-print-pathology-prescription">
+                            <Printer className="h-4 w-4" /> Imprimir
+                          </Button>
+                        }
+                      />
+                    </div>
+                  </>
+                )}
+
+                {(!medications || medications.length === 0) && (!prescriptionModels || prescriptionModels.length === 0) && (
+                  <div className="py-4 text-center text-muted-foreground">
+                    Nenhuma medicação ou modelo cadastrado para esta patologia.
+                  </div>
+                )}
+              </PreviewGate>
             )}
           </div>
         </CollapsibleContent>
