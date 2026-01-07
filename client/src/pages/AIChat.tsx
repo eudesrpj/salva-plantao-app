@@ -140,6 +140,7 @@ export default function AIChat() {
         setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
         setLoading(false);
       } catch (error: any) {
+        setMessages(prev => prev.slice(0, -1));
         toast({ 
           title: "Erro", 
           description: error.message || "Falha na comunicação com a IA.", 

@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { eq } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import { 
   userAiCredentials, 
   aiPrompts, 
@@ -119,13 +119,12 @@ class AiStorage {
   }
 
   async getDefaultPrompt(): Promise<AiPrompt | undefined> {
-    const [prompt] = await db
+    const prompts = await db
       .select()
       .from(aiPrompts)
       .where(eq(aiPrompts.isActive, true))
-      .orderBy(aiPrompts.order)
-      .limit(1);
-    return prompt;
+      .orderBy(asc(aiPrompts.order));
+    return prompts[0];
   }
 
   async createPrompt(data: InsertAiPrompt): Promise<AiPrompt> {
