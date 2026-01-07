@@ -556,35 +556,7 @@ function ContentTab() {
         </CardContent>
       </Card>
 
-      <div className="grid md:grid-cols-3 gap-4">
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <CardHeader>
-            <CardTitle className="text-lg">Prescrições Oficiais</CardTitle>
-            <CardDescription>Gerencie modelos de prescrições.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="w-full">Gerenciar</Button>
-          </CardContent>
-        </Card>
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <CardHeader>
-            <CardTitle className="text-lg">Protocolos</CardTitle>
-            <CardDescription>Edite protocolos clínicos oficiais.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="w-full">Gerenciar</Button>
-          </CardContent>
-        </Card>
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <CardHeader>
-            <CardTitle className="text-lg">Biblioteca</CardTitle>
-            <CardDescription>Adicione vídeos e materiais.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="w-full">Gerenciar</Button>
-          </CardContent>
-        </Card>
-      </div>
+      <ContentManagementSection />
 
       <div className="flex justify-end">
         <Button onClick={handleSaveAll} disabled={saveMutation.isPending} className="gap-2" data-testid="button-save-layout">
@@ -907,5 +879,549 @@ function AiPromptsTab() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ContentManagementSection() {
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: prescriptions, isLoading: loadingPrescriptions } = useQuery<any[]>({
+    queryKey: ["/api/prescriptions"],
+    enabled: activeSection === "prescriptions",
+  });
+
+  const { data: protocols, isLoading: loadingProtocols } = useQuery<any[]>({
+    queryKey: ["/api/protocols"],
+    enabled: activeSection === "protocols",
+  });
+
+  const { data: pathologies, isLoading: loadingPathologies } = useQuery<any[]>({
+    queryKey: ["/api/pathologies"],
+    enabled: activeSection === "pathologies",
+  });
+
+  const deletePrescription = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/prescriptions/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/prescriptions"] });
+      toast({ title: "Prescrição removida!" });
+    },
+  });
+
+  const deleteProtocol = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/protocols/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/protocols"] });
+      toast({ title: "Protocolo removido!" });
+    },
+  });
+
+  const deletePathology = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/pathologies/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/pathologies"] });
+      toast({ title: "Patologia removida!" });
+    },
+  });
+
+  if (activeSection === "prescriptions") {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle>Prescrições Oficiais</CardTitle>
+            <CardDescription>Gerencie modelos de prescrições do sistema.</CardDescription>
+          </div>
+          <Button variant="outline" onClick={() => setActiveSection(null)}>Voltar</Button>
+        </CardHeader>
+        <CardContent>
+          {loadingPrescriptions ? (
+            <PageLoader text="Carregando prescrições..." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Titulo</TableHead>
+                  <TableHead>Medicação</TableHead>
+                  <TableHead>Categoria</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {prescriptions?.filter(p => p.isPublic || p.isLocked).map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.title}</TableCell>
+                    <TableCell>{p.medication || "-"}</TableCell>
+                    <TableCell>{p.category || "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {p.isPublic && <Badge variant="secondary">Oficial</Badge>}
+                        {p.isLocked && <Badge variant="outline">Bloqueado</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deletePrescription.mutate(p.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(!prescriptions || prescriptions.filter(p => p.isPublic || p.isLocked).length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      Nenhuma prescrição oficial encontrada.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (activeSection === "protocols") {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle>Protocolos Clínicos</CardTitle>
+            <CardDescription>Gerencie protocolos oficiais do sistema.</CardDescription>
+          </div>
+          <Button variant="outline" onClick={() => setActiveSection(null)}>Voltar</Button>
+        </CardHeader>
+        <CardContent>
+          {loadingProtocols ? (
+            <PageLoader text="Carregando protocolos..." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Titulo</TableHead>
+                  <TableHead>Especialidade</TableHead>
+                  <TableHead>Categoria</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {protocols?.filter(p => p.isPublic || p.isLocked).map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.title}</TableCell>
+                    <TableCell>{p.specialty || "-"}</TableCell>
+                    <TableCell>{p.category || "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {p.isPublic && <Badge variant="secondary">Oficial</Badge>}
+                        {p.isLocked && <Badge variant="outline">Bloqueado</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteProtocol.mutate(p.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(!protocols || protocols.filter(p => p.isPublic || p.isLocked).length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      Nenhum protocolo oficial encontrado.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (activeSection === "pathologies") {
+    return <PathologyManagement onBack={() => setActiveSection(null)} />;
+  }
+
+  return (
+    <div className="grid md:grid-cols-3 gap-4">
+      <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection("prescriptions")}>
+        <CardHeader>
+          <CardTitle className="text-lg">Prescrições Oficiais</CardTitle>
+          <CardDescription>Gerencie modelos de prescrições.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" className="w-full" data-testid="button-manage-prescriptions">Gerenciar</Button>
+        </CardContent>
+      </Card>
+      <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection("protocols")}>
+        <CardHeader>
+          <CardTitle className="text-lg">Protocolos</CardTitle>
+          <CardDescription>Edite protocolos clínicos oficiais.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" className="w-full" data-testid="button-manage-protocols">Gerenciar</Button>
+        </CardContent>
+      </Card>
+      <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setActiveSection("pathologies")}>
+        <CardHeader>
+          <CardTitle className="text-lg">Patologias</CardTitle>
+          <CardDescription>Gerencie patologias e medicações.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" className="w-full" data-testid="button-manage-pathologies">Gerenciar</Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PathologyManagement({ onBack }: { onBack: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedPathology, setSelectedPathology] = useState<any>(null);
+  const [medicationDialogOpen, setMedicationDialogOpen] = useState(false);
+  const [pathologyName, setPathologyName] = useState("");
+  const [pathologyDescription, setPathologyDescription] = useState("");
+  const [pathologyCategory, setPathologyCategory] = useState("");
+  const [pathologyAgeGroup, setPathologyAgeGroup] = useState("adulto");
+
+  const { data: pathologies, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/pathologies"],
+  });
+
+  const { data: medications } = useQuery<any[]>({
+    queryKey: ["/api/pathologies", selectedPathology?.id, "medications"],
+    enabled: !!selectedPathology,
+  });
+
+  const createPathology = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/pathologies", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/pathologies"] });
+      toast({ title: "Patologia criada!" });
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro ao criar patologia", variant: "destructive" });
+    },
+  });
+
+  const deletePathology = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/pathologies/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/pathologies"] });
+      toast({ title: "Patologia removida!" });
+      setSelectedPathology(null);
+    },
+  });
+
+  const createMedication = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", `/api/pathologies/${selectedPathology.id}/medications`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/pathologies", selectedPathology.id, "medications"] });
+      toast({ title: "Medicação adicionada!" });
+      setMedicationDialogOpen(false);
+    },
+    onError: () => {
+      toast({ title: "Erro ao adicionar medicação", variant: "destructive" });
+    },
+  });
+
+  const deleteMedication = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/pathology-medications/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/pathologies", selectedPathology.id, "medications"] });
+      toast({ title: "Medicação removida!" });
+    },
+  });
+
+  const resetForm = () => {
+    setPathologyName("");
+    setPathologyDescription("");
+    setPathologyCategory("");
+    setPathologyAgeGroup("adulto");
+  };
+
+  const handleCreatePathology = () => {
+    if (!pathologyName) {
+      toast({ title: "Nome é obrigatório", variant: "destructive" });
+      return;
+    }
+    createPathology.mutate({
+      name: pathologyName,
+      description: pathologyDescription,
+      category: pathologyCategory,
+      ageGroup: pathologyAgeGroup,
+      isPublic: true,
+      isLocked: true,
+    });
+  };
+
+  const handleCreateMedication = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    createMedication.mutate({
+      medication: formData.get("medication"),
+      dose: formData.get("dose"),
+      dosePerKg: formData.get("dosePerKg"),
+      maxDose: formData.get("maxDose"),
+      interval: formData.get("interval"),
+      duration: formData.get("duration"),
+      route: formData.get("route"),
+      quantity: formData.get("quantity"),
+      timing: formData.get("timing"),
+      observations: formData.get("observations"),
+    });
+  };
+
+  if (isLoading) return <PageLoader text="Carregando patologias..." />;
+
+  if (selectedPathology) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle>{selectedPathology.name}</CardTitle>
+            <CardDescription>Gerencie as medicações desta patologia</CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Dialog open={medicationDialogOpen} onOpenChange={setMedicationDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-1" data-testid="button-add-medication">
+                  <Plus className="h-4 w-4" /> Nova Medicação
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Adicionar Medicação</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleCreateMedication} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Medicação *</label>
+                    <Input name="medication" required placeholder="Ex: Dipirona 500mg" data-testid="input-medication" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Dose</label>
+                      <Input name="dose" placeholder="Ex: 1g" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Dose/kg (pediátrico)</label>
+                      <Input name="dosePerKg" placeholder="Ex: 10mg/kg" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Dose Máxima</label>
+                      <Input name="maxDose" placeholder="Ex: 4g/dia" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Intervalo</label>
+                      <Input name="interval" placeholder="Ex: 6/6h" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Duração</label>
+                      <Input name="duration" placeholder="Ex: 5 dias" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Via</label>
+                      <Input name="route" placeholder="Ex: VO, IV, IM" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Quantidade</label>
+                      <Input name="quantity" placeholder="Ex: 20 comprimidos" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Horário</label>
+                      <Input name="timing" placeholder="Ex: Jejum" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Observações</label>
+                    <Textarea name="observations" placeholder="Observações adicionais..." rows={2} />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={createMedication.isPending}>
+                    {createMedication.isPending ? "Salvando..." : "Adicionar Medicação"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+            <Button variant="outline" onClick={() => setSelectedPathology(null)}>Voltar</Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {medications && medications.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Medicação</TableHead>
+                  <TableHead>Dose</TableHead>
+                  <TableHead>Intervalo</TableHead>
+                  <TableHead>Via</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {medications.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-medium">{m.medication}</TableCell>
+                    <TableCell>{m.dose || "-"} {m.dosePerKg && `(${m.dosePerKg}/kg)`}</TableCell>
+                    <TableCell>{m.interval || "-"}</TableCell>
+                    <TableCell>{m.route || "-"}</TableCell>
+                    <TableCell className="text-right">
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteMedication.mutate(m.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              Nenhuma medicação cadastrada. Clique em "Nova Medicação" para adicionar.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
+        <div>
+          <CardTitle>Patologias e Medicações</CardTitle>
+          <CardDescription>Gerencie patologias com suas medicações associadas.</CardDescription>
+        </div>
+        <div className="flex gap-2">
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+            <DialogTrigger asChild>
+              <Button className="gap-1" data-testid="button-add-pathology">
+                <Plus className="h-4 w-4" /> Nova Patologia
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nova Patologia</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Nome da Patologia *</label>
+                  <Input 
+                    value={pathologyName} 
+                    onChange={(e) => setPathologyName(e.target.value)}
+                    placeholder="Ex: Pneumonia Adquirida na Comunidade"
+                    data-testid="input-pathology-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Descrição</label>
+                  <Textarea 
+                    value={pathologyDescription} 
+                    onChange={(e) => setPathologyDescription(e.target.value)}
+                    placeholder="Descrição breve da patologia..."
+                    rows={2}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Categoria</label>
+                    <Input 
+                      value={pathologyCategory} 
+                      onChange={(e) => setPathologyCategory(e.target.value)}
+                      placeholder="Ex: Infecciosas"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Faixa Etária</label>
+                    <select 
+                      value={pathologyAgeGroup} 
+                      onChange={(e) => setPathologyAgeGroup(e.target.value)}
+                      className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                    >
+                      <option value="adulto">Adulto</option>
+                      <option value="pediatrico">Pediátrico</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleCreatePathology} disabled={createPathology.isPending}>
+                    {createPathology.isPending ? "Salvando..." : "Criar Patologia"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Button variant="outline" onClick={onBack}>Voltar</Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {pathologies && pathologies.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Patologia</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead>Faixa Etária</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pathologies.map((p) => (
+                <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedPathology(p)}>
+                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell>{p.category || "-"}</TableCell>
+                  <TableCell>{p.ageGroup === "pediatrico" ? "Pediátrico" : "Adulto"}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {p.isPublic && <Badge variant="secondary">Pública</Badge>}
+                      {p.isLocked && <Badge variant="outline">Bloqueada</Badge>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deletePathology.mutate(p.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            Nenhuma patologia cadastrada. Clique em "Nova Patologia" para começar.
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

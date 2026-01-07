@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User } from "lucide-react";
+import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill } from "lucide-react";
 import { PageLoader } from "@/components/ui/loading-spinner";
-import type { Prescription } from "@shared/schema";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { Prescription, Pathology, PathologyMedication } from "@shared/schema";
 
 const INTERVALS = ["6/6h", "8/8h", "12/12h", "1x/dia", "2x/dia", "3x/dia", "Dose única", "SOS"];
 const DURATIONS = ["3 dias", "5 dias", "7 dias", "10 dias", "14 dias", "Uso contínuo", "Uso indeterminado"];
@@ -21,6 +22,7 @@ const TIMINGS = ["Jejum", "Com alimentação", "Antes de dormir", "Longe das ref
 const CATEGORIES = ["Analgesia", "Antibióticos", "Anti-inflamatórios", "Antieméticos", "Cardiovascular", "Neurologia", "Gastro", "Outros"];
 
 export default function Prescriptions() {
+  const [mainTab, setMainTab] = useState<"oficiais" | "minhas" | "patologias">("patologias");
   const [ageGroup, setAgeGroup] = useState<"adulto" | "pediatrico">("adulto");
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useAuth();
@@ -35,7 +37,12 @@ export default function Prescriptions() {
     },
   });
 
-  const filtered = prescriptions?.filter(p => 
+  const officialPrescriptions = prescriptions?.filter(p => p.isPublic || p.isLocked);
+  const myPrescriptions = prescriptions?.filter(p => p.userId === user?.id && !p.isPublic && !p.isLocked);
+
+  const currentList = mainTab === "oficiais" ? officialPrescriptions : myPrescriptions;
+
+  const filtered = currentList?.filter(p => 
     !searchQuery || 
     p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.medication?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -67,9 +74,25 @@ export default function Prescriptions() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <PrescriptionDialog ageGroup={ageGroup} isAdmin={isAdmin} />
+          {(isAdmin || mainTab === "minhas") && (
+            <PrescriptionDialog ageGroup={ageGroup} isAdmin={isAdmin} isPersonal={mainTab === "minhas"} />
+          )}
         </div>
       </header>
+      
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "oficiais" | "minhas" | "patologias")} className="w-auto">
+        <TabsList className="w-auto">
+          <TabsTrigger value="patologias" className="gap-1" data-testid="tab-patologias">
+            <FileText className="h-4 w-4" /> Por Patologia
+          </TabsTrigger>
+          <TabsTrigger value="oficiais" className="gap-1" data-testid="tab-oficiais">
+            <BookOpen className="h-4 w-4" /> Todas Oficiais
+          </TabsTrigger>
+          <TabsTrigger value="minhas" className="gap-1" data-testid="tab-minhas">
+            <Heart className="h-4 w-4" /> Minhas Prescrições
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -82,7 +105,9 @@ export default function Prescriptions() {
         />
       </div>
 
-      {isLoading ? (
+      {mainTab === "patologias" ? (
+        <PathologiesView ageGroup={ageGroup} searchQuery={searchQuery} isAdmin={isAdmin} />
+      ) : isLoading ? (
         <div className="flex justify-center py-12">
           <PageLoader text="Carregando prescrições..." />
         </div>
@@ -105,12 +130,212 @@ export default function Prescriptions() {
           {(!grouped || Object.keys(grouped).length === 0) && (
             <div className="text-center py-12 text-slate-400">
               <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Nenhuma prescrição encontrada.</p>
+              {mainTab === "minhas" ? (
+                <>
+                  <p className="mb-2">Você ainda não tem prescrições pessoais.</p>
+                  <p className="text-sm">Clique em "Nova Minha Prescrição" para criar a sua primeira.</p>
+                </>
+              ) : (
+                <p>Nenhuma prescrição oficial encontrada.</p>
+              )}
             </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function PathologiesView({ ageGroup, searchQuery, isAdmin }: { ageGroup: string; searchQuery: string; isAdmin: boolean }) {
+  const { toast } = useToast();
+  const [expandedPathologies, setExpandedPathologies] = useState<Set<number>>(new Set());
+
+  const { data: pathologies, isLoading } = useQuery<Pathology[]>({
+    queryKey: ["/api/pathologies", ageGroup],
+    queryFn: async () => {
+      const res = await fetch(`/api/pathologies?ageGroup=${ageGroup}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+
+  const filtered = pathologies?.filter(p => 
+    (p.isPublic || p.isLocked) && (
+      !searchQuery || 
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  );
+
+  const grouped = filtered?.reduce((acc, p) => {
+    const cat = p.category || "Outros";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(p);
+    return acc;
+  }, {} as Record<string, Pathology[]>);
+
+  const toggleExpanded = (id: number) => {
+    setExpandedPathologies(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <PageLoader text="Carregando patologias..." />
+      </div>
+    );
+  }
+
+  if (!grouped || Object.keys(grouped).length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-400">
+        <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+        <p>Nenhuma patologia encontrada.</p>
+        {isAdmin && <p className="text-sm mt-2">Acesse o painel Admin para adicionar patologias.</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {Object.entries(grouped).map(([category, items]) => (
+        <div key={category}>
+          <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            {category}
+          </h2>
+          <div className="space-y-3">
+            {items.map((pathology) => (
+              <PathologyCard 
+                key={pathology.id} 
+                pathology={pathology} 
+                isExpanded={expandedPathologies.has(pathology.id)}
+                onToggle={() => toggleExpanded(pathology.id)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Pathology; isExpanded: boolean; onToggle: () => void }) {
+  const { toast } = useToast();
+
+  const { data: medications, isLoading } = useQuery<PathologyMedication[]>({
+    queryKey: ["/api/pathologies", pathology.id, "medications"],
+    queryFn: async () => {
+      const res = await fetch(`/api/pathologies/${pathology.id}/medications`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: isExpanded,
+  });
+
+  const copyAllMedications = () => {
+    if (!medications || medications.length === 0) return;
+    
+    const text = medications.map(m => {
+      const parts = [
+        m.medication,
+        m.quantity || "",
+        m.dose ? `Tomar ${m.dose}, ${m.route || "VO"}, ${m.interval || ""} por ${m.duration || ""}` : "",
+        m.observations || "",
+      ].filter(Boolean);
+      return parts.join("\n");
+    }).join("\n\n---\n\n");
+    
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado!", description: "Todas as medicações foram copiadas." });
+  };
+
+  const copySingleMedication = (med: PathologyMedication) => {
+    const parts = [
+      med.medication,
+      med.quantity || "",
+      med.dose ? `Tomar ${med.dose}, ${med.route || "VO"}, ${med.interval || ""} por ${med.duration || ""}` : "",
+      med.observations || "",
+    ].filter(Boolean);
+    navigator.clipboard.writeText(parts.join("\n"));
+    toast({ title: "Copiado!", description: `${med.medication} copiado.` });
+  };
+
+  return (
+    <Card className="overflow-hidden" data-testid={`card-pathology-${pathology.id}`}>
+      <Collapsible open={isExpanded} onOpenChange={onToggle}>
+        <CollapsibleTrigger asChild>
+          <div className="p-4 cursor-pointer flex items-center justify-between hover:bg-muted/50 transition-colors">
+            <div className="flex items-center gap-3">
+              {isExpanded ? <ChevronDown className="h-5 w-5 text-primary" /> : <ChevronRight className="h-5 w-5 text-muted-foreground" />}
+              <div>
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  {pathology.name}
+                  {pathology.isLocked && <Lock className="h-3 w-3 text-slate-400" />}
+                </h3>
+                {pathology.description && (
+                  <p className="text-sm text-slate-500">{pathology.description}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {pathology.isPublic && <Badge variant="secondary" className="text-xs">Oficial</Badge>}
+              {pathology.ageGroup === "pediatrico" && <Badge className="text-xs bg-pink-100 text-pink-700">Pediátrico</Badge>}
+            </div>
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-4 pb-4 border-t bg-muted/20">
+            {isLoading ? (
+              <div className="py-4 text-center text-muted-foreground">Carregando medicações...</div>
+            ) : medications && medications.length > 0 ? (
+              <>
+                <div className="flex justify-end py-2">
+                  <Button size="sm" variant="outline" onClick={copyAllMedications} className="gap-1">
+                    <Copy className="h-3 w-3" /> Copiar Tudo
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  {medications.map((med, idx) => (
+                    <div key={med.id} className="p-3 bg-background rounded-md border flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Pill className="h-4 w-4 text-primary" />
+                          <span className="font-medium">{med.medication}</span>
+                          {med.maxDose && <Badge variant="outline" className="text-xs">Max: {med.maxDose}</Badge>}
+                        </div>
+                        <div className="text-sm text-slate-600 space-y-0.5">
+                          {med.dose && <p><strong>Dose:</strong> {med.dose} {med.dosePerKg && `(${med.dosePerKg}/kg)`}</p>}
+                          {med.interval && <p><strong>Intervalo:</strong> {med.interval}</p>}
+                          {med.duration && <p><strong>Duração:</strong> {med.duration}</p>}
+                          {med.route && <p><strong>Via:</strong> {med.route}</p>}
+                          {med.quantity && <p><strong>Quantidade:</strong> {med.quantity}</p>}
+                          {med.timing && <p><strong>Horário:</strong> {med.timing}</p>}
+                          {med.observations && <p className="text-slate-500 italic">{med.observations}</p>}
+                        </div>
+                      </div>
+                      <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} className="shrink-0">
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="py-4 text-center text-muted-foreground">
+                Nenhuma medicação cadastrada para esta patologia.
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
   );
 }
 
@@ -193,7 +418,7 @@ function PrescriptionCard({ prescription, isAdmin, userId }: { prescription: Pre
   );
 }
 
-function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: boolean }) {
+function PrescriptionDialog({ ageGroup, isAdmin, isPersonal = false }: { ageGroup: string; isAdmin: boolean; isPersonal?: boolean }) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -225,7 +450,7 @@ function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: 
     
     const route = formData.get("route") as string;
     const timing = formData.get("timing") as string;
-    const data = {
+    const data: Record<string, any> = {
       title: formData.get("title") as string,
       medication: formData.get("medication") as string,
       dose: formData.get("dose") as string,
@@ -238,9 +463,12 @@ function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: 
       category: formData.get("category") as string,
       ageGroup,
       content: `${formData.get("medication")} ${formData.get("dose")}, ${route || "VO"}, ${formData.get("interval")}, por ${formData.get("duration")}`,
-      isPublic: isAdmin && formData.get("isPublic") === "on",
-      isLocked: isAdmin && formData.get("isLocked") === "on",
     };
+
+    if (isAdmin && !isPersonal) {
+      data.isPublic = formData.get("isPublic") === "on";
+      data.isLocked = formData.get("isLocked") === "on";
+    }
 
     createMutation.mutate(data);
   };
@@ -249,12 +477,14 @@ function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="shadow-lg shadow-primary/25" data-testid="button-new-prescription">
-          <Plus className="mr-2 h-4 w-4" /> Nova Prescrição
+          <Plus className="mr-2 h-4 w-4" /> {isPersonal ? "Nova Minha Prescrição" : "Nova Prescrição Oficial"}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nova Prescrição ({ageGroup === "adulto" ? "Adulto" : "Pediátrico"})</DialogTitle>
+          <DialogTitle>
+            {isPersonal ? "Minha Prescrição" : "Prescrição Oficial"} ({ageGroup === "adulto" ? "Adulto" : "Pediátrico"})
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -347,14 +577,14 @@ function PrescriptionDialog({ ageGroup, isAdmin }: { ageGroup: string; isAdmin: 
             <Textarea name="patientNotes" placeholder="Instruções adicionais..." rows={2} data-testid="textarea-notes" />
           </div>
 
-          {isAdmin && (
+          {isAdmin && !isPersonal && (
             <div className="flex gap-6 pt-2 border-t">
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="isPublic" className="rounded" />
+                <input type="checkbox" name="isPublic" className="rounded" defaultChecked />
                 <span>Modelo Oficial (público)</span>
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="isLocked" className="rounded" />
+                <input type="checkbox" name="isLocked" className="rounded" defaultChecked />
                 <span>Bloquear edição</span>
               </label>
             </div>
