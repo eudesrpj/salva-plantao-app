@@ -477,3 +477,18 @@ export type InsertAiSetting = z.infer<typeof insertAiSettingSchema>;
 export type CreateUserAiCredentialsRequest = Omit<InsertUserAiCredentials, 'encryptedApiKey' | 'keyIv' | 'keyAuthTag'> & { apiKey: string };
 export type CreateAiPromptRequest = InsertAiPrompt;
 export type UpdateAiPromptRequest = Partial<InsertAiPrompt>;
+
+// User Preferences (Theme and customization)
+export const userPreferences = pgTable("user_preferences", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().unique().references(() => users.id),
+  theme: text("theme").default("system"), // light, dark, system
+  colorScheme: text("color_scheme").default("blue"), // blue, green, purple, orange, rose
+  fontSize: text("font_size").default("medium"), // small, medium, large
+  compactMode: boolean("compact_mode").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserPreferencesSchema = createInsertSchema(userPreferences).omit({ id: true, updatedAt: true });
+export type UserPreferences = typeof userPreferences.$inferSelect;
+export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;

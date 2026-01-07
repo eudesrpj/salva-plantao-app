@@ -648,6 +648,17 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // --- User Preferences ---
+  app.get("/api/user-preferences", isAuthenticated, async (req, res) => {
+    const prefs = await storage.getUserPreferences(getUserId(req));
+    res.json(prefs || { theme: "system", colorScheme: "blue", fontSize: "medium", compactMode: false });
+  });
+
+  app.put("/api/user-preferences", isAuthenticated, async (req, res) => {
+    const prefs = await storage.upsertUserPreferences(getUserId(req), req.body);
+    res.json(prefs);
+  });
+
   // --- Seed Data ---
   await seedDatabase();
 

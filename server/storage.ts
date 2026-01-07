@@ -1,7 +1,7 @@
 import { 
   prescriptions, checklists, shifts, notes, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
   protocols, flashcards, favorites, adminSettings, doctorProfiles, interconsultMessages, usageStats,
-  pathologies, pathologyMedications, patientHistory, calculatorSettings, medications,
+  pathologies, pathologyMedications, patientHistory, calculatorSettings, medications, userPreferences,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -22,7 +22,8 @@ import {
   type PathologyMedication, type InsertPathologyMedication, type UpdatePathologyMedicationRequest,
   type PatientHistory, type InsertPatientHistory,
   type CalculatorSetting, type InsertCalculatorSetting, type UpdateCalculatorSettingRequest,
-  type Medication, type InsertMedication
+  type Medication, type InsertMedication,
+  type UserPreferences, type InsertUserPreferences
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -147,6 +148,10 @@ export interface IStorage {
   createMedication(item: InsertMedication): Promise<Medication>;
   updateMedication(id: number, item: Partial<InsertMedication>): Promise<Medication>;
   deleteMedication(id: number): Promise<void>;
+
+  // User Preferences
+  getUserPreferences(userId: string): Promise<UserPreferences | undefined>;
+  upsertUserPreferences(userId: string, prefs: Partial<InsertUserPreferences>): Promise<UserPreferences>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -724,6 +729,28 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMedication(id: number): Promise<void> {
     await db.delete(medications).where(eq(medications.id, id));
+  }
+
+  // User Preferences
+  async getUserPreferences(userId: string): Promise<UserPreferences | undefined> {
+    const [item] = await db.select().from(userPreferences).where(eq(userPreferences.userId, userId));
+    return item;
+  }
+
+  async upsertUserPreferences(userId: string, prefs: Partial<InsertUserPreferences>): Promise<UserPreferences> {
+    const existing = await this.getUserPreferences(userId);
+    if (existing) {
+      const [item] = await db.update(userPreferences)
+        .set({ ...prefs, updatedAt: new Date() })
+        .where(eq(userPreferences.userId, userId))
+        .returning();
+      return item;
+    } else {
+      const [item] = await db.insert(userPreferences)
+        .values({ userId, ...prefs })
+        .returning();
+      return item;
+    }
   }
 }
 
