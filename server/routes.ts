@@ -432,12 +432,12 @@ export async function registerRoutes(
   });
 
   // --- Tasks ---
-  app.get(api.tasks.list.path, isAuthenticated, checkActive, async (req, res) => {
+  app.get(api.tasks.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getTasks(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.tasks.create.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.tasks.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.tasks.create.input.parse(req.body);
       const item = await storage.createTask({ ...input, userId: getUserId(req) });
@@ -448,7 +448,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.tasks.update.path, isAuthenticated, checkActive, async (req, res) => {
+  app.put(api.tasks.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const input = api.tasks.update.input.parse(req.body);
       const item = await storage.updateTask(Number(req.params.id), input);
@@ -459,7 +459,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.tasks.toggle.path, isAuthenticated, checkActive, async (req, res) => {
+  app.post(api.tasks.toggle.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
       const item = await storage.toggleTask(Number(req.params.id));
       res.json(item);
@@ -468,7 +468,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.tasks.delete.path, isAuthenticated, checkActive, async (req, res) => {
+  app.delete(api.tasks.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     await storage.deleteTask(Number(req.params.id));
     res.status(204).send();
   });
