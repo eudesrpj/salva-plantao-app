@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer } from "lucide-react";
+import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer, Share2, Download } from "lucide-react";
 import { QuickPrintButton, SUSPrescriptionPrint } from "@/components/SUSPrescriptionPrint";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -151,6 +151,121 @@ export default function Prescriptions() {
   );
 }
 
+function ShareFavoriteButton({ favoriteId }: { favoriteId: number }) {
+  const { toast } = useToast();
+  const [shareToken, setShareToken] = useState<string | null>(null);
+
+  const shareMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/prescription-favorites/${favoriteId}/share`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setShareToken(data.token);
+      const shareUrl = `${window.location.origin}/prescricoes?import=${data.token}`;
+      navigator.clipboard.writeText(shareUrl);
+      toast({ title: "Link copiado!", description: "Envie o link para outro usuário importar esta prescrição." });
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Falha ao gerar link de compartilhamento.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Button 
+      size="icon" 
+      variant="ghost" 
+      className="h-6 w-6"
+      onClick={() => shareMutation.mutate()}
+      disabled={shareMutation.isPending}
+      title="Compartilhar prescrição"
+    >
+      <Share2 className="h-3 w-3" />
+    </Button>
+  );
+}
+
+function ImportPrescriptionDialog() {
+  const [open, setOpen] = useState(false);
+  const [token, setToken] = useState("");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const importMutation = useMutation({
+    mutationFn: async (importToken: string) => {
+      const getRes = await fetch(`/api/prescription-favorites/import/${importToken}`, { credentials: "include" });
+      if (!getRes.ok) throw new Error("Prescrição não encontrada");
+      const prescriptionData = await getRes.json();
+      
+      const createRes = await fetch("/api/prescription-favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `${prescriptionData.title} (importado)`,
+          ...prescriptionData,
+        }),
+        credentials: "include",
+      });
+      if (!createRes.ok) throw new Error("Falha ao importar");
+      return createRes.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescription-favorites"] });
+      toast({ title: "Importado!", description: "Prescrição importada com sucesso." });
+      setOpen(false);
+      setToken("");
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Token inválido ou prescrição não encontrada.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-2" data-testid="button-import-prescription">
+          <Download className="h-4 w-4" /> Importar
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Importar Prescrição Compartilhada</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Cole o código de compartilhamento ou o link completo enviado por outro médico.
+          </p>
+          <Input
+            value={token}
+            onChange={(e) => {
+              let value = e.target.value;
+              if (value.includes("import=")) {
+                const match = value.match(/import=([a-zA-Z0-9]+)/);
+                if (match) value = match[1];
+              }
+              setToken(value);
+            }}
+            placeholder="Cole o link ou código aqui..."
+            data-testid="input-import-token"
+          />
+          <Button 
+            onClick={() => importMutation.mutate(token)} 
+            disabled={!token || importMutation.isPending}
+            className="w-full"
+            data-testid="button-confirm-import"
+          >
+            {importMutation.isPending ? "Importando..." : "Importar Prescrição"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function FavoritesSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -176,26 +291,39 @@ function FavoritesSection() {
 
   if (!favorites || favorites.length === 0) {
     return (
-      <div className="text-center py-6 text-slate-400 border rounded-md bg-muted/20">
-        <Heart className="h-8 w-8 mx-auto mb-2 opacity-50" />
-        <p className="text-sm">Nenhum favorito salvo ainda.</p>
-        <p className="text-xs mt-1">Clique no coração ao lado de uma medicação oficial para salvá-la.</p>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-slate-700 flex items-center gap-2">
+            <Heart className="h-4 w-4 text-pink-500" />
+            Medicações Favoritas
+          </h3>
+          <ImportPrescriptionDialog />
+        </div>
+        <div className="text-center py-6 text-slate-400 border rounded-md bg-muted/20">
+          <Heart className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">Nenhum favorito salvo ainda.</p>
+          <p className="text-xs mt-1">Clique no coração ao lado de uma medicação oficial para salvá-la.</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <h3 className="font-bold text-slate-700 flex items-center gap-2">
-        <Heart className="h-4 w-4 text-pink-500" />
-        Medicações Favoritas ({favorites.length})
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+          <Heart className="h-4 w-4 text-pink-500" />
+          Medicações Favoritas ({favorites.length})
+        </h3>
+        <ImportPrescriptionDialog />
+      </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {favorites.map((fav) => (
           <Card key={fav.id} className="p-3 group" data-testid={`card-favorite-${fav.id}`}>
             <div className="flex justify-between items-start mb-2">
               <h4 className="font-medium text-sm">{fav.title}</h4>
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ShareFavoriteButton favoriteId={fav.id} />
                 <QuickPrintButton prescription={fav} />
                 <Button 
                   size="icon" 
@@ -1232,8 +1360,14 @@ function MedicationDialog({ pathologyId, medication, ageGroup }: { pathologyId: 
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Observações</label>
-            <Textarea name="observations" placeholder="Instruções especiais..." rows={2} defaultValue={medication?.observations || ""} data-testid="textarea-medication-observations" />
+            <label className="text-sm font-medium">Orientações / Sinais de Alarme</label>
+            <Textarea 
+              name="observations" 
+              placeholder="Ex: Procurar atendimento se febre persistente, piora dos sintomas, dificuldade respiratória..." 
+              rows={3} 
+              defaultValue={medication?.observations || ""} 
+              data-testid="textarea-medication-observations" 
+            />
           </div>
 
           <Button type="submit" className="w-full" disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-submit-medication">
