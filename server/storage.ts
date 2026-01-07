@@ -117,6 +117,7 @@ export interface IStorage {
 
   // Pathologies
   getPathologies(userId?: string, ageGroup?: string): Promise<Pathology[]>;
+  getUserPathologies(userId: string, ageGroup?: string): Promise<Pathology[]>;
   searchPathologies(query: string, userId?: string): Promise<Pathology[]>;
   getPathology(id: number): Promise<Pathology | undefined>;
   createPathology(item: InsertPathology): Promise<Pathology>;
@@ -125,6 +126,7 @@ export interface IStorage {
 
   // Pathology Medications
   getPathologyMedications(pathologyId: number): Promise<PathologyMedication[]>;
+  getPathologyMedicationById(id: number): Promise<PathologyMedication | undefined>;
   createPathologyMedication(item: InsertPathologyMedication): Promise<PathologyMedication>;
   updatePathologyMedication(id: number, item: UpdatePathologyMedicationRequest): Promise<PathologyMedication>;
   deletePathologyMedication(id: number): Promise<void>;
@@ -608,6 +610,17 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(pathologies).where(and(...conditions)).orderBy(pathologies.name);
   }
 
+  async getUserPathologies(userId: string, ageGroup?: string): Promise<Pathology[]> {
+    const conditions = [
+      eq(pathologies.userId, userId),
+      eq(pathologies.isPublic, false)
+    ];
+    if (ageGroup) {
+      conditions.push(eq(pathologies.ageGroup, ageGroup));
+    }
+    return await db.select().from(pathologies).where(and(...conditions)).orderBy(pathologies.name);
+  }
+
   async searchPathologies(query: string, userId?: string): Promise<Pathology[]> {
     const searchPattern = `%${query}%`;
     const conditions = [or(ilike(pathologies.name, searchPattern), ilike(pathologies.category, searchPattern))];
@@ -640,6 +653,11 @@ export class DatabaseStorage implements IStorage {
   // Pathology Medications
   async getPathologyMedications(pathologyId: number): Promise<PathologyMedication[]> {
     return await db.select().from(pathologyMedications).where(eq(pathologyMedications.pathologyId, pathologyId)).orderBy(pathologyMedications.order);
+  }
+
+  async getPathologyMedicationById(id: number): Promise<PathologyMedication | undefined> {
+    const [item] = await db.select().from(pathologyMedications).where(eq(pathologyMedications.id, id));
+    return item;
   }
 
   async createPathologyMedication(insertItem: InsertPathologyMedication): Promise<PathologyMedication> {

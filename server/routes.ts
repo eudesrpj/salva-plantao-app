@@ -510,7 +510,21 @@ export async function registerRoutes(
   // --- Pathologies ---
   app.get("/api/pathologies", isAuthenticated, checkActive, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
-    const items = await storage.getPathologies(getUserId(req), ageGroup);
+    const scope = req.query.scope as string | undefined;
+    const userId = getUserId(req);
+    
+    if (scope === "mine") {
+      const items = await storage.getUserPathologies(userId, ageGroup);
+      res.json(items);
+    } else {
+      const items = await storage.getPathologies(userId, ageGroup);
+      res.json(items);
+    }
+  });
+
+  app.get("/api/pathologies/my", isAuthenticated, checkActive, async (req, res) => {
+    const ageGroup = req.query.ageGroup as string | undefined;
+    const items = await storage.getUserPathologies(getUserId(req), ageGroup);
     res.json(items);
   });
 
@@ -521,12 +535,36 @@ export async function registerRoutes(
   });
 
   app.get("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+    const userId = getUserId(req);
     const item = await storage.getPathology(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
+    
+    const user = await authStorage.getUser(userId);
+    const isOwner = item.userId === userId;
+    const isAdminUser = user?.role === "admin";
+    const isOfficialContent = item.isPublic === true;
+    
+    if (!isOfficialContent && !isOwner && !isAdminUser) {
+      return res.status(403).json({ message: "Não autorizado" });
+    }
+    
     res.json(item);
   });
 
   app.get("/api/pathologies/:id/medications", isAuthenticated, checkActive, async (req, res) => {
+    const userId = getUserId(req);
+    const pathology = await storage.getPathology(Number(req.params.id));
+    if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
+    
+    const user = await authStorage.getUser(userId);
+    const isOwner = pathology.userId === userId;
+    const isAdminUser = user?.role === "admin";
+    const isOfficialContent = pathology.isPublic === true;
+    
+    if (!isOfficialContent && !isOwner && !isAdminUser) {
+      return res.status(403).json({ message: "Não autorizado" });
+    }
+    
     const items = await storage.getPathologyMedications(Number(req.params.id));
     res.json(items);
   });
@@ -545,16 +583,61 @@ export async function registerRoutes(
   });
 
   app.put("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+    const userId = getUserId(req);
+    const pathology = await storage.getPathology(Number(req.params.id));
+    if (!pathology) return res.status(404).json({ message: "Not found" });
+    
+    const user = await authStorage.getUser(userId);
+    const isOwner = pathology.userId === userId;
+    const isAdminUser = user?.role === "admin";
+    
+    if (!isOwner && !isAdminUser) {
+      return res.status(403).json({ message: "Não autorizado" });
+    }
+    if (pathology.isLocked && !isAdminUser) {
+      return res.status(403).json({ message: "Patologia bloqueada" });
+    }
+    
     const item = await storage.updatePathology(Number(req.params.id), req.body);
     res.json(item);
   });
 
   app.delete("/api/pathologies/:id", isAuthenticated, checkActive, async (req, res) => {
+    const userId = getUserId(req);
+    const pathology = await storage.getPathology(Number(req.params.id));
+    if (!pathology) return res.status(404).json({ message: "Not found" });
+    
+    const user = await authStorage.getUser(userId);
+    const isOwner = pathology.userId === userId;
+    const isAdminUser = user?.role === "admin";
+    
+    if (!isOwner && !isAdminUser) {
+      return res.status(403).json({ message: "Não autorizado" });
+    }
+    if (pathology.isLocked && !isAdminUser) {
+      return res.status(403).json({ message: "Patologia bloqueada" });
+    }
+    
     await storage.deletePathology(Number(req.params.id));
     res.status(204).send();
   });
 
   app.post("/api/pathologies/:id/medications", isAuthenticated, checkActive, async (req, res) => {
+    const userId = getUserId(req);
+    const pathology = await storage.getPathology(Number(req.params.id));
+    if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
+    
+    const user = await authStorage.getUser(userId);
+    const isOwner = pathology.userId === userId;
+    const isAdminUser = user?.role === "admin";
+    
+    if (!isOwner && !isAdminUser) {
+      return res.status(403).json({ message: "Não autorizado" });
+    }
+    if (pathology.isLocked && !isAdminUser) {
+      return res.status(403).json({ message: "Patologia bloqueada" });
+    }
+    
     const item = await storage.createPathologyMedication({
       ...req.body,
       pathologyId: Number(req.params.id)
@@ -563,11 +646,47 @@ export async function registerRoutes(
   });
 
   app.put("/api/pathology-medications/:id", isAuthenticated, checkActive, async (req, res) => {
+    const userId = getUserId(req);
+    const medication = await storage.getPathologyMedicationById(Number(req.params.id));
+    if (!medication) return res.status(404).json({ message: "Medicação não encontrada" });
+    
+    const pathology = await storage.getPathology(medication.pathologyId);
+    if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
+    
+    const user = await authStorage.getUser(userId);
+    const isOwner = pathology.userId === userId;
+    const isAdminUser = user?.role === "admin";
+    
+    if (!isOwner && !isAdminUser) {
+      return res.status(403).json({ message: "Não autorizado" });
+    }
+    if (pathology.isLocked && !isAdminUser) {
+      return res.status(403).json({ message: "Patologia bloqueada" });
+    }
+    
     const item = await storage.updatePathologyMedication(Number(req.params.id), req.body);
     res.json(item);
   });
 
   app.delete("/api/pathology-medications/:id", isAuthenticated, checkActive, async (req, res) => {
+    const userId = getUserId(req);
+    const medication = await storage.getPathologyMedicationById(Number(req.params.id));
+    if (!medication) return res.status(404).json({ message: "Medicação não encontrada" });
+    
+    const pathology = await storage.getPathology(medication.pathologyId);
+    if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
+    
+    const user = await authStorage.getUser(userId);
+    const isOwner = pathology.userId === userId;
+    const isAdminUser = user?.role === "admin";
+    
+    if (!isOwner && !isAdminUser) {
+      return res.status(403).json({ message: "Não autorizado" });
+    }
+    if (pathology.isLocked && !isAdminUser) {
+      return res.status(403).json({ message: "Patologia bloqueada" });
+    }
+    
     await storage.deletePathologyMedication(Number(req.params.id));
     res.status(204).send();
   });
