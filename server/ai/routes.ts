@@ -161,7 +161,7 @@ export function registerAiRoutes(app: Express) {
         return res.status(400).json({ message: "IA desabilitada" });
       }
 
-      let systemPrompt = "Voce e um assistente medico. Forneça respostas claras e bem formatadas para uso clinico. Sempre organize suas respostas de forma estruturada.";
+      let systemPrompt = "";
       
       if (data.promptId) {
         const prompt = await aiStorage.getPrompt(data.promptId);
@@ -170,6 +170,15 @@ export function registerAiRoutes(app: Express) {
         }
       } else if (data.customPrompt) {
         systemPrompt = data.customPrompt;
+      } else {
+        const defaultPrompt = await aiStorage.getDefaultPrompt();
+        if (defaultPrompt?.promptText) {
+          systemPrompt = defaultPrompt.promptText;
+        }
+      }
+      
+      if (!systemPrompt) {
+        systemPrompt = "Voce e um assistente medico. Forneça respostas claras e bem formatadas para uso clinico. Sempre organize suas respostas de forma estruturada.";
       }
 
       const openai = new OpenAI({ apiKey });

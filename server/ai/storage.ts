@@ -118,6 +118,16 @@ class AiStorage {
     return prompt;
   }
 
+  async getDefaultPrompt(): Promise<AiPrompt | undefined> {
+    const [prompt] = await db
+      .select()
+      .from(aiPrompts)
+      .where(eq(aiPrompts.isActive, true))
+      .orderBy(aiPrompts.order)
+      .limit(1);
+    return prompt;
+  }
+
   async createPrompt(data: InsertAiPrompt): Promise<AiPrompt> {
     const [prompt] = await db.insert(aiPrompts).values(data).returning();
     return prompt;

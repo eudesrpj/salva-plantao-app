@@ -4,8 +4,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Send, Bot, User, Loader2, Users, Headset, MessageCircle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Send, Bot, User, Loader2, Users, Headset, MessageCircle, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
+
+interface MaskedCredentials {
+  maskedApiKey: string;
+  model: string | null;
+  isEnabled: boolean | null;
+}
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -48,6 +56,12 @@ export default function AIChat() {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  const { data: credentials } = useQuery<MaskedCredentials | null>({
+    queryKey: ["/api/ai/credentials"],
+  });
+
+  const hasCredentials = credentials && credentials.maskedApiKey;
 
   const config = CHANNEL_CONFIG[channel];
   const Icon = config.icon;
@@ -110,40 +124,27 @@ export default function AIChat() {
     if (channel === "ai") {
       setLoading(true);
       try {
-        let convId = 1; 
-        const res = await fetch(`/api/conversations/${convId}/messages`, {
+        const res = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: userMessage }),
+          body: JSON.stringify({ message: userMessage }),
           credentials: "include",
         });
 
         if (!res.ok) {
-          const createRes = await fetch("/api/conversations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: "Interconsulta" }),
-            credentials: "include",
-          });
-          if (createRes.ok) {
-            const conv = await createRes.json();
-            convId = conv.id;
-            const retryRes = await fetch(`/api/conversations/${convId}/messages`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: userMessage }),
-              credentials: "include",
-            });
-            if(!retryRes.ok) throw new Error("Failed");
-            await handleStream(retryRes);
-          } else {
-            throw new Error("Failed to start chat");
-          }
-        } else {
-          await handleStream(res);
+          const error = await res.json();
+          throw new Error(error.message || "Falha na comunicação");
         }
-      } catch (error) {
-        toast({ title: "Erro", description: "Falha na comunicação com a IA.", variant: "destructive" });
+
+        const data = await res.json();
+        setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
+        setLoading(false);
+      } catch (error: any) {
+        toast({ 
+          title: "Erro", 
+          description: error.message || "Falha na comunicação com a IA.", 
+          variant: "destructive" 
+        });
         setLoading(false);
       }
     } else {
@@ -155,42 +156,6 @@ export default function AIChat() {
           : "Mensagem enviada para interconsulta. Aguardando resposta dos colegas."
       }]);
     }
-  };
-
-  const handleStream = async (res: Response) => {
-    const reader = res.body?.getReader();
-    const decoder = new TextDecoder();
-    
-    setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-
-    if (!reader) return;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      const chunk = decoder.decode(value);
-      const lines = chunk.split("\n\n");
-      
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.content) {
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                const others = prev.slice(0, -1);
-                return [...others, { ...last, content: last.content + data.content }];
-              });
-            }
-            if (data.done) {
-              setLoading(false);
-            }
-          } catch (e) {}
-        }
-      }
-    }
-    setLoading(false);
   };
 
   const colorMap = {
@@ -229,7 +194,28 @@ export default function AIChat() {
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6">
-        {messages.length === 0 && (
+        {channel === "ai" && !hasCredentials && messages.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <Card className="text-center py-12 max-w-md mx-auto">
+              <CardContent className="space-y-4">
+                <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center">
+                  <Settings className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h2 className="text-xl font-bold">Configure sua IA</h2>
+                <p className="text-muted-foreground">
+                  Para usar o chat com IA, voce precisa primeiro configurar sua chave de API.
+                </p>
+                <Link href="/ai-settings">
+                  <Button data-testid="button-configure-ai">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Configurar Minha IA
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+        {messages.length === 0 && (channel !== "ai" || hasCredentials) && (
           <div className="text-center text-slate-400 mt-20">
             <Icon className="h-16 w-16 mx-auto mb-4 opacity-20" />
             {channel === "ai" && (
@@ -298,16 +284,16 @@ export default function AIChat() {
           <Input 
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={config.placeholder}
+            placeholder={channel === "ai" && !hasCredentials ? "Configure sua IA primeiro..." : config.placeholder}
             className="flex-1 h-12 bg-slate-50 border-slate-200"
-            disabled={loading}
+            disabled={loading || (channel === "ai" && !hasCredentials)}
             data-testid="input-chat-message"
           />
           <Button 
             type="submit" 
             size="icon" 
             className={`h-12 w-12 shrink-0 ${colors.bg} hover:opacity-90`} 
-            disabled={loading}
+            disabled={loading || (channel === "ai" && !hasCredentials)}
             data-testid="button-send-message"
           >
             <Send className="h-5 w-5" />
