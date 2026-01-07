@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
-import { type InsertShift, type UpdateShiftRequest } from "@shared/schema";
+import { z } from "zod";
+
+type CreateShiftInput = z.infer<typeof api.shifts.create.input>;
+type UpdateShiftInput = z.infer<typeof api.shifts.update.input>;
 
 export function useShifts() {
   return useQuery({
@@ -27,7 +30,7 @@ export function useShiftStats() {
 export function useCreateShift() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertShift) => {
+    mutationFn: async (data: CreateShiftInput) => {
       const res = await fetch(api.shifts.create.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,7 +50,7 @@ export function useCreateShift() {
 export function useUpdateShift() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: UpdateShiftRequest & { id: number }) => {
+    mutationFn: async ({ id, ...data }: UpdateShiftInput & { id: number }) => {
       const url = buildUrl(api.shifts.update.path, { id });
       const res = await fetch(url, {
         method: "PUT",

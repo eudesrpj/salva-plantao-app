@@ -253,7 +253,10 @@ export const shifts = pgTable("shifts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true, createdAt: true });
+export const insertShiftSchema = createInsertSchema(shifts, {
+  date: z.coerce.date(),
+  isPaid: z.boolean().optional().default(false),
+}).omit({ id: true, createdAt: true });
 export type Shift = typeof shifts.$inferSelect;
 export type InsertShift = z.infer<typeof insertShiftSchema>;
 

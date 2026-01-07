@@ -119,27 +119,34 @@ function ShiftDialog({ shift, date }: { shift?: any, date?: Date }) {
     if (!selectedDate) return toast({ title: "Data obrigatória", variant: "destructive" });
 
     const formData = new FormData(e.currentTarget);
-    const valueStr = formData.get("value") as string;
-    const data = {
-      date: selectedDate as Date,
+    const typeVal = formData.get("type") as string;
+    const startTimeVal = formData.get("startTime") as string;
+    const endTimeVal = formData.get("endTime") as string;
+    const valueVal = formData.get("value") as string;
+    
+    const normalizedDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 12, 0, 0);
+    
+    const data: Record<string, any> = {
+      date: normalizedDate,
       location: formData.get("location") as string,
-      type: formData.get("type") as string,
-      startTime: formData.get("startTime") as string,
-      endTime: formData.get("endTime") as string,
-      value: valueStr || "0",
-      isPaid: false
     };
+    
+    if (typeVal) data.type = typeVal;
+    if (startTimeVal) data.startTime = startTimeVal;
+    if (endTimeVal) data.endTime = endTimeVal;
+    if (valueVal) data.value = valueVal;
 
     try {
       if (shift) {
         await update.mutateAsync({ id: shift.id, ...data });
         toast({ title: "Atualizado", description: "Plantão atualizado." });
       } else {
-        await create.mutateAsync(data);
+        await create.mutateAsync(data as any);
         toast({ title: "Agendado", description: "Plantão agendado." });
       }
       setOpen(false);
     } catch (error) {
+      console.error("Shift save error:", error);
       toast({ title: "Erro", description: "Falha ao salvar.", variant: "destructive" });
     }
   };

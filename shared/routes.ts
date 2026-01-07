@@ -334,7 +334,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/shifts',
-      input: insertShiftSchema,
+      input: insertShiftSchema.omit({ userId: true }),
       responses: {
         201: z.custom<typeof shifts.$inferSelect>(),
         400: errorSchemas.validation,
@@ -343,7 +343,7 @@ export const api = {
     update: {
       method: 'PUT' as const,
       path: '/api/shifts/:id',
-      input: insertShiftSchema.partial(),
+      input: insertShiftSchema.omit({ userId: true }).partial(),
       responses: {
         200: z.custom<typeof shifts.$inferSelect>(),
         404: errorSchemas.notFound,

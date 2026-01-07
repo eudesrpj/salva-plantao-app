@@ -147,7 +147,7 @@ export function PediatricCalculatorButton({ onClick }: { onClick: () => void }) 
       size="icon"
       data-testid="button-pediatric-calculator"
     >
-      <span className="text-2xl">🦖</span>
+      <Calculator className="h-6 w-6 text-white" />
     </Button>
   );
 }

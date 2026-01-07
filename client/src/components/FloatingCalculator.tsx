@@ -30,7 +30,7 @@ export function FloatingCalculator() {
   };
 
   return (
-    <div className="fixed bottom-24 right-4 z-40 md:bottom-8 md:right-8 print:hidden">
+    <div className="fixed bottom-4 left-4 z-40 md:bottom-8 md:left-8 print:hidden">
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
           <Button 

@@ -367,8 +367,195 @@ function PaymentSettingsTab() {
 }
 
 function ContentTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [appName, setAppName] = useState("Salva Plantão");
+  const [welcomeMessage, setWelcomeMessage] = useState("");
+  const [footerText, setFooterText] = useState("");
+  const [termsUrl, setTermsUrl] = useState("");
+  const [privacyUrl, setPrivacyUrl] = useState("");
+  const [supportEmail, setSupportEmail] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("#3b82f6");
+  const [enableDarkMode, setEnableDarkMode] = useState(true);
+
+  const { data: settings, isLoading } = useQuery<AdminSetting[]>({
+    queryKey: ["/api/admin/settings"],
+  });
+
+  useEffect(() => {
+    if (settings) {
+      const getSetting = (key: string) => settings.find(s => s.key === key)?.value || "";
+      setAppName(getSetting("app_name") || "Salva Plantão");
+      setWelcomeMessage(getSetting("welcome_message"));
+      setFooterText(getSetting("footer_text"));
+      setTermsUrl(getSetting("terms_url"));
+      setPrivacyUrl(getSetting("privacy_url"));
+      setSupportEmail(getSetting("support_email"));
+      setPrimaryColor(getSetting("primary_color") || "#3b82f6");
+      setEnableDarkMode(getSetting("enable_dark_mode") !== "false");
+    }
+  }, [settings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { key: string; value: string }) => {
+      const res = await apiRequest("POST", "/api/admin/settings", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    },
+  });
+
+  const handleSaveAll = async () => {
+    const settingsToSave = [
+      { key: "app_name", value: appName },
+      { key: "welcome_message", value: welcomeMessage },
+      { key: "footer_text", value: footerText },
+      { key: "terms_url", value: termsUrl },
+      { key: "privacy_url", value: privacyUrl },
+      { key: "support_email", value: supportEmail },
+      { key: "primary_color", value: primaryColor },
+      { key: "enable_dark_mode", value: enableDarkMode.toString() },
+    ];
+
+    try {
+      for (const setting of settingsToSave) {
+        await saveMutation.mutateAsync(setting);
+      }
+      toast({ title: "Configurações salvas!", description: "Todas as configurações de layout foram atualizadas." });
+    } catch {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+    }
+  };
+
+  if (isLoading) return <div className="flex justify-center p-8"><PageLoader text="Carregando configurações..." /></div>;
+
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-primary" /> Configurações da Interface
+          </CardTitle>
+          <CardDescription>Personalize a aparência e textos do aplicativo.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Nome do App</label>
+              <Input 
+                value={appName} 
+                onChange={(e) => setAppName(e.target.value)} 
+                placeholder="Salva Plantão"
+                data-testid="input-app-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email de Suporte</label>
+              <Input 
+                value={supportEmail} 
+                onChange={(e) => setSupportEmail(e.target.value)} 
+                placeholder="suporte@exemplo.com"
+                data-testid="input-support-email"
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Mensagem de Boas-Vindas</label>
+            <Textarea 
+              value={welcomeMessage} 
+              onChange={(e) => setWelcomeMessage(e.target.value)} 
+              placeholder="Bem-vindo ao sistema! Aqui você encontra..."
+              rows={2}
+              data-testid="textarea-welcome-message"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Texto do Rodapé</label>
+            <Input 
+              value={footerText} 
+              onChange={(e) => setFooterText(e.target.value)} 
+              placeholder="© 2025 Salva Plantão. Todos os direitos reservados."
+              data-testid="input-footer-text"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Aparência e Layout</CardTitle>
+          <CardDescription>Personalize cores e tema do aplicativo.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Cor Primária</label>
+              <div className="flex gap-2">
+                <Input 
+                  type="color"
+                  value={primaryColor} 
+                  onChange={(e) => setPrimaryColor(e.target.value)} 
+                  className="w-16 h-9 p-1 cursor-pointer"
+                  data-testid="input-primary-color"
+                />
+                <Input 
+                  value={primaryColor} 
+                  onChange={(e) => setPrimaryColor(e.target.value)} 
+                  placeholder="#3b82f6"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Modo Escuro</label>
+              <div className="flex items-center gap-2 pt-2">
+                <Checkbox 
+                  id="enableDarkMode" 
+                  checked={enableDarkMode} 
+                  onCheckedChange={(checked) => setEnableDarkMode(checked === true)}
+                  data-testid="checkbox-dark-mode"
+                />
+                <label htmlFor="enableDarkMode" className="text-sm cursor-pointer">
+                  Permitir alternância de tema (claro/escuro)
+                </label>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Links Legais</CardTitle>
+          <CardDescription>Configure URLs para termos e políticas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">URL dos Termos de Uso</label>
+              <Input 
+                value={termsUrl} 
+                onChange={(e) => setTermsUrl(e.target.value)} 
+                placeholder="https://seusite.com/termos"
+                data-testid="input-terms-url"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">URL da Política de Privacidade</label>
+              <Input 
+                value={privacyUrl} 
+                onChange={(e) => setPrivacyUrl(e.target.value)} 
+                placeholder="https://seusite.com/privacidade"
+                data-testid="input-privacy-url"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid md:grid-cols-3 gap-4">
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
           <CardHeader>
@@ -398,9 +585,13 @@ function ContentTab() {
           </CardContent>
         </Card>
       </div>
-      <p className="text-sm text-slate-500 text-center">
-        Dica: Acesse as páginas de Prescrições, Protocolos ou Memorização e marque a opção "Oficial" ao criar conteúdo.
-      </p>
+
+      <div className="flex justify-end">
+        <Button onClick={handleSaveAll} disabled={saveMutation.isPending} className="gap-2" data-testid="button-save-layout">
+          <Save className="h-4 w-4" />
+          {saveMutation.isPending ? "Salvando..." : "Salvar Configurações de Layout"}
+        </Button>
+      </div>
     </div>
   );
 }
