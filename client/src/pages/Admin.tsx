@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
@@ -4134,6 +4135,8 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
   const [ageGroupFilter, setAgeGroupFilter] = useState<"all" | "adulto" | "pediatrico" | "ambos">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { data: medicationsList, isLoading } = useQuery<any[]>({
     queryKey: ["/api/medications"],
@@ -4234,6 +4237,77 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
     },
   });
 
+  const batchActivateMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await apiRequest("POST", "/api/admin/medications/batch-activate", { ids });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/medications"] });
+      toast({ title: "Medicações ativadas!" });
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+    },
+    onError: () => toast({ title: "Erro ao ativar", variant: "destructive" }),
+  });
+
+  const batchDeactivateMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await apiRequest("POST", "/api/admin/medications/batch-deactivate", { ids });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/medications"] });
+      toast({ title: "Medicações desativadas!" });
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+    },
+    onError: () => toast({ title: "Erro ao desativar", variant: "destructive" }),
+  });
+
+  const batchDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await apiRequest("POST", "/api/admin/medications/batch-delete", { ids });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/medications"] });
+      toast({ title: "Medicações removidas!" });
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+    },
+    onError: () => toast({ title: "Erro ao remover", variant: "destructive" }),
+  });
+
+  const handleExport = async (format: "csv" | "json") => {
+    const ids = Array.from(selectedIds);
+    const res = await fetch(`/api/admin/medications/export?format=${format}&ids=${ids.join(",")}`, { credentials: "include" });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `medications.${format}`;
+    a.click();
+    toast({ title: `Exportado em ${format.toUpperCase()}!` });
+  };
+
+  const toggleSelection = (id: number) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredMedications.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredMedications.map(m => m.id)));
+    }
+  };
+
   const handleCreateMedication = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -4264,6 +4338,14 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
           <CardDescription>Crie medicamentos reutilizáveis para associar às patologias.</CardDescription>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button 
+            variant={selectionMode ? "default" : "outline"} 
+            className="gap-1"
+            onClick={() => { setSelectionMode(!selectionMode); setSelectedIds(new Set()); }}
+            data-testid="button-selection-mode"
+          >
+            <CheckSquare className="h-4 w-4" /> {selectionMode ? "Sair Seleção" : "Modo Seleção"}
+          </Button>
           <Dialog open={bulkImportOpen} onOpenChange={setBulkImportOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-1" data-testid="button-bulk-import-medications">
@@ -4428,10 +4510,46 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
           />
           <Badge variant="secondary" className="ml-auto">{filteredMedications.length} medicações</Badge>
         </div>
+        {selectionMode && selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 p-3 bg-muted rounded-md">
+            <span className="text-sm font-medium">{selectedIds.size} selecionado(s)</span>
+            <div className="flex gap-2 ml-auto">
+              <Button size="sm" variant="outline" onClick={() => batchActivateMutation.mutate(Array.from(selectedIds))} data-testid="button-batch-activate">
+                <Power className="h-4 w-4 mr-1" /> Ativar
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => batchDeactivateMutation.mutate(Array.from(selectedIds))} data-testid="button-batch-deactivate">
+                <PowerOff className="h-4 w-4 mr-1" /> Desativar
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" data-testid="button-batch-export">
+                    <Download className="h-4 w-4 mr-1" /> Exportar
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => handleExport("csv")}>CSV</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("json")}>JSON</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button size="sm" variant="destructive" onClick={() => batchDeleteMutation.mutate(Array.from(selectedIds))} data-testid="button-batch-delete">
+                <Trash2 className="h-4 w-4 mr-1" /> Excluir
+              </Button>
+            </div>
+          </div>
+        )}
         {filteredMedications.length > 0 ? (
           <Table>
             <TableHeader>
               <TableRow>
+                {selectionMode && (
+                  <TableHead className="w-[40px]">
+                    <Checkbox 
+                      checked={selectedIds.size === filteredMedications.length && filteredMedications.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                      data-testid="checkbox-select-all"
+                    />
+                  </TableHead>
+                )}
                 <TableHead>Medicação</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead>Dose</TableHead>
@@ -4443,6 +4561,15 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
             <TableBody>
               {filteredMedications.map((m) => (
                 <TableRow key={m.id}>
+                  {selectionMode && (
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedIds.has(m.id)} 
+                        onCheckedChange={() => toggleSelection(m.id)}
+                        data-testid={`checkbox-med-${m.id}`}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="font-medium">
                     {m.name}
                     {m.presentation && <span className="text-muted-foreground ml-1">({m.presentation})</span>}
