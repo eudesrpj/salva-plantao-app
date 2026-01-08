@@ -6,6 +6,7 @@ import {
   evolutionModels, physicalExamTemplates, signsSymptoms, semiologicalSigns,
   medicalCertificates, attendanceDeclarations, medicalReferrals, referralDestinations, referralReasons,
   prescriptionModels, prescriptionModelMedications, monthlyExpenses, financialGoals,
+  plans, subscriptions, payments,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -46,7 +47,10 @@ import {
   type MonthlyExpense, type InsertMonthlyExpense,
   type FinancialGoal, type InsertFinancialGoal,
   type PromoCoupon, type InsertPromoCoupon,
-  type CouponUsage, type InsertCouponUsage
+  type CouponUsage, type InsertCouponUsage,
+  type Plan, type InsertPlan,
+  type Subscription, type InsertSubscription,
+  type Payment, type InsertPayment
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -288,6 +292,29 @@ export interface IStorage {
   createFinancialGoal(item: InsertFinancialGoal): Promise<FinancialGoal>;
   updateFinancialGoal(id: number, item: Partial<InsertFinancialGoal>): Promise<FinancialGoal>;
   deleteFinancialGoal(id: number): Promise<void>;
+
+  // Plans
+  getPlans(): Promise<Plan[]>;
+  getActivePlan(): Promise<Plan | undefined>;
+  getPlan(id: number): Promise<Plan | undefined>;
+  createPlan(item: InsertPlan): Promise<Plan>;
+  updatePlan(id: number, item: Partial<InsertPlan>): Promise<Plan>;
+
+  // Subscriptions
+  getUserSubscription(userId: string): Promise<Subscription | undefined>;
+  getActiveSubscription(userId: string): Promise<Subscription | undefined>;
+  getAllSubscriptions(): Promise<Subscription[]>;
+  getSubscription(id: number): Promise<Subscription | undefined>;
+  getSubscriptionByProviderId(providerSubscriptionId: string): Promise<Subscription | undefined>;
+  createSubscription(item: InsertSubscription): Promise<Subscription>;
+  updateSubscription(id: number, item: Partial<InsertSubscription>): Promise<Subscription>;
+
+  // Payments
+  getUserPayments(userId: string): Promise<Payment[]>;
+  getPayment(id: number): Promise<Payment | undefined>;
+  getPaymentByProviderId(providerPaymentId: string): Promise<Payment | undefined>;
+  createPayment(item: InsertPayment): Promise<Payment>;
+  updatePayment(id: number, item: Partial<InsertPayment>): Promise<Payment>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1513,6 +1540,106 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFinancialGoal(id: number): Promise<void> {
     await db.delete(financialGoals).where(eq(financialGoals.id, id));
+  }
+
+  // Plans
+  async getPlans(): Promise<Plan[]> {
+    return await db.select().from(plans).orderBy(desc(plans.createdAt));
+  }
+
+  async getActivePlan(): Promise<Plan | undefined> {
+    const [item] = await db.select().from(plans).where(eq(plans.isActive, true)).limit(1);
+    return item;
+  }
+
+  async getPlan(id: number): Promise<Plan | undefined> {
+    const [item] = await db.select().from(plans).where(eq(plans.id, id));
+    return item;
+  }
+
+  async createPlan(insertItem: InsertPlan): Promise<Plan> {
+    const [item] = await db.insert(plans).values(insertItem).returning();
+    return item;
+  }
+
+  async updatePlan(id: number, updateItem: Partial<InsertPlan>): Promise<Plan> {
+    const [item] = await db.update(plans).set(updateItem).where(eq(plans.id, id)).returning();
+    return item;
+  }
+
+  // Subscriptions
+  async getUserSubscription(userId: string): Promise<Subscription | undefined> {
+    const [item] = await db.select().from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+    return item;
+  }
+
+  async getActiveSubscription(userId: string): Promise<Subscription | undefined> {
+    const [item] = await db.select().from(subscriptions)
+      .where(and(
+        eq(subscriptions.userId, userId),
+        eq(subscriptions.status, 'active')
+      ))
+      .limit(1);
+    return item;
+  }
+
+  async getAllSubscriptions(): Promise<Subscription[]> {
+    return await db.select().from(subscriptions).orderBy(desc(subscriptions.createdAt));
+  }
+
+  async getSubscription(id: number): Promise<Subscription | undefined> {
+    const [item] = await db.select().from(subscriptions).where(eq(subscriptions.id, id));
+    return item;
+  }
+
+  async getSubscriptionByProviderId(providerSubscriptionId: string): Promise<Subscription | undefined> {
+    const [item] = await db.select().from(subscriptions)
+      .where(eq(subscriptions.providerSubscriptionId, providerSubscriptionId));
+    return item;
+  }
+
+  async createSubscription(insertItem: InsertSubscription): Promise<Subscription> {
+    const [item] = await db.insert(subscriptions).values(insertItem).returning();
+    return item;
+  }
+
+  async updateSubscription(id: number, updateItem: Partial<InsertSubscription>): Promise<Subscription> {
+    const [item] = await db.update(subscriptions).set({
+      ...updateItem,
+      updatedAt: new Date()
+    }).where(eq(subscriptions.id, id)).returning();
+    return item;
+  }
+
+  // Payments
+  async getUserPayments(userId: string): Promise<Payment[]> {
+    return await db.select().from(payments)
+      .where(eq(payments.userId, userId))
+      .orderBy(desc(payments.createdAt));
+  }
+
+  async getPayment(id: number): Promise<Payment | undefined> {
+    const [item] = await db.select().from(payments).where(eq(payments.id, id));
+    return item;
+  }
+
+  async getPaymentByProviderId(providerPaymentId: string): Promise<Payment | undefined> {
+    const [item] = await db.select().from(payments)
+      .where(eq(payments.providerPaymentId, providerPaymentId));
+    return item;
+  }
+
+  async createPayment(insertItem: InsertPayment): Promise<Payment> {
+    const [item] = await db.insert(payments).values(insertItem).returning();
+    return item;
+  }
+
+  async updatePayment(id: number, updateItem: Partial<InsertPayment>): Promise<Payment> {
+    const [item] = await db.update(payments).set(updateItem).where(eq(payments.id, id)).returning();
+    return item;
   }
 }
 

@@ -1172,6 +1172,290 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(201).json(usage);
   });
 
+  // --- Subscription System ---
+  
+  // Get current plan
+  app.get("/api/subscription/plan", async (req, res) => {
+    const plan = await storage.getActivePlan();
+    if (!plan) {
+      return res.json({ 
+        name: "Salva Plantão Premium", 
+        priceCents: 2990, 
+        billingPeriod: "monthly" 
+      });
+    }
+    res.json(plan);
+  });
+
+  // Get user subscription status
+  app.get("/api/subscription/status", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const subscription = await storage.getActiveSubscription(userId);
+    
+    res.json({
+      hasActiveSubscription: !!subscription,
+      subscription,
+      userStatus: user?.status || "pending",
+      isAdmin: user?.role === "admin"
+    });
+  });
+
+  // Validate coupon for subscription
+  app.post("/api/subscription/validate-coupon", isAuthenticated, async (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ message: "Código do cupom é obrigatório" });
+    
+    const coupon = await storage.getPromoCouponByCode(code.toUpperCase().trim());
+    if (!coupon) return res.status(404).json({ message: "Cupom não encontrado" });
+    if (!coupon.isActive) return res.status(400).json({ message: "Cupom inativo" });
+    if (coupon.validUntil && new Date(coupon.validUntil) < new Date()) {
+      return res.status(400).json({ message: "Cupom expirado" });
+    }
+    if (coupon.maxUses && coupon.currentUses && coupon.currentUses >= coupon.maxUses) {
+      return res.status(400).json({ message: "Cupom esgotado" });
+    }
+    
+    res.json({
+      valid: true,
+      id: coupon.id,
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+      discountMonths: coupon.discountMonths
+    });
+  });
+
+  // Create subscription with payment
+  app.post("/api/subscription/create", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await authStorage.getUser(userId);
+      if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
+
+      const { paymentMethod, couponCode, name, cpfCnpj, phone } = req.body;
+      
+      if (!paymentMethod || !['PIX', 'CREDIT_CARD'].includes(paymentMethod)) {
+        return res.status(400).json({ message: "Método de pagamento inválido" });
+      }
+
+      const plan = await storage.getActivePlan();
+      let priceCents = plan?.priceCents || 2990;
+      let discountCents = 0;
+      let couponId: number | null = null;
+
+      if (couponCode) {
+        const coupon = await storage.getPromoCouponByCode(couponCode.toUpperCase().trim());
+        if (coupon && coupon.isActive) {
+          if (coupon.discountType === 'percentage') {
+            discountCents = Math.floor(priceCents * (Number(coupon.discountValue) / 100));
+          } else {
+            discountCents = Math.floor(Number(coupon.discountValue) * 100);
+          }
+          couponId = coupon.id;
+          await storage.updatePromoCoupon(coupon.id, { 
+            currentUses: (coupon.currentUses || 0) + 1 
+          });
+        }
+      }
+
+      const finalAmount = Math.max(priceCents - discountCents, 0);
+      const now = new Date();
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
+
+      const subscription = await storage.createSubscription({
+        userId,
+        planId: plan?.id || 1,
+        status: 'pending',
+        currentPeriodStart: now,
+        currentPeriodEnd: nextMonth,
+        nextBillingDate: nextMonth,
+        appliedCouponId: couponId
+      });
+
+      const asaasService = await import('./services/asaas');
+      
+      if (asaasService.isAsaasConfigured()) {
+        const customer = await asaasService.getOrCreateCustomer({
+          name: name || user.firstName || 'Usuário',
+          email: user.email || `${userId}@salvaplantao.app`,
+          cpfCnpj,
+          phone
+        });
+
+        await storage.updateSubscription(subscription.id, {
+          providerCustomerId: customer.id
+        });
+
+        const dueDate = asaasService.formatDateForAsaas(new Date());
+        const asaasPayment = await asaasService.createPayment({
+          customer: customer.id,
+          billingType: paymentMethod as 'PIX' | 'CREDIT_CARD',
+          value: finalAmount / 100,
+          dueDate,
+          description: `Assinatura Salva Plantão - ${plan?.name || 'Premium'}`,
+          externalReference: `subscription-${subscription.id}`
+        });
+
+        let pixData = null;
+        if (paymentMethod === 'PIX') {
+          pixData = await asaasService.getPixQrCode(asaasPayment.id);
+        }
+
+        const payment = await storage.createPayment({
+          subscriptionId: subscription.id,
+          userId,
+          providerPaymentId: asaasPayment.id,
+          amountCents: finalAmount,
+          discountCents,
+          status: 'pending',
+          method: paymentMethod,
+          pixQrCode: pixData?.encodedImage,
+          pixCopyPaste: pixData?.payload,
+          pixExpiresAt: pixData ? new Date(pixData.expirationDate) : null,
+          invoiceUrl: asaasPayment.invoiceUrl
+        });
+
+        res.json({
+          subscription,
+          payment,
+          pixQrCode: pixData?.encodedImage,
+          pixCopyPaste: pixData?.payload,
+          invoiceUrl: asaasPayment.invoiceUrl
+        });
+      } else {
+        const payment = await storage.createPayment({
+          subscriptionId: subscription.id,
+          userId,
+          amountCents: finalAmount,
+          discountCents,
+          status: 'pending',
+          method: paymentMethod
+        });
+
+        res.json({
+          subscription,
+          payment,
+          message: 'Sistema de pagamento não configurado. Entre em contato com o suporte.'
+        });
+      }
+    } catch (error: any) {
+      console.error('Error creating subscription:', error);
+      res.status(500).json({ message: error.message || 'Erro ao criar assinatura' });
+    }
+  });
+
+  // ASAAS Webhook for payment status updates
+  app.post("/api/webhooks/asaas", async (req, res) => {
+    try {
+      const { event, payment: paymentData } = req.body;
+      
+      if (!paymentData?.id) {
+        return res.status(400).json({ message: 'Invalid webhook data' });
+      }
+
+      const existingPayment = await storage.getPaymentByProviderId(paymentData.id);
+      if (!existingPayment) {
+        console.log('Payment not found for webhook:', paymentData.id);
+        return res.status(200).json({ message: 'Payment not found, ignoring' });
+      }
+
+      let newStatus = existingPayment.status;
+      switch (event) {
+        case 'PAYMENT_CONFIRMED':
+        case 'PAYMENT_RECEIVED':
+          newStatus = 'paid';
+          break;
+        case 'PAYMENT_OVERDUE':
+          newStatus = 'overdue';
+          break;
+        case 'PAYMENT_DELETED':
+        case 'PAYMENT_REFUNDED':
+          newStatus = 'refunded';
+          break;
+        case 'PAYMENT_UPDATED':
+          newStatus = paymentData.status?.toLowerCase() || existingPayment.status;
+          break;
+      }
+
+      await storage.updatePayment(existingPayment.id, {
+        status: newStatus,
+        paidAt: newStatus === 'paid' ? new Date() : null
+      });
+
+      if (newStatus === 'paid' && existingPayment.subscriptionId) {
+        const subscription = await storage.getSubscription(existingPayment.subscriptionId);
+        if (subscription) {
+          await storage.updateSubscription(subscription.id, {
+            status: 'active',
+            lastPaymentStatus: 'paid'
+          });
+          await authStorage.updateUserStatus(subscription.userId, 'active');
+          notifyUser(subscription.userId, { 
+            type: 'subscription_activated', 
+            message: 'Sua assinatura foi ativada com sucesso!' 
+          });
+        }
+      }
+
+      res.status(200).json({ received: true });
+    } catch (error: any) {
+      console.error('Webhook error:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Admin: Manual payment confirmation
+  app.post("/api/admin/subscription/confirm-payment/:paymentId", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const paymentId = Number(req.params.paymentId);
+      const payment = await storage.getPayment(paymentId);
+      if (!payment) return res.status(404).json({ message: 'Pagamento não encontrado' });
+
+      await storage.updatePayment(paymentId, {
+        status: 'paid',
+        paidAt: new Date()
+      });
+
+      if (payment.subscriptionId) {
+        const subscription = await storage.getSubscription(payment.subscriptionId);
+        if (subscription) {
+          await storage.updateSubscription(subscription.id, {
+            status: 'active',
+            lastPaymentStatus: 'paid'
+          });
+          await authStorage.updateUserStatus(subscription.userId, 'active');
+          notifyUser(subscription.userId, { 
+            type: 'subscription_activated', 
+            message: 'Sua assinatura foi ativada pelo administrador!' 
+          });
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Admin: Get all subscriptions
+  app.get("/api/admin/subscriptions", isAuthenticated, checkAdmin, async (req, res) => {
+    const subs = await storage.getAllSubscriptions();
+    res.json(subs);
+  });
+
+  // Admin: Get user payments
+  app.get("/api/admin/payments/:userId", isAuthenticated, checkAdmin, async (req, res) => {
+    const payments = await storage.getUserPayments(req.params.userId);
+    res.json(payments);
+  });
+
+  // User: Get my payments
+  app.get("/api/subscription/payments", isAuthenticated, async (req, res) => {
+    const payments = await storage.getUserPayments(getUserId(req));
+    res.json(payments);
+  });
+
   // --- Prescription Favorites (User personalized copies) ---
   app.get("/api/prescription-favorites", isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getPrescriptionFavorites(getUserId(req));
