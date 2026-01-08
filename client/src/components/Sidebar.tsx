@@ -47,7 +47,7 @@ const NAV_ITEMS = [
   { icon: ClipboardList, label: "Protocolos", href: "/protocols" },
   { icon: CheckSquare, label: "Condutas", href: "/checklists" },
   { icon: Pill, label: "Interações", href: "/drug-interactions" },
-  { icon: Brain, label: "Memorização", href: "/flashcards" },
+  { icon: Brain, label: "Memorização", href: "/memorize" },
   { icon: Stethoscope, label: "Passagem (SBAR)", href: "/handovers" },
   { icon: CalendarDays, label: "Plantões", href: "/shifts" },
   { icon: DollarSign, label: "Financeiro", href: "/finance" },

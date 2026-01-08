@@ -37,6 +37,7 @@ import MedicalCertificate from "@/pages/MedicalCertificate";
 import AttendanceDeclaration from "@/pages/AttendanceDeclaration";
 import Referral from "@/pages/Referral";
 import AiWebView from "@/pages/AiWebView";
+import Memorize from "@/pages/Memorize";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -114,6 +115,10 @@ function Router() {
 
       <Route path="/flashcards">
         <ProtectedRoute component={Flashcards} />
+      </Route>
+
+      <Route path="/memorize">
+        <ProtectedRoute component={Memorize} />
       </Route>
 
       <Route path="/checklists">
