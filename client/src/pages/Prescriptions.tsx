@@ -744,12 +744,9 @@ function UserPathologiesView({ ageGroup, searchQuery, patientAllergies }: { ageG
     p.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const grouped = filtered?.reduce((acc, p) => {
-    const cat = p.category || "Outros";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(p);
-    return acc;
-  }, {} as Record<string, Pathology[]>);
+  const sortedPathologies = filtered?.sort((a, b) => 
+    a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+  );
 
   const toggleExpanded = (id: number) => {
     setExpandedPathologies(prev => {
@@ -769,36 +766,28 @@ function UserPathologiesView({ ageGroup, searchQuery, patientAllergies }: { ageG
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <FavoritesSection />
 
-      {(!grouped || Object.keys(grouped).length === 0) ? (
+      {(!sortedPathologies || sortedPathologies.length === 0) ? (
         <div className="text-center py-8 text-slate-400 border rounded-md bg-muted/20">
           <FolderPlus className="h-10 w-10 mx-auto mb-3 opacity-50" />
           <p className="mb-2">Você ainda não tem patologias pessoais.</p>
           <p className="text-sm">Clique em "Nova Patologia" para criar a sua primeira.</p>
         </div>
       ) : (
-        Object.entries(grouped).map(([category, items]) => (
-          <div key={category}>
-            <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
-              <FolderPlus className="h-5 w-5 text-primary" />
-              {category}
-            </h2>
-            <div className="space-y-3">
-              {items.map((pathology) => (
-                <UserPathologyCard 
-                  key={pathology.id} 
-                  pathology={pathology} 
-                  isExpanded={expandedPathologies.has(pathology.id)}
-                  onToggle={() => toggleExpanded(pathology.id)}
-                  ageGroup={ageGroup}
-                  patientAllergies={patientAllergies}
-                />
-              ))}
-            </div>
-          </div>
-        ))
+        <div className="space-y-3">
+          {sortedPathologies.map((pathology) => (
+            <UserPathologyCard 
+              key={pathology.id} 
+              pathology={pathology} 
+              isExpanded={expandedPathologies.has(pathology.id)}
+              onToggle={() => toggleExpanded(pathology.id)}
+              ageGroup={ageGroup}
+              patientAllergies={patientAllergies}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -826,12 +815,9 @@ function PathologiesView({ ageGroup, searchQuery, isAdmin, patientAllergies }: {
     )
   );
 
-  const grouped = filtered?.reduce((acc, p) => {
-    const cat = p.category || "Outros";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(p);
-    return acc;
-  }, {} as Record<string, Pathology[]>);
+  const sortedPathologies = filtered?.sort((a, b) => 
+    a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+  );
 
   const toggleExpanded = (id: number) => {
     setExpandedPathologies(prev => {
@@ -850,7 +836,7 @@ function PathologiesView({ ageGroup, searchQuery, isAdmin, patientAllergies }: {
     );
   }
 
-  if (!grouped || Object.keys(grouped).length === 0) {
+  if (!sortedPathologies || sortedPathologies.length === 0) {
     return (
       <div className="text-center py-12 text-slate-400">
         <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -861,25 +847,15 @@ function PathologiesView({ ageGroup, searchQuery, isAdmin, patientAllergies }: {
   }
 
   return (
-    <div className="space-y-8">
-      {Object.entries(grouped).map(([category, items]) => (
-        <div key={category}>
-          <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            {category}
-          </h2>
-          <div className="space-y-3">
-            {items.map((pathology) => (
-              <PathologyCard 
-                key={pathology.id} 
-                pathology={pathology} 
-                isExpanded={expandedPathologies.has(pathology.id)}
-                onToggle={() => toggleExpanded(pathology.id)}
-                patientAllergies={patientAllergies}
-              />
-            ))}
-          </div>
-        </div>
+    <div className="space-y-3">
+      {sortedPathologies.map((pathology) => (
+        <PathologyCard 
+          key={pathology.id} 
+          pathology={pathology} 
+          isExpanded={expandedPathologies.has(pathology.id)}
+          onToggle={() => toggleExpanded(pathology.id)}
+          patientAllergies={patientAllergies}
+        />
       ))}
     </div>
   );
