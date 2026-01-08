@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
@@ -71,6 +71,9 @@ export default function Admin() {
           <TabsTrigger value="dashboard-config" className="gap-1">
             <Layout className="h-4 w-4" /> Dashboard
           </TabsTrigger>
+          <TabsTrigger value="donations" className="gap-1">
+            <Heart className="h-4 w-4" /> Doações
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -115,6 +118,10 @@ export default function Admin() {
 
         <TabsContent value="dashboard-config">
           <DashboardConfigTab />
+        </TabsContent>
+
+        <TabsContent value="donations">
+          <DonationsTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -5571,6 +5578,268 @@ function DashboardConfigTab() {
                 ))}
                 {(!quickAccessItems || quickAccessItems.length === 0) && (
                   <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum item configurado.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function DonationsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [causeDialogOpen, setCauseDialogOpen] = useState(false);
+  const [editingCause, setEditingCause] = useState<any>(null);
+  const [causeName, setCauseName] = useState("");
+  const [causeDescription, setCauseDescription] = useState("");
+  const [causeTarget, setCauseTarget] = useState("");
+  const [causeIsActive, setCauseIsActive] = useState(true);
+  const [causeDestinationType, setCauseDestinationType] = useState("PIX");
+  const [causeDestinationKey, setCauseDestinationKey] = useState("");
+
+  const { data: causes, isLoading: causesLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/donation-causes"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/donation-causes", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const { data: donations, isLoading: donationsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/donations"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/donations", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const createCauseMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/admin/donation-causes", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/donation-causes"] });
+      toast({ title: "Causa criada!" });
+      resetCauseForm();
+      setCauseDialogOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao criar causa", variant: "destructive" }),
+  });
+
+  const updateCauseMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await apiRequest("PUT", `/api/admin/donation-causes/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/donation-causes"] });
+      toast({ title: "Causa atualizada!" });
+      resetCauseForm();
+      setCauseDialogOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao atualizar causa", variant: "destructive" }),
+  });
+
+  const deleteCauseMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/donation-causes/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/donation-causes"] });
+      toast({ title: "Causa removida!" });
+    },
+    onError: () => toast({ title: "Erro ao remover causa", variant: "destructive" }),
+  });
+
+  const resetCauseForm = () => {
+    setCauseName("");
+    setCauseDescription("");
+    setCauseTarget("");
+    setCauseIsActive(true);
+    setCauseDestinationType("PIX");
+    setCauseDestinationKey("");
+    setEditingCause(null);
+  };
+
+  const openEditCause = (cause: any) => {
+    setEditingCause(cause);
+    setCauseName(cause.name);
+    setCauseDescription(cause.description || "");
+    setCauseTarget(cause.targetAmount?.toString() || "");
+    setCauseIsActive(cause.isActive !== false);
+    setCauseDestinationType(cause.destinationType || "PIX");
+    setCauseDestinationKey(cause.destinationKey || "");
+    setCauseDialogOpen(true);
+  };
+
+  const handleSaveCause = () => {
+    const data = {
+      name: causeName,
+      description: causeDescription,
+      targetAmount: causeTarget ? parseFloat(causeTarget) : null,
+      isActive: causeIsActive,
+      destinationType: causeDestinationType,
+      destinationKey: causeDestinationKey,
+    };
+    if (editingCause) {
+      updateCauseMutation.mutate({ id: editingCause.id, data });
+    } else {
+      createCauseMutation.mutate(data);
+    }
+  };
+
+  const statusColors: Record<string, string> = {
+    CREATED: "outline",
+    PAID: "default",
+    TRANSFERRED: "secondary",
+    FAILED: "destructive",
+    REFUNDED: "secondary",
+  };
+
+  if (causesLoading || donationsLoading) return <PageLoader text="Carregando doações..." />;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Heart className="h-5 w-5 text-red-500" /> Causas de Doação
+            </CardTitle>
+            <CardDescription>Gerencie as causas disponíveis para doação.</CardDescription>
+          </div>
+          <Dialog open={causeDialogOpen} onOpenChange={(open) => { setCauseDialogOpen(open); if (!open) resetCauseForm(); }}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" data-testid="button-add-cause">
+                <Plus className="h-4 w-4" /> Nova Causa
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingCause ? "Editar Causa" : "Nova Causa de Doação"}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Nome da Causa</label>
+                  <Input value={causeName} onChange={(e) => setCauseName(e.target.value)} placeholder="Ex: Ajuda para Creche" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Descrição</label>
+                  <Textarea value={causeDescription} onChange={(e) => setCauseDescription(e.target.value)} placeholder="Descreva a causa..." />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Meta (R$)</label>
+                    <Input type="number" value={causeTarget} onChange={(e) => setCauseTarget(e.target.value)} placeholder="1000" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Tipo Destino</label>
+                    <Select value={causeDestinationType} onValueChange={setCauseDestinationType}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PIX">PIX</SelectItem>
+                        <SelectItem value="BANK">Conta Bancária</SelectItem>
+                        <SelectItem value="LINK">Link Externo</SelectItem>
+                        <SelectItem value="INTERNAL">Interno</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Chave/Destino</label>
+                  <Input value={causeDestinationKey} onChange={(e) => setCauseDestinationKey(e.target.value)} placeholder="Chave PIX, conta, ou link" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={causeIsActive} onCheckedChange={(c) => setCauseIsActive(c === true)} id="causeActive" />
+                  <label htmlFor="causeActive" className="text-sm">Causa ativa</label>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setCauseDialogOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleSaveCause} disabled={!causeName} data-testid="button-save-cause">
+                    {editingCause ? "Atualizar" : "Criar"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Destino</TableHead>
+                  <TableHead>Meta</TableHead>
+                  <TableHead>Arrecadado</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[100px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {causes?.map(cause => (
+                  <TableRow key={cause.id}>
+                    <TableCell className="font-medium">{cause.name}</TableCell>
+                    <TableCell><Badge variant="outline">{cause.destinationType}</Badge></TableCell>
+                    <TableCell>{cause.targetAmount ? `R$ ${Number(cause.targetAmount).toFixed(2)}` : "-"}</TableCell>
+                    <TableCell>R$ {Number(cause.currentAmount || 0).toFixed(2)}</TableCell>
+                    <TableCell>{cause.isActive ? <Badge>Ativa</Badge> : <Badge variant="secondary">Inativa</Badge>}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => openEditCause(cause)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteCauseMutation.mutate(cause.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(!causes || causes.length === 0) && (
+                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma causa cadastrada.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5" /> Histórico de Doações
+          </CardTitle>
+          <CardDescription>Todas as doações recebidas.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Doador</TableHead>
+                  <TableHead>Causa</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {donations?.map(donation => (
+                  <TableRow key={donation.id}>
+                    <TableCell>{donation.createdAt ? new Date(donation.createdAt).toLocaleDateString("pt-BR") : "-"}</TableCell>
+                    <TableCell>{donation.donorName || "Anônimo"}</TableCell>
+                    <TableCell>{causes?.find(c => c.id === donation.causeId)?.name || "-"}</TableCell>
+                    <TableCell>R$ {Number(donation.amount || 0).toFixed(2)}</TableCell>
+                    <TableCell><Badge variant={statusColors[donation.status] as any || "outline"}>{donation.status}</Badge></TableCell>
+                  </TableRow>
+                ))}
+                {(!donations || donations.length === 0) && (
+                  <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhuma doação registrada.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
