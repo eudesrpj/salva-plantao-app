@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -2427,6 +2427,27 @@ function ContentManagementSection() {
   );
 }
 
+const CLINICAL_CATEGORIES = [
+  "Cardiologia",
+  "Pneumologia",
+  "Gastro/Hepato",
+  "Nefro/Uro",
+  "Endocrino/Metabolico",
+  "Infectologia",
+  "Reumatologia/Ortopedia",
+  "Dermatologia",
+  "Neurologia",
+  "Psiquiatria",
+  "Gineco/Obstetricia",
+  "Pediatria Geral",
+  "Trauma/Urgencia",
+  "Toxicologico",
+  "Oftalmologia/Otorrino",
+  "Hematologia",
+  "Oncologia",
+  "Outros",
+];
+
 function PathologyManagement({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -2436,8 +2457,12 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
   const [pathologyName, setPathologyName] = useState("");
   const [pathologyDescription, setPathologyDescription] = useState("");
   const [pathologyCategory, setPathologyCategory] = useState("");
+  const [pathologyClinicalCategory, setPathologyClinicalCategory] = useState("");
   const [pathologyAgeGroup, setPathologyAgeGroup] = useState("adulto");
   const [selectedMedicationId, setSelectedMedicationId] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"adulto" | "pediatrico">("adulto");
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const { data: pathologies, isLoading } = useQuery<any[]>({
     queryKey: ["/api/pathologies"],
@@ -2476,6 +2501,20 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
       qc.invalidateQueries({ queryKey: ["/api/pathologies"] });
       toast({ title: "Patologia removida!" });
       setSelectedPathology(null);
+    },
+  });
+
+  const duplicatePathology = useMutation({
+    mutationFn: async ({ id, targetAgeGroup }: { id: number; targetAgeGroup: string }) => {
+      const res = await apiRequest("POST", `/api/pathologies/${id}/duplicate`, { targetAgeGroup });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/pathologies"] });
+      toast({ title: "Patologia duplicada com sucesso!" });
+    },
+    onError: () => {
+      toast({ title: "Patologia já existe no grupo de idade alvo", variant: "destructive" });
     },
   });
 
@@ -2523,6 +2562,7 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
     setPathologyName("");
     setPathologyDescription("");
     setPathologyCategory("");
+    setPathologyClinicalCategory("");
     setPathologyAgeGroup("adulto");
   };
 
@@ -2535,11 +2575,27 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
       name: pathologyName,
       description: pathologyDescription,
       category: pathologyCategory,
+      clinicalCategory: pathologyClinicalCategory || null,
       ageGroup: pathologyAgeGroup,
       isPublic: true,
       isLocked: true,
     });
   };
+
+  const filteredPathologies = pathologies?.filter(p => p.ageGroup === activeTab) || [];
+  
+  const groupedPathologies = filteredPathologies.reduce((groups: Record<string, any[]>, p) => {
+    const category = p.clinicalCategory || p.category || "Sem Categoria";
+    if (!groups[category]) groups[category] = [];
+    groups[category].push(p);
+    return groups;
+  }, {});
+
+  const sortedCategories = Object.keys(groupedPathologies).sort((a, b) => {
+    if (a === "Sem Categoria") return 1;
+    if (b === "Sem Categoria") return -1;
+    return a.localeCompare(b, 'pt-BR');
+  });
 
   const handleAddMedication = () => {
     if (!selectedMedicationId) {
@@ -2703,12 +2759,17 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Categoria</label>
-                    <Input 
-                      value={pathologyCategory} 
-                      onChange={(e) => setPathologyCategory(e.target.value)}
-                      placeholder="Ex: Infecciosas"
-                    />
+                    <label className="text-sm font-medium">Categoria Clínica</label>
+                    <select 
+                      value={pathologyClinicalCategory} 
+                      onChange={(e) => setPathologyClinicalCategory(e.target.value)}
+                      className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                    >
+                      <option value="">-- Selecione --</option>
+                      {CLINICAL_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Faixa Etária</label>
@@ -2734,42 +2795,78 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
           <Button variant="outline" onClick={onBack}>Voltar</Button>
         </div>
       </CardHeader>
-      <CardContent>
-        {pathologies && pathologies.length > 0 ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Patologia</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Faixa Etária</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pathologies.map((p) => (
-                <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedPathology(p)}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell>{p.category || "-"}</TableCell>
-                  <TableCell>{p.ageGroup === "pediatrico" ? "Pediátrico" : "Adulto"}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {p.isPublic && <Badge variant="secondary">Pública</Badge>}
-                      {p.isLocked && <Badge variant="outline">Bloqueada</Badge>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deletePathology.mutate(p.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2 border-b pb-3">
+          <Button 
+            variant={activeTab === "adulto" ? "default" : "outline"} 
+            onClick={() => setActiveTab("adulto")}
+            data-testid="tab-adulto"
+          >
+            Adulto ({pathologies?.filter(p => p.ageGroup === "adulto").length || 0})
+          </Button>
+          <Button 
+            variant={activeTab === "pediatrico" ? "default" : "outline"} 
+            onClick={() => setActiveTab("pediatrico")}
+            data-testid="tab-pediatrico"
+          >
+            Pediátrico ({pathologies?.filter(p => p.ageGroup === "pediatrico").length || 0})
+          </Button>
+        </div>
+
+        {filteredPathologies.length > 0 ? (
+          <div className="space-y-6">
+            {sortedCategories.map(category => (
+              <div key={category} className="space-y-2">
+                <h3 className="font-semibold text-lg border-b pb-1">{category}</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Patologia</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedPathologies[category].map((p: any) => (
+                      <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedPathology(p)}>
+                        <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {p.isPublic && <Badge variant="secondary">Oficial</Badge>}
+                            {p.sourceGroup && <Badge variant="outline">{p.sourceGroup.replace(/_/g, " ")}</Badge>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-1">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => duplicatePathology.mutate({ 
+                                id: p.id, 
+                                targetAgeGroup: activeTab === "adulto" ? "pediatrico" : "adulto" 
+                              })}
+                              disabled={duplicatePathology.isPending}
+                              title={activeTab === "adulto" ? "Duplicar para Pediatria" : "Duplicar para Adulto"}
+                              data-testid={`button-duplicate-${p.id}`}
+                            >
+                              <Copy className="h-4 w-4 mr-1" />
+                              {activeTab === "adulto" ? "Ped" : "Adult"}
+                            </Button>
+                            <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deletePathology.mutate(p.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="text-center py-8 text-muted-foreground">
-            Nenhuma patologia cadastrada. Clique em "Nova Patologia" para começar.
+            Nenhuma patologia cadastrada para {activeTab === "adulto" ? "adultos" : "pediatria"}. Clique em "Nova Patologia" para começar.
           </div>
         )}
       </CardContent>
