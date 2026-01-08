@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
+import { insertMonthlyExpenseSchema, insertFinancialGoalSchema } from "@shared/schema";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
@@ -526,11 +527,13 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
   app.post("/api/monthly-expenses", isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
-      const item = await storage.createMonthlyExpense({ ...req.body, userId: getUserId(req) });
+      const input = insertMonthlyExpenseSchema.parse({ ...req.body, userId: getUserId(req) });
+      const item = await storage.createMonthlyExpense(input);
       res.status(201).json(item);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json(err);
-      throw err;
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0]?.message || "Dados inválidos" });
+      console.error("Error creating monthly expense:", err);
+      res.status(500).json({ message: "Erro ao criar gasto" });
     }
   });
 
@@ -539,7 +542,8 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       const item = await storage.updateMonthlyExpense(Number(req.params.id), req.body);
       res.json(item);
     } catch (err) {
-      res.status(500).json({ message: "Failed to update" });
+      console.error("Error updating monthly expense:", err);
+      res.status(500).json({ message: "Erro ao atualizar gasto" });
     }
   });
 
@@ -556,11 +560,13 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
   app.post("/api/financial-goals", isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
-      const item = await storage.createFinancialGoal({ ...req.body, userId: getUserId(req) });
+      const input = insertFinancialGoalSchema.parse({ ...req.body, userId: getUserId(req) });
+      const item = await storage.createFinancialGoal(input);
       res.status(201).json(item);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json(err);
-      throw err;
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0]?.message || "Dados inválidos" });
+      console.error("Error creating financial goal:", err);
+      res.status(500).json({ message: "Erro ao criar meta" });
     }
   });
 
@@ -569,7 +575,8 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       const item = await storage.updateFinancialGoal(Number(req.params.id), req.body);
       res.json(item);
     } catch (err) {
-      res.status(500).json({ message: "Failed to update" });
+      console.error("Error updating financial goal:", err);
+      res.status(500).json({ message: "Erro ao atualizar meta" });
     }
   });
 

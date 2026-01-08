@@ -35,56 +35,74 @@ export default function Finance() {
   });
 
   const createExpense = useMutation({
-    mutationFn: (data: any) => apiRequest('/api/monthly-expenses', 'POST', data),
+    mutationFn: (data: any) => apiRequest('POST', '/api/monthly-expenses', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/monthly-expenses'] });
       setExpenseDialogOpen(false);
       toast({ title: "Gasto adicionado com sucesso" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro ao adicionar gasto", description: error?.message || "Tente novamente", variant: "destructive" });
     }
   });
 
   const updateExpense = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest(`/api/monthly-expenses/${id}`, 'PUT', data),
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest('PUT', `/api/monthly-expenses/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/monthly-expenses'] });
       setExpenseDialogOpen(false);
       setEditingExpense(null);
       toast({ title: "Gasto atualizado" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro ao atualizar gasto", description: error?.message || "Tente novamente", variant: "destructive" });
     }
   });
 
   const deleteExpense = useMutation({
-    mutationFn: (id: number) => apiRequest(`/api/monthly-expenses/${id}`, 'DELETE'),
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/monthly-expenses/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/monthly-expenses'] });
       toast({ title: "Gasto removido" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro ao remover gasto", description: error?.message || "Tente novamente", variant: "destructive" });
     }
   });
 
   const createGoal = useMutation({
-    mutationFn: (data: any) => apiRequest('/api/financial-goals', 'POST', data),
+    mutationFn: (data: any) => apiRequest('POST', '/api/financial-goals', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/financial-goals'] });
       setGoalDialogOpen(false);
       toast({ title: "Meta adicionada" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro ao adicionar meta", description: error?.message || "Tente novamente", variant: "destructive" });
     }
   });
 
   const updateGoal = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest(`/api/financial-goals/${id}`, 'PUT', data),
+    mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest('PUT', `/api/financial-goals/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/financial-goals'] });
       setGoalDialogOpen(false);
       setEditingGoal(null);
       toast({ title: "Meta atualizada" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro ao atualizar meta", description: error?.message || "Tente novamente", variant: "destructive" });
     }
   });
 
   const deleteGoal = useMutation({
-    mutationFn: (id: number) => apiRequest(`/api/financial-goals/${id}`, 'DELETE'),
+    mutationFn: (id: number) => apiRequest('DELETE', `/api/financial-goals/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/financial-goals'] });
       toast({ title: "Meta removida" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro ao remover meta", description: error?.message || "Tente novamente", variant: "destructive" });
     }
   });
 
