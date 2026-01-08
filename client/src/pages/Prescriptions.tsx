@@ -1042,6 +1042,7 @@ function PathologiesView({
 function FavoritesView({ searchQuery }: { searchQuery: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [editingFavorite, setEditingFavorite] = useState<PrescriptionFavorite | null>(null);
   
   const { data: favorites, isLoading } = useQuery<PrescriptionFavorite[]>({
     queryKey: ["/api/prescription-favorites"],
@@ -1095,35 +1096,55 @@ function FavoritesView({ searchQuery }: { searchQuery: string }) {
   }
   
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {filtered.map((fav) => (
-        <Card key={fav.id} className="p-4 group" data-testid={`card-favorite-${fav.id}`}>
-          <div className="flex justify-between items-start mb-3">
-            <div className="flex items-center gap-2">
-              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-              <h3 className="font-bold text-slate-900">{fav.title || fav.medication}</h3>
+    <>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filtered.map((fav) => (
+          <Card key={fav.id} className="p-4 group" data-testid={`card-favorite-${fav.id}`}>
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex items-center gap-2">
+                <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                <h3 className="font-bold text-slate-900">{fav.title || fav.medication}</h3>
+              </div>
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  onClick={() => setEditingFavorite(fav)} 
+                  className="h-7 w-7"
+                  data-testid={`button-edit-favorite-${fav.id}`}
+                >
+                  <Edit className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="icon" variant="ghost" onClick={() => copyToClipboard(fav)} className="h-7 w-7">
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+                <QuickPrintButton prescription={{ medication: fav.medication, dose: fav.dose, quantity: fav.quantity, interval: fav.interval, duration: fav.duration, route: fav.route } as any} />
+                <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(fav.id)} className="h-7 w-7 text-red-400">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button size="icon" variant="ghost" onClick={() => copyToClipboard(fav)} className="h-7 w-7">
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
-              <QuickPrintButton prescription={{ medication: fav.medication, dose: fav.dose, quantity: fav.quantity, interval: fav.interval, duration: fav.duration, route: fav.route } as any} />
-              <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(fav.id)} className="h-7 w-7 text-red-400">
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
+            
+            <div className="space-y-1 text-sm text-slate-600">
+              {fav.medication && <p><strong>Medicação:</strong> {fav.medication}</p>}
+              {fav.dose && <p><strong>Dose:</strong> {fav.dose}</p>}
+              {fav.interval && <p><strong>Intervalo:</strong> {fav.interval}</p>}
+              {fav.duration && <p><strong>Duração:</strong> {fav.duration}</p>}
+              {fav.patientNotes && <p className="text-slate-500 italic">Obs: {fav.patientNotes}</p>}
             </div>
-          </div>
-          
-          <div className="space-y-1 text-sm text-slate-600">
-            {fav.medication && <p><strong>Medicação:</strong> {fav.medication}</p>}
-            {fav.dose && <p><strong>Dose:</strong> {fav.dose}</p>}
-            {fav.interval && <p><strong>Intervalo:</strong> {fav.interval}</p>}
-            {fav.duration && <p><strong>Duração:</strong> {fav.duration}</p>}
-            {fav.patientNotes && <p className="text-slate-500 italic">Obs: {fav.patientNotes}</p>}
-          </div>
-        </Card>
-      ))}
-    </div>
+          </Card>
+        ))}
+      </div>
+      
+      {editingFavorite && (
+        <EditFavoriteDialog
+          favorite={editingFavorite}
+          open={!!editingFavorite}
+          onOpenChange={(open) => !open && setEditingFavorite(null)}
+          onClose={() => setEditingFavorite(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -1934,6 +1955,181 @@ function ModifyMedicationDialog({
             data-testid="button-save-favorite"
           >
             <Star className="h-4 w-4" /> Salvar nos Favoritos
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditFavoriteDialog({ 
+  favorite,
+  open, 
+  onOpenChange,
+  onClose 
+}: { 
+  favorite: PrescriptionFavorite;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [formData, setFormData] = useState({
+    title: favorite.title || "",
+    medication: favorite.medication || "",
+    dose: favorite.dose || "",
+    interval: favorite.interval || "",
+    quantity: favorite.quantity || "",
+    duration: favorite.duration || "",
+    route: favorite.route || "",
+    timing: favorite.timing || "",
+    patientNotes: favorite.patientNotes || "",
+    orientations: favorite.orientations || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/prescription-favorites/${favorite.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescription-favorites"] });
+      toast({ 
+        title: "Salvo!",
+        description: "A prescrição foi atualizada."
+      });
+      onClose();
+    },
+    onError: () => {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Editar Prescrição</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          <div>
+            <label className="text-sm font-medium">Título</label>
+            <Input 
+              value={formData.title} 
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              data-testid="input-edit-title"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Medicação</label>
+            <Input 
+              value={formData.medication} 
+              onChange={(e) => setFormData({ ...formData, medication: e.target.value })}
+              data-testid="input-edit-medication"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Dose</label>
+              <Input 
+                value={formData.dose} 
+                onChange={(e) => setFormData({ ...formData, dose: e.target.value })}
+                data-testid="input-edit-dose"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Quantidade</label>
+              <Input 
+                value={formData.quantity} 
+                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                data-testid="input-edit-quantity"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Via</label>
+              <Select value={formData.route} onValueChange={(v) => setFormData({ ...formData, route: v })}>
+                <SelectTrigger data-testid="select-edit-route">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROUTES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Intervalo</label>
+              <Select value={formData.interval} onValueChange={(v) => setFormData({ ...formData, interval: v })}>
+                <SelectTrigger data-testid="select-edit-interval">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVALS.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Duração</label>
+              <Select value={formData.duration} onValueChange={(v) => setFormData({ ...formData, duration: v })}>
+                <SelectTrigger data-testid="select-edit-duration">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Horário</label>
+              <Select value={formData.timing} onValueChange={(v) => setFormData({ ...formData, timing: v })}>
+                <SelectTrigger data-testid="select-edit-timing">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMINGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Observações</label>
+            <Textarea 
+              value={formData.patientNotes} 
+              onChange={(e) => setFormData({ ...formData, patientNotes: e.target.value })}
+              rows={3}
+              data-testid="textarea-edit-notes"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Orientações / Sinais de Alarme</label>
+            <Textarea 
+              value={formData.orientations} 
+              onChange={(e) => setFormData({ ...formData, orientations: e.target.value })}
+              rows={2}
+              data-testid="textarea-edit-orientations"
+            />
+          </div>
+        </div>
+        
+        <DialogFooter className="flex gap-2">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button 
+            onClick={() => saveMutation.mutate()} 
+            disabled={saveMutation.isPending}
+            data-testid="button-save-edit"
+          >
+            Salvar Alterações
           </Button>
         </DialogFooter>
       </DialogContent>
