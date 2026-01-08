@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
@@ -623,19 +623,38 @@ interface ContraindicationItem {
   isActive: boolean;
 }
 
+interface DilutionItem {
+  id: number;
+  medicationName: string;
+  route: string;
+  dilutionNeeded: boolean;
+  dilutionHow: string;
+  infusionTime: string;
+  compatibility: string;
+  administrationNotes: string;
+  isActive: boolean;
+}
+
 function InteractionsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAddingInteraction, setIsAddingInteraction] = useState(false);
   const [isAddingContraindication, setIsAddingContraindication] = useState(false);
+  const [isAddingDilution, setIsAddingDilution] = useState(false);
+  const [isBulkImportDilution, setIsBulkImportDilution] = useState(false);
   const [editingInteraction, setEditingInteraction] = useState<DrugInteractionItem | null>(null);
   const [editingContraindication, setEditingContraindication] = useState<ContraindicationItem | null>(null);
+  const [editingDilution, setEditingDilution] = useState<DilutionItem | null>(null);
+  const [dilutionBulkData, setDilutionBulkData] = useState("");
 
   const [newInteraction, setNewInteraction] = useState({
     drug1: "", drug2: "", severity: "moderada", description: "", recommendation: ""
   });
   const [newContraindication, setNewContraindication] = useState({
     medicationName: "", contraindication: "", severity: "moderada", notes: ""
+  });
+  const [newDilution, setNewDilution] = useState({
+    medicationName: "", route: "IV", dilutionNeeded: false, dilutionHow: "", infusionTime: "", compatibility: "", administrationNotes: ""
   });
 
   const { data: interactions = [], isLoading: loadingInteractions } = useQuery<DrugInteractionItem[]>({
@@ -720,6 +739,70 @@ function InteractionsTab() {
     },
   });
 
+  const { data: dilutions = [], isLoading: loadingDilutions } = useQuery<DilutionItem[]>({
+    queryKey: ["/api/medication-dilutions"],
+  });
+
+  const createDilutionMutation = useMutation({
+    mutationFn: async (data: typeof newDilution) => {
+      const res = await apiRequest("POST", "/api/medication-dilutions", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/medication-dilutions"] });
+      toast({ title: "Diluição cadastrada!" });
+      setIsAddingDilution(false);
+      setNewDilution({ medicationName: "", route: "IV", dilutionNeeded: false, dilutionHow: "", infusionTime: "", compatibility: "", administrationNotes: "" });
+    },
+    onError: () => toast({ title: "Erro ao cadastrar", variant: "destructive" }),
+  });
+
+  const updateDilutionMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<DilutionItem> }) => {
+      const res = await apiRequest("PUT", `/api/medication-dilutions/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/medication-dilutions"] });
+      toast({ title: "Diluição atualizada!" });
+      setEditingDilution(null);
+    },
+    onError: () => toast({ title: "Erro ao atualizar", variant: "destructive" }),
+  });
+
+  const deleteDilutionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/medication-dilutions/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/medication-dilutions"] });
+      toast({ title: "Diluição removida!" });
+    },
+  });
+
+  const bulkImportDilutionMutation = useMutation({
+    mutationFn: async (data: string) => {
+      const res = await apiRequest("POST", "/api/medication-dilutions/bulk-import", { data });
+      return res.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/medication-dilutions"] });
+      toast({ title: `${result.imported} diluições importadas!` });
+      setIsBulkImportDilution(false);
+      setDilutionBulkData("");
+    },
+    onError: () => toast({ title: "Erro ao importar", variant: "destructive" }),
+  });
+
+  const routeOptions = [
+    { value: "IV", label: "Intravenoso (IV)" },
+    { value: "IM", label: "Intramuscular (IM)" },
+    { value: "SC", label: "Subcutâneo (SC)" },
+    { value: "VO", label: "Via Oral (VO)" },
+    { value: "VR", label: "Via Retal (VR)" },
+    { value: "Tópico", label: "Tópico" },
+  ];
+
   const severityOptions = [
     { value: "leve", label: "Leve" },
     { value: "moderada", label: "Moderada" },
@@ -734,7 +817,7 @@ function InteractionsTab() {
     contraindicada: "bg-red-200 text-red-900",
   };
 
-  if (loadingInteractions || loadingContraindications) {
+  if (loadingInteractions || loadingContraindications || loadingDilutions) {
     return <div className="flex justify-center p-8"><PageLoader text="Carregando..." /></div>;
   }
 
@@ -969,6 +1052,179 @@ function InteractionsTab() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Syringe className="h-5 w-5 text-blue-500" /> Diluições e Administração
+            </CardTitle>
+            <CardDescription>Cadastre informações de diluição e administração de medicamentos IV/IM/SC.</CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Dialog open={isBulkImportDilution} onOpenChange={setIsBulkImportDilution}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-1" data-testid="button-bulk-import-dilutions">
+                  <Upload className="h-4 w-4" /> Importar
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Importar Diluições em Massa</DialogTitle>
+                  <DialogDescription>
+                    Formato: medicamento;via;requer_diluicao;como_diluir;tempo_infusao;compatibilidade;notas
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <Textarea
+                    value={dilutionBulkData}
+                    onChange={(e) => setDilutionBulkData(e.target.value)}
+                    placeholder="Vancomicina;IV;sim;Diluir em 100-200mL SF;Infundir em 60min;Compatível com SF/SG5%;Nefrotóxico"
+                    className="min-h-[200px] font-mono text-sm"
+                    data-testid="textarea-bulk-dilutions"
+                  />
+                  <Button
+                    onClick={() => bulkImportDilutionMutation.mutate(dilutionBulkData)}
+                    disabled={!dilutionBulkData.trim() || bulkImportDilutionMutation.isPending}
+                    className="w-full"
+                    data-testid="button-import-dilutions"
+                  >
+                    {bulkImportDilutionMutation.isPending ? "Importando..." : "Importar Diluições"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={isAddingDilution} onOpenChange={setIsAddingDilution}>
+              <DialogTrigger asChild>
+                <Button className="gap-1" data-testid="button-add-dilution">
+                  <Plus className="h-4 w-4" /> Nova Diluição
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Nova Diluição</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Medicamento</label>
+                      <Input
+                        value={newDilution.medicationName}
+                        onChange={(e) => setNewDilution({ ...newDilution, medicationName: e.target.value })}
+                        placeholder="Ex: Vancomicina"
+                        data-testid="input-dilution-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Via</label>
+                      <select
+                        className="w-full h-9 px-3 rounded-md border bg-background"
+                        value={newDilution.route}
+                        onChange={(e) => setNewDilution({ ...newDilution, route: e.target.value })}
+                        data-testid="select-dilution-route"
+                      >
+                        {routeOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="dilutionNeeded"
+                      checked={newDilution.dilutionNeeded}
+                      onChange={(e) => setNewDilution({ ...newDilution, dilutionNeeded: e.target.checked })}
+                    />
+                    <label htmlFor="dilutionNeeded" className="text-sm font-medium">Requer diluição</label>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Como diluir</label>
+                    <Input
+                      value={newDilution.dilutionHow}
+                      onChange={(e) => setNewDilution({ ...newDilution, dilutionHow: e.target.value })}
+                      placeholder="Ex: Diluir em 100-200mL SF 0,9%"
+                      data-testid="input-dilution-how"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Tempo de infusão</label>
+                    <Input
+                      value={newDilution.infusionTime}
+                      onChange={(e) => setNewDilution({ ...newDilution, infusionTime: e.target.value })}
+                      placeholder="Ex: Infundir em 60 minutos"
+                      data-testid="input-dilution-time"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Compatibilidade</label>
+                    <Input
+                      value={newDilution.compatibility}
+                      onChange={(e) => setNewDilution({ ...newDilution, compatibility: e.target.value })}
+                      placeholder="Ex: Compatível com SF, SG5%"
+                      data-testid="input-dilution-compat"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Notas de administração</label>
+                    <Textarea
+                      value={newDilution.administrationNotes}
+                      onChange={(e) => setNewDilution({ ...newDilution, administrationNotes: e.target.value })}
+                      placeholder="Observações importantes..."
+                      data-testid="textarea-dilution-notes"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => createDilutionMutation.mutate(newDilution)}
+                    disabled={!newDilution.medicationName || createDilutionMutation.isPending}
+                    className="w-full"
+                    data-testid="button-save-dilution"
+                  >
+                    {createDilutionMutation.isPending ? "Salvando..." : "Salvar Diluição"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {dilutions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Nenhuma diluição cadastrada.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Medicamento</TableHead>
+                  <TableHead>Via</TableHead>
+                  <TableHead>Diluição</TableHead>
+                  <TableHead>Tempo</TableHead>
+                  <TableHead className="w-24">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dilutions.map((d) => (
+                  <TableRow key={d.id} data-testid={`row-dilution-${d.id}`}>
+                    <TableCell className="font-medium">{d.medicationName}</TableCell>
+                    <TableCell><Badge variant="outline">{d.route}</Badge></TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{d.dilutionHow || "-"}</TableCell>
+                    <TableCell className="text-sm">{d.infusionTime || "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => setEditingDilution(d)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => deleteDilutionMutation.mutate(d.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {editingInteraction && (
         <Dialog open={!!editingInteraction} onOpenChange={() => setEditingInteraction(null)}>
           <DialogContent>
@@ -1076,6 +1332,83 @@ function InteractionsTab() {
                 className="w-full"
               >
                 {updateContraindicationMutation.isPending ? "Salvando..." : "Atualizar Contraindicação"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {editingDilution && (
+        <Dialog open={!!editingDilution} onOpenChange={() => setEditingDilution(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Diluição</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Medicamento</label>
+                  <Input
+                    value={editingDilution.medicationName}
+                    onChange={(e) => setEditingDilution({ ...editingDilution, medicationName: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Via</label>
+                  <select
+                    className="w-full h-9 px-3 rounded-md border bg-background"
+                    value={editingDilution.route}
+                    onChange={(e) => setEditingDilution({ ...editingDilution, route: e.target.value })}
+                  >
+                    {routeOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="editDilutionNeeded"
+                  checked={editingDilution.dilutionNeeded}
+                  onChange={(e) => setEditingDilution({ ...editingDilution, dilutionNeeded: e.target.checked })}
+                />
+                <label htmlFor="editDilutionNeeded" className="text-sm font-medium">Requer diluição</label>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Como diluir</label>
+                <Input
+                  value={editingDilution.dilutionHow}
+                  onChange={(e) => setEditingDilution({ ...editingDilution, dilutionHow: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tempo de infusão</label>
+                <Input
+                  value={editingDilution.infusionTime}
+                  onChange={(e) => setEditingDilution({ ...editingDilution, infusionTime: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Compatibilidade</label>
+                <Input
+                  value={editingDilution.compatibility}
+                  onChange={(e) => setEditingDilution({ ...editingDilution, compatibility: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Notas de administração</label>
+                <Textarea
+                  value={editingDilution.administrationNotes}
+                  onChange={(e) => setEditingDilution({ ...editingDilution, administrationNotes: e.target.value })}
+                />
+              </div>
+              <Button
+                onClick={() => updateDilutionMutation.mutate({ id: editingDilution.id, data: editingDilution })}
+                disabled={updateDilutionMutation.isPending}
+                className="w-full"
+              >
+                {updateDilutionMutation.isPending ? "Salvando..." : "Atualizar Diluição"}
               </Button>
             </div>
           </DialogContent>
