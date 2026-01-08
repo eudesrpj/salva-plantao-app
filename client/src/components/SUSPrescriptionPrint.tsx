@@ -29,9 +29,11 @@ interface SUSPrescriptionPrintProps {
   patientName?: string;
   patientAge?: string;
   trigger?: React.ReactNode;
+  warningSigns?: string[];
+  onPrintComplete?: () => void;
 }
 
-export function SUSPrescriptionPrint({ prescriptions, patientName: initialPatientName, patientAge: initialPatientAge, trigger }: SUSPrescriptionPrintProps) {
+export function SUSPrescriptionPrint({ prescriptions, patientName: initialPatientName, patientAge: initialPatientAge, trigger, warningSigns = [], onPrintComplete }: SUSPrescriptionPrintProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [patientName, setPatientName] = useState(initialPatientName || "");
@@ -45,7 +47,7 @@ export function SUSPrescriptionPrint({ prescriptions, patientName: initialPatien
     queryKey: ["/api/doctor-profile"],
   });
 
-  const doctorName = user?.name || user?.username || "";
+  const doctorName = user?.firstName ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}` : "";
   const today = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
 
   const handlePrint = () => {
@@ -195,6 +197,8 @@ export function SUSPrescriptionPrint({ prescriptions, patientName: initialPatien
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
+      setIsOpen(false);
+      onPrintComplete?.();
     }, 250);
   };
 
@@ -235,13 +239,21 @@ export function SUSPrescriptionPrint({ prescriptions, patientName: initialPatien
           </div>
         ))}
 
-        {(additionalNotes || prescriptions.some(p => p.orientations)) && (
+        {(additionalNotes || prescriptions.some(p => p.orientations) || warningSigns.length > 0) && (
           <div className="orientations">
             <div className="orientations-title">Orientações / Sinais de Alarme:</div>
             {prescriptions.filter(p => p.orientations).map((p, idx) => (
               <div key={idx}>- {p.orientations}</div>
             ))}
             {additionalNotes && <div>- {additionalNotes}</div>}
+            {warningSigns.length > 0 && (
+              <>
+                <div style={{ marginTop: '8px', fontWeight: 'bold' }}>PROCURE ATENDIMENTO MÉDICO SE:</div>
+                {warningSigns.map((sign, idx) => (
+                  <div key={idx}>• {sign}</div>
+                ))}
+              </>
+            )}
           </div>
         )}
       </div>

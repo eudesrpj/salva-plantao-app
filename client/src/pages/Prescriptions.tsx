@@ -27,6 +27,30 @@ const TIMINGS = ["Jejum", "Com alimentação", "Antes de dormir", "Longe das ref
 const CATEGORIES = ["Analgesia", "Antibióticos", "Anti-inflamatórios", "Antieméticos", "Cardiovascular", "Neurologia", "Gastro", "Outros"];
 const PATHOLOGY_CATEGORIES = ["Infectologia", "Cardiologia", "Pneumologia", "Gastroenterologia", "Neurologia", "Ortopedia", "Dermatologia", "Endocrinologia", "Nefrologia", "Outros"];
 
+// Common warning signs (sinais de alarme) for different conditions
+const COMMON_WARNING_SIGNS = [
+  "Febre persistente (>72h) ou febre alta (>39°C)",
+  "Dificuldade para respirar ou falta de ar",
+  "Dor torácica ou palpitações",
+  "Vômitos persistentes ou incoercíveis",
+  "Diarreia com sangue ou desidratação",
+  "Sinais de desidratação (boca seca, urina escura, tontura)",
+  "Alteração do nível de consciência ou confusão mental",
+  "Convulsões",
+  "Dor abdominal intensa ou rigidez abdominal",
+  "Sangramento ativo ou sangue nas fezes/urina",
+  "Erupção cutânea que não desaparece com pressão",
+  "Piora significativa dos sintomas",
+  "Sintomas que não melhoram após 48-72h de tratamento",
+  "Recusa alimentar (especialmente em crianças)",
+  "Choro inconsolável ou irritabilidade extrema (crianças)",
+  "Manchas roxas na pele (petéquias/equimoses)",
+  "Inchaço progressivo em membros ou face",
+  "Dor de cabeça intensa e persistente",
+  "Rigidez de nuca",
+  "Dificuldade para engolir ou babar excessivamente",
+];
+
 const ALLERGY_CLASSES: Record<string, string[]> = {
   "penicilina": ["amoxicilina", "ampicilina", "amoxicilina+clavulanato", "oxacilina", "penicilina", "piperacilina"],
   "cefalosporina": ["cefalexina", "cefazolina", "ceftriaxona", "cefuroxima", "cefepime", "ceftazidima"],
@@ -1454,6 +1478,10 @@ function PathologyCard({
   const [selectedModel, setSelectedModel] = useState<number | null>(null);
   const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
   const [modifyMedication, setModifyMedication] = useState<PathologyMedication | null>(null);
+  const [showWarningSignsDialog, setShowWarningSignsDialog] = useState(false);
+  const [selectedWarningSigns, setSelectedWarningSigns] = useState<string[]>([]);
+  const [customWarningSign, setCustomWarningSign] = useState("");
+  const [printAction, setPrintAction] = useState<"copy" | "print">("copy");
 
   const { data: medications, isLoading } = useQuery<PathologyMedication[]>({
     queryKey: ["/api/pathologies", pathology.id, "medications"],
@@ -1487,6 +1515,63 @@ function PathologyCard({
   });
 
   const currentModel = prescriptionModels?.find(m => m.id === selectedModel);
+
+  const toggleWarningSign = (sign: string) => {
+    setSelectedWarningSigns(prev => 
+      prev.includes(sign) 
+        ? prev.filter(s => s !== sign) 
+        : [...prev, sign]
+    );
+  };
+
+  const addCustomWarningSign = () => {
+    if (customWarningSign.trim() && !selectedWarningSigns.includes(customWarningSign.trim())) {
+      setSelectedWarningSigns(prev => [...prev, customWarningSign.trim()]);
+      setCustomWarningSign("");
+    }
+  };
+
+  const formatWarningSignsText = () => {
+    if (selectedWarningSigns.length === 0) return "";
+    return `\nSINAIS DE ALARME - PROCURE ATENDIMENTO MÉDICO SE:\n${selectedWarningSigns.map((s, i) => `• ${s}`).join("\n")}\n`;
+  };
+
+  const openWarningSignsDialog = (action: "copy" | "print") => {
+    setPrintAction(action);
+    setShowWarningSignsDialog(true);
+  };
+
+  const executeAction = () => {
+    if (printAction === "copy") {
+      copyAllMedicationsWithSigns();
+    }
+    setShowWarningSignsDialog(false);
+  };
+
+  const copyAllMedicationsWithSigns = () => {
+    if (!medications || medications.length === 0) return;
+    
+    const header = `PRESCRIÇÃO - ${pathology.name.toUpperCase()}`;
+    const separator = "=".repeat(40);
+    
+    const formattedMeds = medications.map((m, idx) => formatMedicationSUS(m, idx + 1));
+    
+    const warningSigns = formatWarningSignsText();
+    
+    const text = [
+      separator,
+      header,
+      separator,
+      "",
+      ...formattedMeds,
+      "",
+      warningSigns,
+      separator,
+    ].filter(Boolean).join("\n");
+    
+    navigator.clipboard.writeText(text);
+    toast({ title: "Prescrição copiada!", description: "Formato padrão SUS com sinais de alarme." });
+  };
 
   const copyModelPrescription = () => {
     if (!modelMedications || modelMedications.length === 0 || !currentModel) return;
@@ -1742,27 +1827,13 @@ function PathologyCard({
                         );
                       })}
                     </div>
-                    <div className="pt-2 border-t flex gap-2">
-                      <Button onClick={copyAllMedications} className="flex-1 gap-2" data-testid="button-copy-prescription-sus">
-                        <Copy className="h-4 w-4" /> Copiar (Padrão SUS)
+                    <div className="pt-2 border-t flex gap-2 flex-wrap">
+                      <Button onClick={() => openWarningSignsDialog("copy")} className="flex-1 gap-2" data-testid="button-copy-prescription-sus">
+                        <Copy className="h-4 w-4" /> Copiar
                       </Button>
-                      <SUSPrescriptionPrint
-                        prescriptions={medications.map(med => ({
-                          medication: med.medication,
-                          dose: med.dose || "",
-                          quantity: med.quantity || "",
-                          interval: med.interval || "",
-                          duration: med.duration || "",
-                          route: med.route || "",
-                          timing: med.timing || "",
-                          orientations: med.observations || "",
-                        }))}
-                        trigger={
-                          <Button variant="outline" className="gap-2" data-testid="button-print-pathology-prescription">
-                            <Printer className="h-4 w-4" /> Imprimir
-                          </Button>
-                        }
-                      />
+                      <Button onClick={() => openWarningSignsDialog("print")} variant="outline" className="gap-2" data-testid="button-print-pathology-prescription">
+                        <Printer className="h-4 w-4" /> Imprimir
+                      </Button>
                     </div>
                   </>
                 )}
@@ -1790,6 +1861,119 @@ function PathologyCard({
           }}
         />
       )}
+      
+      <Dialog open={showWarningSignsDialog} onOpenChange={setShowWarningSignsDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-500" />
+              Sinais de Alarme - {pathology.name}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Selecione os sinais de alarme que deseja incluir na prescrição. O paciente será orientado a retornar caso apresente algum deles.
+            </p>
+            
+            <div className="space-y-3">
+              <h4 className="font-medium text-sm">Sinais de Alarme Comuns:</h4>
+              <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto p-2 border rounded-md bg-muted/20">
+                {COMMON_WARNING_SIGNS.map((sign) => (
+                  <label 
+                    key={sign} 
+                    className="flex items-start gap-3 p-2 hover:bg-muted/50 rounded-md cursor-pointer"
+                  >
+                    <Checkbox 
+                      checked={selectedWarningSigns.includes(sign)}
+                      onCheckedChange={() => toggleWarningSign(sign)}
+                      className="mt-0.5"
+                    />
+                    <span className="text-sm">{sign}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm">Adicionar sinal personalizado:</h4>
+              <div className="flex gap-2">
+                <Input 
+                  value={customWarningSign}
+                  onChange={(e) => setCustomWarningSign(e.target.value)}
+                  placeholder="Digite um sinal de alarme específico..."
+                  onKeyDown={(e) => e.key === "Enter" && addCustomWarningSign()}
+                  data-testid="input-custom-warning-sign"
+                />
+                <Button variant="outline" onClick={addCustomWarningSign} data-testid="button-add-warning-sign">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            
+            {selectedWarningSigns.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-sm">Selecionados ({selectedWarningSigns.length}):</h4>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setSelectedWarningSigns([])}
+                    className="text-muted-foreground"
+                  >
+                    Limpar todos
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedWarningSigns.map((sign) => (
+                    <Badge 
+                      key={sign} 
+                      variant="secondary" 
+                      className="flex items-center gap-1 py-1"
+                    >
+                      <span className="max-w-[200px] truncate">{sign}</span>
+                      <button onClick={() => toggleWarningSign(sign)} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => setShowWarningSignsDialog(false)}>
+              Cancelar
+            </Button>
+            {printAction === "copy" ? (
+              <Button onClick={executeAction} className="gap-2" data-testid="button-confirm-copy-warning">
+                <Copy className="h-4 w-4" /> Copiar Prescrição
+              </Button>
+            ) : (
+              <SUSPrescriptionPrint
+                prescriptions={(medications || []).map(med => ({
+                  medication: med.medication,
+                  dose: med.dose || "",
+                  quantity: med.quantity || "",
+                  interval: med.interval || "",
+                  duration: med.duration || "",
+                  route: med.route || "",
+                  timing: med.timing || "",
+                  orientations: med.observations || "",
+                }))}
+                warningSigns={selectedWarningSigns}
+                trigger={
+                  <Button className="gap-2" data-testid="button-confirm-print-warning">
+                    <Printer className="h-4 w-4" /> Imprimir Prescrição
+                  </Button>
+                }
+                onPrintComplete={() => setShowWarningSignsDialog(false)}
+              />
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
