@@ -32,7 +32,8 @@ import {
   FileCheck,
   ArrowRightLeft,
   MessageCircle,
-  Upload
+  Upload,
+  Heart
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -56,6 +57,7 @@ const NAV_ITEMS = [
   { icon: MessageCircle, label: "Assistente IA", href: "/ai-webview" },
   { icon: Library, label: "Biblioteca", href: "/library" },
   { icon: StickyNote, label: "Anotações", href: "/notes" },
+  { icon: Heart, label: "Doar", href: "/donate" },
   { icon: User, label: "Meu Perfil", href: "/profile" },
   { icon: Palette, label: "Personalizar", href: "/settings" },
 ];

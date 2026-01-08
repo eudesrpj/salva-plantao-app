@@ -39,6 +39,7 @@ import Referral from "@/pages/Referral";
 import AiWebView from "@/pages/AiWebView";
 import Memorize from "@/pages/Memorize";
 import ImportTemplates from "@/pages/ImportTemplates";
+import Donate from "@/pages/Donate";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -164,6 +165,10 @@ function Router() {
 
       <Route path="/settings">
         <ProtectedRoute component={Settings} />
+      </Route>
+
+      <Route path="/donate">
+        <ProtectedRoute component={Donate} />
       </Route>
 
       <Route path="/drug-interactions">
