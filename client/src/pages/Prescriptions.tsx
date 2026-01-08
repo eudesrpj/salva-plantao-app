@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer, Share2, Download, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer, Share2, Download, AlertTriangle, ShieldAlert } from "lucide-react";
 import { QuickPrintButton, SUSPrescriptionPrint } from "@/components/SUSPrescriptionPrint";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -76,7 +76,7 @@ function checkMedicationAllergy(medicationName: string, patientAllergies: string
 }
 
 export default function Prescriptions() {
-  const [mainTab, setMainTab] = useState<"oficiais" | "minhas" | "patologias">("patologias");
+  const [mainTab, setMainTab] = useState<"minhas" | "patologias">("patologias");
   const [ageGroup, setAgeGroup] = useState<"adulto" | "pediatrico">("adulto");
   const [searchQuery, setSearchQuery] = useState("");
   const [draftPrescription, setDraftPrescription] = useState<Prescription | null>(null);
@@ -123,10 +123,9 @@ export default function Prescriptions() {
     },
   });
 
-  const officialPrescriptions = prescriptions?.filter(p => p.isPublic || p.isLocked);
   const myPrescriptions = prescriptions?.filter(p => p.userId === user?.id && !p.isPublic && !p.isLocked);
 
-  const currentList = mainTab === "oficiais" ? officialPrescriptions : myPrescriptions;
+  const currentList = myPrescriptions;
 
   const filtered = currentList?.filter(p => 
     !searchQuery || 
@@ -172,13 +171,10 @@ export default function Prescriptions() {
         </div>
       </header>
       
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "oficiais" | "minhas" | "patologias")} className="w-auto">
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "minhas" | "patologias")} className="w-auto">
         <TabsList className="w-auto">
           <TabsTrigger value="patologias" className="gap-1" data-testid="tab-patologias">
             <FileText className="h-4 w-4" /> Por Patologia
-          </TabsTrigger>
-          <TabsTrigger value="oficiais" className="gap-1" data-testid="tab-oficiais">
-            <BookOpen className="h-4 w-4" /> Todas Oficiais
           </TabsTrigger>
           <TabsTrigger value="minhas" className="gap-1" data-testid="tab-minhas">
             <Heart className="h-4 w-4" /> Minhas Prescrições
