@@ -424,6 +424,385 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
+  // Calculator Allowed Meds (Admin)
+  app.get("/api/calculator-allowed-meds", isAuthenticated, async (req, res) => {
+    try {
+      const patientType = req.query.patientType as string | undefined;
+      const meds = await storage.getCalculatorAllowedMeds(patientType);
+      res.json(meds);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar medicamentos autorizados" });
+    }
+  });
+
+  app.post("/api/admin/calculator-allowed-meds", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const med = await storage.createCalculatorAllowedMed(req.body);
+      res.json(med);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao adicionar medicamento autorizado" });
+    }
+  });
+
+  app.delete("/api/admin/calculator-allowed-meds/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      await storage.deleteCalculatorAllowedMed(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao remover medicamento autorizado" });
+    }
+  });
+
+  // Dashboard Config
+  app.get("/api/dashboard-config", isAuthenticated, async (req, res) => {
+    try {
+      const scope = req.query.scope as string || "user_default";
+      const config = await storage.getDashboardConfig(scope);
+      res.json(config || { widgets: [] });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar config do dashboard" });
+    }
+  });
+
+  app.post("/api/admin/dashboard-config", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const config = await storage.upsertDashboardConfig(req.body);
+      res.json(config);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao salvar config do dashboard" });
+    }
+  });
+
+  // Quick Access Config
+  app.get("/api/quick-access-config", isAuthenticated, async (req, res) => {
+    try {
+      const patientType = req.query.patientType as string | undefined;
+      const configs = await storage.getQuickAccessConfigs(patientType);
+      res.json(configs);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar config de acesso rápido" });
+    }
+  });
+
+  app.post("/api/admin/quick-access-config", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const config = await storage.upsertQuickAccessConfig(req.body);
+      res.json(config);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao salvar config de acesso rápido" });
+    }
+  });
+
+  // Donation Causes
+  app.get("/api/donation-causes", isAuthenticated, async (req, res) => {
+    try {
+      const activeOnly = req.query.activeOnly === "true";
+      const causes = await storage.getDonationCauses(activeOnly);
+      res.json(causes);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar causas de doação" });
+    }
+  });
+
+  app.get("/api/donation-causes/:id", isAuthenticated, async (req, res) => {
+    try {
+      const cause = await storage.getDonationCause(parseInt(req.params.id));
+      if (!cause) return res.status(404).json({ message: "Causa não encontrada" });
+      res.json(cause);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar causa" });
+    }
+  });
+
+  app.post("/api/admin/donation-causes", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const cause = await storage.createDonationCause(req.body);
+      res.json(cause);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao criar causa" });
+    }
+  });
+
+  app.patch("/api/admin/donation-causes/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const cause = await storage.updateDonationCause(parseInt(req.params.id), req.body);
+      res.json(cause);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao atualizar causa" });
+    }
+  });
+
+  app.delete("/api/admin/donation-causes/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      await storage.deleteDonationCause(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao excluir causa" });
+    }
+  });
+
+  // Donations
+  app.get("/api/donations", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const isAdmin = user?.role === "admin";
+      const donations = await storage.getDonations(isAdmin ? undefined : user.id);
+      res.json(donations);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar doações" });
+    }
+  });
+
+  app.get("/api/donations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const donation = await storage.getDonation(parseInt(req.params.id));
+      if (!donation) return res.status(404).json({ message: "Doação não encontrada" });
+      res.json(donation);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar doação" });
+    }
+  });
+
+  app.post("/api/donations", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const donation = await storage.createDonation({ ...req.body, userId: user.id });
+      res.json(donation);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao criar doação" });
+    }
+  });
+
+  app.patch("/api/admin/donations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const donation = await storage.updateDonation(parseInt(req.params.id), req.body);
+      res.json(donation);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao atualizar doação" });
+    }
+  });
+
+  // Donation Receipts
+  app.get("/api/donations/:id/receipts", isAuthenticated, async (req, res) => {
+    try {
+      const receipts = await storage.getDonationReceipts(parseInt(req.params.id));
+      res.json(receipts);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar comprovantes" });
+    }
+  });
+
+  app.post("/api/admin/donations/:id/receipts", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const receipt = await storage.createDonationReceipt({ ...req.body, donationId: parseInt(req.params.id) });
+      res.json(receipt);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao criar comprovante" });
+    }
+  });
+
+  // Batch Operations (Admin only)
+  app.post("/api/admin/batch/medications/activate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      const results = await Promise.all(ids.map(id => storage.updateMedication(id, { isActive: true })));
+      res.json({ updated: results.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao ativar medicamentos" });
+    }
+  });
+
+  app.post("/api/admin/batch/medications/deactivate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      const results = await Promise.all(ids.map(id => storage.updateMedication(id, { isActive: false })));
+      res.json({ updated: results.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao desativar medicamentos" });
+    }
+  });
+
+  app.post("/api/admin/batch/medications/delete", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      await Promise.all(ids.map(id => storage.deleteMedication(id)));
+      res.json({ deleted: ids.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao excluir medicamentos" });
+    }
+  });
+
+  app.post("/api/admin/batch/pathologies/activate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      const results = await Promise.all(ids.map(id => storage.updatePathology(id, { isPublic: true })));
+      res.json({ updated: results.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao ativar patologias" });
+    }
+  });
+
+  app.post("/api/admin/batch/pathologies/deactivate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      const results = await Promise.all(ids.map(id => storage.updatePathology(id, { isPublic: false })));
+      res.json({ updated: results.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao desativar patologias" });
+    }
+  });
+
+  app.post("/api/admin/batch/pathologies/delete", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      await Promise.all(ids.map(id => storage.deletePathology(id)));
+      res.json({ deleted: ids.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao excluir patologias" });
+    }
+  });
+
+  app.post("/api/admin/batch/protocols/activate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      const results = await Promise.all(ids.map(id => storage.updateProtocol(id, { isPublic: true })));
+      res.json({ updated: results.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao ativar protocolos" });
+    }
+  });
+
+  app.post("/api/admin/batch/protocols/deactivate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      const results = await Promise.all(ids.map(id => storage.updateProtocol(id, { isPublic: false })));
+      res.json({ updated: results.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao desativar protocolos" });
+    }
+  });
+
+  app.post("/api/admin/batch/protocols/delete", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      await Promise.all(ids.map(id => storage.deleteProtocol(id)));
+      res.json({ deleted: ids.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao excluir protocolos" });
+    }
+  });
+
+  app.post("/api/admin/batch/checklists/activate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      const results = await Promise.all(ids.map(id => storage.updateChecklist(id, { isPublic: true })));
+      res.json({ updated: results.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao ativar checklists" });
+    }
+  });
+
+  app.post("/api/admin/batch/checklists/deactivate", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      const results = await Promise.all(ids.map(id => storage.updateChecklist(id, { isPublic: false })));
+      res.json({ updated: results.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao desativar checklists" });
+    }
+  });
+
+  app.post("/api/admin/batch/checklists/delete", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs são obrigatórios" });
+      }
+      await Promise.all(ids.map(id => storage.deleteChecklist(id)));
+      res.json({ deleted: ids.length });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao excluir checklists" });
+    }
+  });
+
+  // Export selected items
+  app.post("/api/admin/batch/export", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { entityType, ids, format = "json" } = req.body;
+      if (!entityType || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "entityType e ids são obrigatórios" });
+      }
+
+      let items: any[] = [];
+      switch (entityType) {
+        case "medications":
+          items = await Promise.all(ids.map(id => storage.getMedication(id)));
+          break;
+        case "pathologies":
+          items = await Promise.all(ids.map(id => storage.getPathology(id)));
+          break;
+        case "protocols":
+          items = await Promise.all(ids.map(id => storage.getProtocol(id)));
+          break;
+        case "checklists":
+          items = await Promise.all(ids.map(id => storage.getChecklist(id)));
+          break;
+        default:
+          return res.status(400).json({ message: "Tipo de entidade inválido" });
+      }
+
+      items = items.filter(Boolean);
+
+      if (format === "csv") {
+        if (items.length === 0) {
+          return res.status(404).json({ message: "Nenhum item encontrado" });
+        }
+        const headers = Object.keys(items[0]).join(";");
+        const rows = items.map(item => Object.values(item).map(v => typeof v === "object" ? JSON.stringify(v) : v).join(";"));
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename=${entityType}_export.csv`);
+        res.send([headers, ...rows].join("\n"));
+      } else {
+        res.json({ [entityType]: items });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao exportar dados" });
+    }
+  });
+
   // User bulk import checklists (personal)
   app.post("/api/user/import/checklists", isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
