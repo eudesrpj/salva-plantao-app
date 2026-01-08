@@ -1393,7 +1393,8 @@ interface Payment {
 function SubscriptionsTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: subscriptions, isLoading } = useQuery<Subscription[]>({
     queryKey: ["/api/admin/subscriptions"],
@@ -1404,15 +1405,15 @@ function SubscriptionsTab() {
     },
   });
 
-  const { data: payments } = useQuery<Payment[]>({
-    queryKey: ["/api/admin/payments", selectedUserId],
+  const { data: payments, isLoading: loadingPayments } = useQuery<Payment[]>({
+    queryKey: ["/api/admin/payments", selectedSubscription?.id],
     queryFn: async () => {
-      if (!selectedUserId) return [];
-      const res = await fetch(`/api/admin/payments/${selectedUserId}`, { credentials: "include" });
+      if (!selectedSubscription) return [];
+      const res = await fetch(`/api/admin/payments/${selectedSubscription.userId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
-    enabled: !!selectedUserId,
+    enabled: !!selectedSubscription && dialogOpen,
   });
 
   const confirmPaymentMutation = useMutation({
@@ -1422,10 +1423,17 @@ function SubscriptionsTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/admin/subscriptions"] });
-      qc.invalidateQueries({ queryKey: ["/api/admin/payments", selectedUserId] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/payments", selectedSubscription?.id] });
       toast({ title: "Pagamento confirmado!", description: "A assinatura do usuário foi ativada." });
+      setDialogOpen(false);
     },
-    onError: () => toast({ title: "Erro ao confirmar pagamento", variant: "destructive" }),
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro ao confirmar pagamento", 
+        description: error?.message || "Tente novamente.",
+        variant: "destructive" 
+      });
+    },
   });
 
   const getStatusBadge = (status: string) => {
@@ -1497,12 +1505,15 @@ function SubscriptionsTab() {
                       {sub.nextBillingDate ? new Date(sub.nextBillingDate).toLocaleDateString("pt-BR") : "-"}
                     </TableCell>
                     <TableCell>
-                      <Dialog>
+                      <Dialog open={dialogOpen && selectedSubscription?.id === sub.id} onOpenChange={(open) => {
+                        setDialogOpen(open);
+                        if (open) setSelectedSubscription(sub);
+                        else setSelectedSubscription(null);
+                      }}>
                         <DialogTrigger asChild>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setSelectedUserId(sub.userId)}
                             data-testid={`button-view-payments-${sub.id}`}
                           >
                             Ver Pagamentos
@@ -1513,7 +1524,11 @@ function SubscriptionsTab() {
                             <DialogTitle>Pagamentos do Usuário</DialogTitle>
                           </DialogHeader>
                           <div className="space-y-4 max-h-96 overflow-y-auto">
-                            {payments && payments.length > 0 ? (
+                            {loadingPayments ? (
+                              <div className="flex justify-center py-8">
+                                <Loader2 className="h-8 w-8 animate-spin" />
+                              </div>
+                            ) : payments && payments.length > 0 ? (
                               <Table>
                                 <TableHeader>
                                   <TableRow>

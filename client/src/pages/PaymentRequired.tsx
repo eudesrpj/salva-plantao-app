@@ -119,13 +119,30 @@ export default function PaymentRequired() {
       ? Math.floor(priceCents * (Number(appliedCoupon.discountValue) / 100))
       : Math.floor(Number(appliedCoupon.discountValue) * 100)
     : 0;
-  const finalPrice = (priceCents - discountCents) / 100;
+  const finalPriceCents = Math.max(0, priceCents - discountCents);
+  const finalPrice = finalPriceCents / 100;
 
-  const copyText = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast({ title: "Copiado!", description: "Código copiado para a área de transferência." });
-    setTimeout(() => setCopied(false), 2000);
+  const copyText = async (text: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        toast({ title: "Copiado!", description: "Código copiado para a área de transferência." });
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        toast({ 
+          title: "Copie manualmente", 
+          description: "Selecione o código e use Ctrl+C para copiar.",
+          variant: "default" 
+        });
+      }
+    } catch {
+      toast({ 
+        title: "Erro ao copiar", 
+        description: "Selecione o código manualmente e copie.",
+        variant: "destructive" 
+      });
+    }
   };
 
   const openWhatsApp = () => {
@@ -200,6 +217,12 @@ export default function PaymentRequired() {
             {paymentData.message && (
               <div className="p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 rounded-lg text-sm">
                 {paymentData.message}
+              </div>
+            )}
+
+            {settings?.instructions && (
+              <div className="p-4 bg-muted rounded-lg text-sm text-muted-foreground whitespace-pre-wrap">
+                {settings.instructions}
               </div>
             )}
 
