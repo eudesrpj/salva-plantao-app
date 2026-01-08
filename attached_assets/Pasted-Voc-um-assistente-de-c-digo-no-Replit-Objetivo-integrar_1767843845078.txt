@@ -1,0 +1,176 @@
+Você é um assistente de código no Replit.
+
+Objetivo: integrar o meu app web com o provedor de pagamentos ASAAS para assinatura mensal do plano de R$ 29,90, com suporte a:
+- pagamento por PIX e Cartão
+- criação de cliente no ASAAS
+- criação de assinatura mensal
+- cupom de desconto (já tratado no backend)
+- webhook para ativar ou desativar o acesso do usuário automaticamente
+
+IMPORTANTE:
+- Não quebrar funcionalidades existentes do app.
+- Reusar a stack atual (linguagem, framework e padrões já usados).
+- Colocar a API KEY do ASAAS em variável de ambiente e NUNCA hard-code no código.
+
+---
+
+## 1️⃣ VARIÁVEIS DE AMBIENTE
+
+Criar (se não existirem):
+
+- `ASAAS_API_KEY`
+- `ASAAS_BASE_URL=https://www.asaas.com/api/v3`
+
+Usar sempre essas variáveis.
+
+---
+
+## 2️⃣ CRIAR UM SERVIÇO DE INTEGRAÇÃO ASAAS
+
+Criar um arquivo de serviço (ex: `asaasService.(js/ts/py)` conforme o projeto) com funções:
+
+1) `createAsaasCustomer(user)`
+- Envia `name`, `email`, `cpfCnpj`, telefone (se houver)
+- Faz POST em `/customers`
+- Salva o `customer.id` do ASAAS no usuário (ex.: campo `asaas_customer_id`)
+- Se já existir `asaas_customer_id`, não cria novamente.
+
+2) `createAsaasSubscription(customerId, value, description, nextDueDate, billingType)`
+- Faz POST em `/subscriptions`
+- Parâmetros:
+  - `customer`
+  - `value` (em reais — usar 29.90 ou valor já com desconto do backend)
+  - `cycle = "MONTHLY"`
+  - `billingType = "PIX"` ou `"CREDIT_CARD"`
+  - `description = "Assinatura Salva Plantão"`
+  - `nextDueDate` = data inicial
+- Retorna o objeto da assinatura
+- Salvar no banco:
+  - `provider_subscription_id`
+  - status inicial
+
+3) `createPaymentRecord(subscription, asaasPaymentData)`
+- Criar registro em tabela de pagamentos do app
+- Guardar:
+  - `provider_payment_id`
+  - `amount`
+  - método (pix / card)
+  - status inicial
+
+---
+
+## 3️⃣ ROTA PARA CRIAR ASSINATURA NO APP
+
+Criar uma rota backend, ex.:
+
+`POST /api/subscriptions/create`
+
+Receber:
+- `user_id`
+- `plan_id`
+- `coupon_code` (opcional)
+- `payment_method` ("pix" ou "card")
+- dados do cartão (somente se `payment_method = card`, seguindo padrão do gateway)
+
+Fluxo:
+
+1. Buscar usuário no banco.
+2. Validar / calcular valor final do plano (cupom — já existe lógica no backend).
+3. Se usuário NÃO tiver `asaas_customer_id`:
+   - chamar `createAsaasCustomer(user)`
+4. Chamar `createAsaasSubscription()` com:
+   - valor final
+   - billingType conforme método escolhido
+5. Salvar assinatura no banco:
+   - `subscription_id`
+   - `provider_subscription_id`
+   - status inicial = pending/active conforme retorno do ASAAS
+6. Se houver pagamento inicial com PIX:
+   - retornar para o frontend:
+     - QR Code
+     - código copia-e-cola
+     - link de pagamento, se existir
+7. Se cartão:
+   - seguir fluxo do ASAAS e retornar o status.
+
+---
+
+## 4️⃣ ROTA DE WEBHOOK DO ASAAS
+
+Criar endpoint:
+
+`POST /api/asaas/webhook`
+
+Funções:
+
+1. Validar cabeçalhos mínimos (event type).
+2. Ler o payload do ASAAS.
+3. Mapear por tipo de evento relevante, por exemplo:
+
+- Pagamento confirmado:
+  - atualizar `payments.status = paid`
+  - atualizar `subscriptions.status = active`
+  - atualizar `next_billing_date` / `current_period_end`
+  - liberar acesso do usuário no app
+
+- Pagamento vencido / falhou:
+  - marcar assinatura como `past_due` ou `inactive`
+  - bloquear acesso
+
+- Assinatura cancelada:
+  - `subscriptions.status = canceled`
+  - acesso bloqueado
+
+4. Registrar logs de evento no banco para auditoria.
+
+IMPORTANTE:
+- O webhook não deve quebrar o app se receber eventos desconhecidos → ignorar com segurança.
+
+---
+
+## 5️⃣ CONTROLE DE ACESSO AO APP
+
+Em qualquer middleware / verificação de login:
+
+- Usuário só tem acesso às áreas PRO quando:
+  - `subscription.status = active`
+  - `next_billing_date` > hoje
+
+Se assinatura estiver:
+- cancelada
+- vencida
+- não paga
+
+→ bloquear e exibir mensagem “Assinatura inativa — regularize seu pagamento”.
+
+---
+
+## 6️⃣ TELA DO USUÁRIO (STATUS DA ASSINATURA)
+
+Na área do usuário:
+
+Exibir:
+- status da assinatura
+- próxima cobrança
+- botão “Gerenciar assinatura”
+
+Se inativa:
+- exibir botão “Assinar agora”
+
+---
+
+## 7️⃣ BOAS PRÁTICAS
+
+- Não logar dados sensíveis
+- Não duplicar clientes no ASAAS
+- Todo erro da API deve ser tratado de forma amigável
+- Manter código compatível com a arquitetura atual do projeto
+
+---
+
+Implemente tudo acima:
+- criando os arquivos necessários
+- conectando backend + banco
+- adicionando a rota de criação de assinatura
+- adicionando o webhook
+- garantindo que o app continue rodando sem erros.
