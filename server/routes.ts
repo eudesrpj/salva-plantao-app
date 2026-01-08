@@ -1253,9 +1253,8 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
             discountCents = Math.floor(Number(coupon.discountValue) * 100);
           }
           couponId = coupon.id;
-          await storage.updatePromoCoupon(coupon.id, { 
-            currentUses: (coupon.currentUses || 0) + 1 
-          });
+          // Use coupon tracking (currentUses is managed separately)
+          await storage.useCoupon(coupon.id, userId);
         }
       }
 
@@ -1393,6 +1392,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
           await authStorage.updateUserStatus(subscription.userId, 'active');
           notifyUser(subscription.userId, { 
             type: 'subscription_activated', 
+            title: 'Assinatura Ativada',
             message: 'Sua assinatura foi ativada com sucesso!' 
           });
         }
@@ -1427,6 +1427,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
           await authStorage.updateUserStatus(subscription.userId, 'active');
           notifyUser(subscription.userId, { 
             type: 'subscription_activated', 
+            title: 'Assinatura Ativada',
             message: 'Sua assinatura foi ativada pelo administrador!' 
           });
         }

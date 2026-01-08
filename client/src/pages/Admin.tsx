@@ -46,6 +46,9 @@ export default function Admin() {
           <TabsTrigger value="coupons" className="gap-1">
             <Ticket className="h-4 w-4" /> Cupons
           </TabsTrigger>
+          <TabsTrigger value="subscriptions" className="gap-1">
+            <CreditCard className="h-4 w-4" /> Assinaturas
+          </TabsTrigger>
           <TabsTrigger value="calculator" className="gap-1">
             <Calculator className="h-4 w-4" /> Calculadora
           </TabsTrigger>
@@ -76,6 +79,10 @@ export default function Admin() {
 
         <TabsContent value="coupons">
           <CouponsTab />
+        </TabsContent>
+
+        <TabsContent value="subscriptions">
+          <SubscriptionsTab />
         </TabsContent>
 
         <TabsContent value="calculator">
@@ -1345,6 +1352,228 @@ function CouponsTab() {
             <div className="text-center py-8 text-muted-foreground">
               <Ticket className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>Nenhum cupom cadastrado.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+interface Subscription {
+  id: number;
+  userId: string;
+  planId: number;
+  providerSubscriptionId: string | null;
+  providerCustomerId: string | null;
+  status: string;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  nextBillingDate: string | null;
+  lastPaymentStatus: string | null;
+  appliedCouponId: number | null;
+  canceledAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+interface Payment {
+  id: number;
+  subscriptionId: number | null;
+  userId: string;
+  providerPaymentId: string | null;
+  amountCents: number;
+  discountCents: number | null;
+  status: string;
+  method: string | null;
+  paidAt: string | null;
+  createdAt: string | null;
+}
+
+function SubscriptionsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+  const { data: subscriptions, isLoading } = useQuery<Subscription[]>({
+    queryKey: ["/api/admin/subscriptions"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/subscriptions", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: payments } = useQuery<Payment[]>({
+    queryKey: ["/api/admin/payments", selectedUserId],
+    queryFn: async () => {
+      if (!selectedUserId) return [];
+      const res = await fetch(`/api/admin/payments/${selectedUserId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!selectedUserId,
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (paymentId: number) => {
+      const res = await apiRequest("POST", `/api/admin/subscription/confirm-payment/${paymentId}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/payments", selectedUserId] });
+      toast({ title: "Pagamento confirmado!", description: "A assinatura do usuário foi ativada." });
+    },
+    onError: () => toast({ title: "Erro ao confirmar pagamento", variant: "destructive" }),
+  });
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge className="bg-green-500">Ativa</Badge>;
+      case "pending":
+        return <Badge className="bg-yellow-500">Pendente</Badge>;
+      case "canceled":
+        return <Badge variant="destructive">Cancelada</Badge>;
+      case "overdue":
+        return <Badge className="bg-orange-500">Vencida</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  const getPaymentStatusBadge = (status: string) => {
+    switch (status) {
+      case "paid":
+        return <Badge className="bg-green-500">Pago</Badge>;
+      case "pending":
+        return <Badge className="bg-yellow-500">Pendente</Badge>;
+      case "overdue":
+        return <Badge className="bg-orange-500">Vencido</Badge>;
+      case "refunded":
+        return <Badge variant="secondary">Reembolsado</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  if (isLoading) return <PageLoader text="Carregando assinaturas..." />;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" /> Assinaturas
+            </CardTitle>
+            <CardDescription>Gerencie assinaturas e confirme pagamentos manualmente</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {subscriptions && subscriptions.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Usuário</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Início</TableHead>
+                  <TableHead>Próximo Venc.</TableHead>
+                  <TableHead>Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {subscriptions.map((sub) => (
+                  <TableRow key={sub.id}>
+                    <TableCell className="font-mono text-xs">{sub.id}</TableCell>
+                    <TableCell className="font-mono text-xs">{sub.userId.substring(0, 8)}...</TableCell>
+                    <TableCell>{getStatusBadge(sub.status)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {sub.currentPeriodStart ? new Date(sub.currentPeriodStart).toLocaleDateString("pt-BR") : "-"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {sub.nextBillingDate ? new Date(sub.nextBillingDate).toLocaleDateString("pt-BR") : "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedUserId(sub.userId)}
+                            data-testid={`button-view-payments-${sub.id}`}
+                          >
+                            Ver Pagamentos
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Pagamentos do Usuário</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4 max-h-96 overflow-y-auto">
+                            {payments && payments.length > 0 ? (
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>ID</TableHead>
+                                    <TableHead>Valor</TableHead>
+                                    <TableHead>Método</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Data</TableHead>
+                                    <TableHead>Ações</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {payments.map((payment) => (
+                                    <TableRow key={payment.id}>
+                                      <TableCell>{payment.id}</TableCell>
+                                      <TableCell>
+                                        R$ {(payment.amountCents / 100).toFixed(2).replace(".", ",")}
+                                        {payment.discountCents && payment.discountCents > 0 && (
+                                          <span className="text-xs text-green-600 ml-1">
+                                            (-R$ {(payment.discountCents / 100).toFixed(2).replace(".", ",")})
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>{payment.method || "-"}</TableCell>
+                                      <TableCell>{getPaymentStatusBadge(payment.status)}</TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">
+                                        {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString("pt-BR") : "-"}
+                                      </TableCell>
+                                      <TableCell>
+                                        {payment.status === "pending" && (
+                                          <Button
+                                            size="sm"
+                                            onClick={() => confirmPaymentMutation.mutate(payment.id)}
+                                            disabled={confirmPaymentMutation.isPending}
+                                            data-testid={`button-confirm-payment-${payment.id}`}
+                                          >
+                                            <CheckCircle className="h-4 w-4 mr-1" />
+                                            Confirmar
+                                          </Button>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            ) : (
+                              <p className="text-center text-muted-foreground py-4">Nenhum pagamento encontrado.</p>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhuma assinatura encontrada.</p>
             </div>
           )}
         </CardContent>
