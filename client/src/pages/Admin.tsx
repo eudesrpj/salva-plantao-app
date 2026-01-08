@@ -3363,6 +3363,7 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
   const [activeTab, setActiveTab] = useState<"adulto" | "pediatrico">("adulto");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [medAgeFilter, setMedAgeFilter] = useState<string>("all");
 
   const { data: pathologies, isLoading } = useQuery<any[]>({
     queryKey: ["/api/pathologies"],
@@ -3530,6 +3531,20 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
                   {libraryMedications && libraryMedications.length > 0 ? (
                     <>
                       <div className="space-y-2">
+                        <label className="text-sm font-medium">Filtrar por faixa etária</label>
+                        <Select value={medAgeFilter} onValueChange={setMedAgeFilter}>
+                          <SelectTrigger data-testid="select-pathology-med-age-filter">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas</SelectItem>
+                            <SelectItem value="adulto">Adulto</SelectItem>
+                            <SelectItem value="pediatrico">Pediátrico</SelectItem>
+                            <SelectItem value="ambos">Ambos</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
                         <label className="text-sm font-medium">Selecione uma medicação *</label>
                         <select 
                           value={selectedMedicationId} 
@@ -3538,11 +3553,13 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
                           data-testid="select-medication"
                         >
                           <option value="">-- Escolha uma medicação --</option>
-                          {libraryMedications.map(m => (
-                            <option key={m.id} value={m.id}>
-                              {m.name} {m.presentation && `(${m.presentation})`} - {m.dose || "sem dose"} {m.route || ""}
-                            </option>
-                          ))}
+                          {libraryMedications
+                            .filter(m => medAgeFilter === "all" || m.ageGroup === medAgeFilter || m.ageGroup === "ambos")
+                            .map(m => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} {m.presentation && `(${m.presentation})`} - {m.dose || "sem dose"} {m.route || ""} [{m.ageGroup || "adulto"}]
+                              </option>
+                            ))}
                         </select>
                       </div>
                       {selectedMedicationId && (
