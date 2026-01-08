@@ -8,6 +8,9 @@ import {
   prescriptionModels, prescriptionModelMedications, monthlyExpenses, financialGoals,
   plans, subscriptions, payments,
   medicationDilutions, hydrationPresets, memorizeDecks, memorizeCards, cardProgress,
+  calculatorAllowedMeds, insertCalculatorAllowedMedSchema, dashboardConfig, insertDashboardConfigSchema,
+  quickAccessConfig, insertQuickAccessConfigSchema, donationCauses, insertDonationCauseSchema,
+  donations, insertDonationSchema, donationReceipts, insertDonationReceiptSchema,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -56,7 +59,13 @@ import {
   type HydrationPreset, type InsertHydrationPreset,
   type MemorizeDeck, type InsertMemorizeDeck,
   type MemorizeCard, type InsertMemorizeCard,
-  type CardProgress, type InsertCardProgress
+  type CardProgress, type InsertCardProgress,
+  type CalculatorAllowedMed, type InsertCalculatorAllowedMed,
+  type DashboardConfig, type InsertDashboardConfig,
+  type QuickAccessConfig, type InsertQuickAccessConfig,
+  type DonationCause, type InsertDonationCause,
+  type Donation, type InsertDonation,
+  type DonationReceipt, type InsertDonationReceipt
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, isNull } from "drizzle-orm";
@@ -382,6 +391,38 @@ export interface IStorage {
   getCardProgress(userId: string, cardId: number): Promise<CardProgress | undefined>;
   getCardsToReview(userId: string, deckId: number): Promise<(MemorizeCard & { progress?: CardProgress })[]>;
   upsertCardProgress(item: InsertCardProgress): Promise<CardProgress>;
+
+  // Calculator Allowed Meds
+  getCalculatorAllowedMeds(patientType?: string): Promise<CalculatorAllowedMed[]>;
+  getCalculatorAllowedMed(id: number): Promise<CalculatorAllowedMed | undefined>;
+  createCalculatorAllowedMed(item: InsertCalculatorAllowedMed): Promise<CalculatorAllowedMed>;
+  deleteCalculatorAllowedMed(id: number): Promise<void>;
+
+  // Dashboard Config
+  getDashboardConfig(scope?: string): Promise<DashboardConfig | undefined>;
+  upsertDashboardConfig(item: InsertDashboardConfig): Promise<DashboardConfig>;
+
+  // Quick Access Config
+  getQuickAccessConfigs(patientType?: string): Promise<QuickAccessConfig[]>;
+  upsertQuickAccessConfig(item: InsertQuickAccessConfig): Promise<QuickAccessConfig>;
+
+  // Donation Causes
+  getDonationCauses(activeOnly?: boolean): Promise<DonationCause[]>;
+  getDonationCause(id: number): Promise<DonationCause | undefined>;
+  createDonationCause(item: InsertDonationCause): Promise<DonationCause>;
+  updateDonationCause(id: number, item: Partial<InsertDonationCause>): Promise<DonationCause>;
+  deleteDonationCause(id: number): Promise<void>;
+
+  // Donations
+  getDonations(userId?: string): Promise<Donation[]>;
+  getDonation(id: number): Promise<Donation | undefined>;
+  getDonationByProviderId(providerPaymentId: string): Promise<Donation | undefined>;
+  createDonation(item: InsertDonation): Promise<Donation>;
+  updateDonation(id: number, item: Partial<InsertDonation>): Promise<Donation>;
+
+  // Donation Receipts
+  getDonationReceipts(donationId: number): Promise<DonationReceipt[]>;
+  createDonationReceipt(item: InsertDonationReceipt): Promise<DonationReceipt>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2133,6 +2174,158 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
     const [created] = await db.insert(cardProgress).values(item).returning();
+    return created;
+  }
+
+  // Calculator Allowed Meds
+  async getCalculatorAllowedMeds(patientType?: string): Promise<CalculatorAllowedMed[]> {
+    if (patientType) {
+      return await db.select().from(calculatorAllowedMeds)
+        .where(and(eq(calculatorAllowedMeds.patientType, patientType), eq(calculatorAllowedMeds.isActive, true)))
+        .orderBy(calculatorAllowedMeds.sortOrder);
+    }
+    return await db.select().from(calculatorAllowedMeds)
+      .where(eq(calculatorAllowedMeds.isActive, true))
+      .orderBy(calculatorAllowedMeds.sortOrder);
+  }
+
+  async getCalculatorAllowedMed(id: number): Promise<CalculatorAllowedMed | undefined> {
+    const [med] = await db.select().from(calculatorAllowedMeds).where(eq(calculatorAllowedMeds.id, id));
+    return med;
+  }
+
+  async createCalculatorAllowedMed(item: InsertCalculatorAllowedMed): Promise<CalculatorAllowedMed> {
+    const [created] = await db.insert(calculatorAllowedMeds).values(item).returning();
+    return created;
+  }
+
+  async deleteCalculatorAllowedMed(id: number): Promise<void> {
+    await db.delete(calculatorAllowedMeds).where(eq(calculatorAllowedMeds.id, id));
+  }
+
+  // Dashboard Config
+  async getDashboardConfig(scope?: string): Promise<DashboardConfig | undefined> {
+    const s = scope || "user_default";
+    const [config] = await db.select().from(dashboardConfig).where(eq(dashboardConfig.scope, s));
+    return config;
+  }
+
+  async upsertDashboardConfig(item: InsertDashboardConfig): Promise<DashboardConfig> {
+    const existing = await this.getDashboardConfig(item.scope);
+    if (existing) {
+      const [updated] = await db.update(dashboardConfig)
+        .set({ ...item, updatedAt: new Date() })
+        .where(eq(dashboardConfig.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(dashboardConfig).values(item).returning();
+    return created;
+  }
+
+  // Quick Access Config
+  async getQuickAccessConfigs(patientType?: string): Promise<QuickAccessConfig[]> {
+    if (patientType) {
+      return await db.select().from(quickAccessConfig)
+        .where(and(
+          or(eq(quickAccessConfig.patientType, patientType), eq(quickAccessConfig.patientType, "ambos")),
+          eq(quickAccessConfig.isActive, true)
+        ))
+        .orderBy(quickAccessConfig.sortOrder);
+    }
+    return await db.select().from(quickAccessConfig)
+      .where(eq(quickAccessConfig.isActive, true))
+      .orderBy(quickAccessConfig.sortOrder);
+  }
+
+  async upsertQuickAccessConfig(item: InsertQuickAccessConfig): Promise<QuickAccessConfig> {
+    const [existing] = await db.select().from(quickAccessConfig)
+      .where(eq(quickAccessConfig.patientType, item.patientType || "ambos"));
+    if (existing) {
+      const [updated] = await db.update(quickAccessConfig)
+        .set({ ...item, updatedAt: new Date() })
+        .where(eq(quickAccessConfig.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(quickAccessConfig).values(item).returning();
+    return created;
+  }
+
+  // Donation Causes
+  async getDonationCauses(activeOnly?: boolean): Promise<DonationCause[]> {
+    if (activeOnly) {
+      return await db.select().from(donationCauses)
+        .where(eq(donationCauses.isActive, true))
+        .orderBy(donationCauses.sortOrder);
+    }
+    return await db.select().from(donationCauses).orderBy(donationCauses.sortOrder);
+  }
+
+  async getDonationCause(id: number): Promise<DonationCause | undefined> {
+    const [cause] = await db.select().from(donationCauses).where(eq(donationCauses.id, id));
+    return cause;
+  }
+
+  async createDonationCause(item: InsertDonationCause): Promise<DonationCause> {
+    const [created] = await db.insert(donationCauses).values(item).returning();
+    return created;
+  }
+
+  async updateDonationCause(id: number, item: Partial<InsertDonationCause>): Promise<DonationCause> {
+    const [updated] = await db.update(donationCauses)
+      .set({ ...item, updatedAt: new Date() })
+      .where(eq(donationCauses.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteDonationCause(id: number): Promise<void> {
+    await db.delete(donationCauses).where(eq(donationCauses.id, id));
+  }
+
+  // Donations
+  async getDonations(userId?: string): Promise<Donation[]> {
+    if (userId) {
+      return await db.select().from(donations)
+        .where(eq(donations.userId, userId))
+        .orderBy(desc(donations.createdAt));
+    }
+    return await db.select().from(donations).orderBy(desc(donations.createdAt));
+  }
+
+  async getDonation(id: number): Promise<Donation | undefined> {
+    const [donation] = await db.select().from(donations).where(eq(donations.id, id));
+    return donation;
+  }
+
+  async getDonationByProviderId(providerPaymentId: string): Promise<Donation | undefined> {
+    const [donation] = await db.select().from(donations)
+      .where(eq(donations.providerPaymentId, providerPaymentId));
+    return donation;
+  }
+
+  async createDonation(item: InsertDonation): Promise<Donation> {
+    const [created] = await db.insert(donations).values(item).returning();
+    return created;
+  }
+
+  async updateDonation(id: number, item: Partial<InsertDonation>): Promise<Donation> {
+    const [updated] = await db.update(donations)
+      .set({ ...item, updatedAt: new Date() })
+      .where(eq(donations.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Donation Receipts
+  async getDonationReceipts(donationId: number): Promise<DonationReceipt[]> {
+    return await db.select().from(donationReceipts)
+      .where(eq(donationReceipts.donationId, donationId));
+  }
+
+  async createDonationReceipt(item: InsertDonationReceipt): Promise<DonationReceipt> {
+    const [created] = await db.insert(donationReceipts).values(item).returning();
     return created;
   }
 }
