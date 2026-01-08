@@ -2451,6 +2451,8 @@ function AiContentGenerator() {
 
 function ContentManagementSection() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [prescBulkImportOpen, setPrescBulkImportOpen] = useState(false);
+  const [prescBulkImportText, setPrescBulkImportText] = useState("");
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -2468,6 +2470,61 @@ function ContentManagementSection() {
     queryKey: ["/api/pathologies"],
     enabled: activeSection === "pathologies",
   });
+
+  const prescBulkImportMutation = useMutation({
+    mutationFn: async (prescriptions: any[]) => {
+      const res = await apiRequest("POST", "/api/prescriptions/bulk-import", { prescriptions });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/prescriptions"] });
+      toast({ 
+        title: "Importação concluída!", 
+        description: `${data.success} de ${data.total} prescrições importadas.${data.errors.length > 0 ? ` ${data.errors.length} erros.` : ''}`
+      });
+      setPrescBulkImportOpen(false);
+      setPrescBulkImportText("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handlePrescBulkImport = () => {
+    try {
+      const lines = prescBulkImportText.trim().split('\n').filter(l => l.trim());
+      if (lines.length === 0) {
+        toast({ title: "Nenhum dado para importar", variant: "destructive" });
+        return;
+      }
+
+      const prescriptions = lines.map(line => {
+        const parts = line.split(';').map(p => p.trim());
+        return {
+          title: parts[0] || '',
+          medication: parts[1] || parts[0] || '',
+          dose: parts[2] || null,
+          interval: parts[3] || null,
+          route: parts[4] || 'VO',
+          duration: parts[5] || null,
+          quantity: parts[6] || null,
+          category: parts[7] || null,
+          ageGroup: parts[8] || 'adulto',
+          orientation: parts[9] || null,
+          observations: parts[10] || null
+        };
+      }).filter(p => p.title || p.medication);
+
+      if (prescriptions.length === 0) {
+        toast({ title: "Nenhuma prescrição válida encontrada", variant: "destructive" });
+        return;
+      }
+
+      prescBulkImportMutation.mutate(prescriptions);
+    } catch (err) {
+      toast({ title: "Erro ao processar dados", description: "Verifique o formato do texto", variant: "destructive" });
+    }
+  };
 
   const deletePrescription = useMutation({
     mutationFn: async (id: number) => {
@@ -2507,7 +2564,43 @@ function ContentManagementSection() {
             <CardTitle>Prescrições Oficiais</CardTitle>
             <CardDescription>Gerencie modelos de prescrições do sistema.</CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Dialog open={prescBulkImportOpen} onOpenChange={setPrescBulkImportOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-1" data-testid="button-bulk-import-prescriptions">
+                  <Upload className="h-4 w-4" /> Importar em Massa
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Importação em Massa de Prescrições</DialogTitle>
+                  <DialogDescription>
+                    Cole os dados das prescrições no formato: Título;Medicação;Dose;Intervalo;Via;Duração;Quantidade;Categoria;FaixaEtária;Orientação;Observações
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="p-3 bg-muted rounded-md text-sm">
+                    <p className="font-medium mb-2">Formato (separado por ponto-e-vírgula):</p>
+                    <code className="text-xs block">Febre;Dipirona 500mg;1g;6/6h;VO;5 dias;;;adulto;;</code>
+                    <code className="text-xs block">IVAS;Amoxicilina Susp;50mg/kg/dia;8/8h;VO;7 dias;;Infecto;pediatrico;Retornar se não melhorar;</code>
+                  </div>
+                  <Textarea 
+                    value={prescBulkImportText}
+                    onChange={(e) => setPrescBulkImportText(e.target.value)}
+                    placeholder="Cole aqui as prescrições (uma por linha)..."
+                    rows={10}
+                    className="font-mono text-sm"
+                    data-testid="textarea-bulk-import-prescriptions"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setPrescBulkImportOpen(false)}>Cancelar</Button>
+                    <Button onClick={handlePrescBulkImport} disabled={prescBulkImportMutation.isPending || !prescBulkImportText.trim()}>
+                      {prescBulkImportMutation.isPending ? "Importando..." : "Importar Prescrições"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             <NewPrescriptionDialog />
             <Button variant="outline" onClick={() => setActiveSection(null)}>Voltar</Button>
           </div>

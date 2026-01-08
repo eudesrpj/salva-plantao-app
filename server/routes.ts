@@ -226,6 +226,62 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(204).send();
   });
 
+  app.post("/api/prescriptions/bulk-import", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { prescriptions: prescList, mode = "create" } = req.body;
+      const userId = getUserId(req);
+      
+      if (!Array.isArray(prescList) || prescList.length === 0) {
+        return res.status(400).json({ message: "Forneça uma lista de prescrições" });
+      }
+
+      const results = { success: 0, errors: [] as string[], imported: [] as any[] };
+      
+      for (let i = 0; i < prescList.length; i++) {
+        const presc = prescList[i];
+        try {
+          if (!presc.title && !presc.medication) {
+            results.errors.push(`Linha ${i + 1}: Título ou medicação é obrigatório`);
+            continue;
+          }
+
+          const importData = {
+            userId,
+            title: presc.title || presc.medication || '',
+            medication: presc.medication || presc.title || '',
+            dose: presc.dose || null,
+            interval: presc.interval || null,
+            duration: presc.duration || null,
+            route: presc.route || 'VO',
+            quantity: presc.quantity || null,
+            category: presc.category || null,
+            ageGroup: presc.ageGroup || 'adulto',
+            orientation: presc.orientation || null,
+            observations: presc.observations || null,
+            isPublic: true,
+            isLocked: true
+          };
+
+          const item = await storage.createPrescription(importData);
+          results.imported.push(item);
+          results.success++;
+        } catch (err: any) {
+          results.errors.push(`Linha ${i + 1}: ${err.message || 'Erro desconhecido'}`);
+        }
+      }
+
+      res.json({
+        message: `Importação concluída: ${results.success} de ${prescList.length} prescrições processadas`,
+        success: results.success,
+        total: prescList.length,
+        errors: results.errors,
+        imported: results.imported
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Erro ao importar prescrições" });
+    }
+  });
+
   // --- Prescription Suggestions (Internal AI - no external API) ---
   app.get("/api/prescriptions/suggestions", isAuthenticated, checkNotBlocked, async (req, res) => {
     try {
