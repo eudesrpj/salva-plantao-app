@@ -14,13 +14,20 @@ import { users } from "./models/auth";
 export const medications = pgTable("medications", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(), // Ex: Dipirona 500mg
+  nameNormalized: text("name_normalized"), // Lower + sem acento + trim para busca e deduplicação
   presentation: text("presentation"), // Ex: Comprimido, Gotas, Ampola
+  concentrationText: text("concentration_text"), // "250 mg/5 mL", "1 g"
+  routes: text("routes").array(), // [VO, IV, IM] - múltiplas vias
   dose: text("dose"), // Default dose
   dosePerKg: text("dose_per_kg"), // For pediatric
+  defaultDoseAdult: text("default_dose_adult"), // Dose padrão adulto
+  defaultDosePeds: text("default_dose_peds"), // Dose padrão pediátrico
   maxDose: text("max_dose"),
+  renalAdjustment: text("renal_adjustment"), // Ajuste para insuficiência renal
+  pregnancyWarning: text("pregnancy_warning"), // Aviso na gravidez
   interval: text("interval"), // 6/6h, 8/8h, etc.
   duration: text("duration"),
-  route: text("route"), // VO, IV, IM, SC
+  route: text("route"), // VO, IV, IM, SC (legacy single route)
   quantity: text("quantity"), // 1 caixa, 20 comprimidos
   timing: text("timing"), // jejum, com alimentação
   observations: text("observations"),
@@ -28,9 +35,10 @@ export const medications = pgTable("medications", {
   category: text("category"), // Analgésicos, Antibióticos, etc.
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertMedicationSchema = createInsertSchema(medications).omit({ id: true, createdAt: true });
+export const insertMedicationSchema = createInsertSchema(medications).omit({ id: true, createdAt: true, updatedAt: true });
 export type Medication = typeof medications.$inferSelect;
 export type InsertMedication = z.infer<typeof insertMedicationSchema>;
 
@@ -38,20 +46,22 @@ export type InsertMedication = z.infer<typeof insertMedicationSchema>;
 export const pathologies = pgTable("pathologies", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  nameNormalized: text("name_normalized"), // Lower + sem acento + trim para busca e deduplicação
   description: text("description"),
   ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
-  clinicalCategory: text("clinical_category"), // Cardiologia, Pneumologia, Gastro/Hepato, etc.
-  sourceGroup: text("source_group"), // adulto_base, pediatrico_base, outras_prevalentes, plantao_urgencia, duplicado_de_adulto, duplicado_de_pediatrico
-  category: text("category"), // Legacy: Emergência, Clínica, Pediatria, etc.
+  clinicalCategory: text("clinical_category"), // Legacy: Cardiologia, Pneumologia, etc. (ignorar na UI)
+  sourceGroup: text("source_group"), // adulto_base, pediatrico_base, outras_prevalentes, etc.
+  category: text("category"), // Legacy: Emergência, Clínica, Pediatria, etc. (ignorar na UI)
   specialty: text("specialty"),
   tags: text("tags").array(),
   isPublic: boolean("is_public").default(false),
   isLocked: boolean("is_locked").default(false),
   userId: text("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertPathologySchema = createInsertSchema(pathologies).omit({ id: true, createdAt: true });
+export const insertPathologySchema = createInsertSchema(pathologies).omit({ id: true, createdAt: true, updatedAt: true });
 export type Pathology = typeof pathologies.$inferSelect;
 export type InsertPathology = z.infer<typeof insertPathologySchema>;
 
@@ -199,6 +209,44 @@ export const medicationContraindications = pgTable("medication_contraindications
 export const insertMedicationContraindicationSchema = createInsertSchema(medicationContraindications).omit({ id: true, createdAt: true });
 export type MedicationContraindication = typeof medicationContraindications.$inferSelect;
 export type InsertMedicationContraindication = z.infer<typeof insertMedicationContraindicationSchema>;
+
+// Medication Dilutions (Diluição/Administração)
+export const medicationDilutions = pgTable("medication_dilutions", {
+  id: serial("id").primaryKey(),
+  medicationId: integer("medication_id").references(() => medications.id),
+  medicationName: text("medication_name").notNull(), // Para busca independente
+  dilutionNeeded: boolean("dilution_needed").default(false),
+  dilutionHow: text("dilution_how"), // "diluir em 100 mL SF 0,9%"
+  infusionTime: text("infusion_time"), // "infundir em 30 min"
+  compatibility: text("compatibility"), // "compatível com..."
+  administrationNotes: text("administration_notes"), // "não misturar com..."
+  route: text("route"), // VO, IV, IM, SC
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMedicationDilutionSchema = createInsertSchema(medicationDilutions).omit({ id: true, createdAt: true, updatedAt: true });
+export type MedicationDilution = typeof medicationDilutions.$inferSelect;
+export type InsertMedicationDilution = z.infer<typeof insertMedicationDilutionSchema>;
+
+// Hydration Presets (Calculadora de Hidratação)
+export const hydrationPresets = pgTable("hydration_presets", {
+  id: serial("id").primaryKey(),
+  label: text("label").notNull(), // "Manutenção Pediátrica", "Reposição Adulto"
+  patientType: text("patient_type").notNull(), // ADULT, PEDS
+  formulaType: text("formula_type").notNull(), // ML_PER_KG, FIXED, HOLLIDAY_SEGAR
+  params: jsonb("params"), // { "ml_per_kg": 30, "base_volume": 1000 }
+  notes: text("notes"),
+  order: integer("order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertHydrationPresetSchema = createInsertSchema(hydrationPresets).omit({ id: true, createdAt: true, updatedAt: true });
+export type HydrationPreset = typeof hydrationPresets.$inferSelect;
+export type InsertHydrationPreset = z.infer<typeof insertHydrationPresetSchema>;
 
 // Promotional Coupons (Admin created)
 export const promoCoupons = pgTable("promo_coupons", {

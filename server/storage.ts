@@ -7,6 +7,7 @@ import {
   medicalCertificates, attendanceDeclarations, medicalReferrals, referralDestinations, referralReasons,
   prescriptionModels, prescriptionModelMedications, monthlyExpenses, financialGoals,
   plans, subscriptions, payments,
+  medicationDilutions, hydrationPresets,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -50,7 +51,9 @@ import {
   type CouponUsage, type InsertCouponUsage,
   type Plan, type InsertPlan,
   type Subscription, type InsertSubscription,
-  type Payment, type InsertPayment
+  type Payment, type InsertPayment,
+  type MedicationDilution, type InsertMedicationDilution,
+  type HydrationPreset, type InsertHydrationPreset
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -317,6 +320,27 @@ export interface IStorage {
   getPaymentByProviderId(providerPaymentId: string): Promise<Payment | undefined>;
   createPayment(item: InsertPayment): Promise<Payment>;
   updatePayment(id: number, item: Partial<InsertPayment>): Promise<Payment>;
+
+  // Medication Dilutions
+  getMedicationDilutions(medicationId?: number): Promise<MedicationDilution[]>;
+  getMedicationDilution(id: number): Promise<MedicationDilution | undefined>;
+  getMedicationDilutionByName(medicationName: string): Promise<MedicationDilution | undefined>;
+  createMedicationDilution(item: InsertMedicationDilution): Promise<MedicationDilution>;
+  updateMedicationDilution(id: number, item: Partial<InsertMedicationDilution>): Promise<MedicationDilution>;
+  deleteMedicationDilution(id: number): Promise<void>;
+  upsertMedicationDilution(item: InsertMedicationDilution): Promise<MedicationDilution>;
+
+  // Hydration Presets
+  getHydrationPresets(patientType?: string): Promise<HydrationPreset[]>;
+  getHydrationPreset(id: number): Promise<HydrationPreset | undefined>;
+  createHydrationPreset(item: InsertHydrationPreset): Promise<HydrationPreset>;
+  updateHydrationPreset(id: number, item: Partial<InsertHydrationPreset>): Promise<HydrationPreset>;
+  deleteHydrationPreset(id: number): Promise<void>;
+
+  // Medication Service (centralized)
+  getMedicationByNormalizedName(nameNormalized: string): Promise<Medication | undefined>;
+  upsertMedication(item: InsertMedication): Promise<Medication>;
+  searchMedicationsAdvanced(query: string, options?: { ageGroup?: string; category?: string }): Promise<Medication[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1666,6 +1690,132 @@ export class DatabaseStorage implements IStorage {
   async updatePayment(id: number, updateItem: Partial<InsertPayment>): Promise<Payment> {
     const [item] = await db.update(payments).set(updateItem).where(eq(payments.id, id)).returning();
     return item;
+  }
+
+  // Medication Dilutions
+  async getMedicationDilutions(medicationId?: number): Promise<MedicationDilution[]> {
+    if (medicationId) {
+      return await db.select().from(medicationDilutions)
+        .where(and(eq(medicationDilutions.medicationId, medicationId), eq(medicationDilutions.isActive, true)));
+    }
+    return await db.select().from(medicationDilutions)
+      .where(eq(medicationDilutions.isActive, true));
+  }
+
+  async getMedicationDilution(id: number): Promise<MedicationDilution | undefined> {
+    const [item] = await db.select().from(medicationDilutions).where(eq(medicationDilutions.id, id));
+    return item;
+  }
+
+  async getMedicationDilutionByName(medicationName: string): Promise<MedicationDilution | undefined> {
+    const [item] = await db.select().from(medicationDilutions)
+      .where(ilike(medicationDilutions.medicationName, medicationName));
+    return item;
+  }
+
+  async createMedicationDilution(insertItem: InsertMedicationDilution): Promise<MedicationDilution> {
+    const [item] = await db.insert(medicationDilutions).values(insertItem).returning();
+    return item;
+  }
+
+  async updateMedicationDilution(id: number, updateItem: Partial<InsertMedicationDilution>): Promise<MedicationDilution> {
+    const [item] = await db.update(medicationDilutions)
+      .set({ ...updateItem, updatedAt: new Date() })
+      .where(eq(medicationDilutions.id, id)).returning();
+    return item;
+  }
+
+  async deleteMedicationDilution(id: number): Promise<void> {
+    await db.delete(medicationDilutions).where(eq(medicationDilutions.id, id));
+  }
+
+  async upsertMedicationDilution(item: InsertMedicationDilution): Promise<MedicationDilution> {
+    const existing = await this.getMedicationDilutionByName(item.medicationName);
+    if (existing) {
+      return await this.updateMedicationDilution(existing.id, item);
+    }
+    return await this.createMedicationDilution(item);
+  }
+
+  // Hydration Presets
+  async getHydrationPresets(patientType?: string): Promise<HydrationPreset[]> {
+    if (patientType) {
+      return await db.select().from(hydrationPresets)
+        .where(and(eq(hydrationPresets.patientType, patientType), eq(hydrationPresets.isActive, true)))
+        .orderBy(hydrationPresets.order);
+    }
+    return await db.select().from(hydrationPresets)
+      .where(eq(hydrationPresets.isActive, true))
+      .orderBy(hydrationPresets.order);
+  }
+
+  async getHydrationPreset(id: number): Promise<HydrationPreset | undefined> {
+    const [item] = await db.select().from(hydrationPresets).where(eq(hydrationPresets.id, id));
+    return item;
+  }
+
+  async createHydrationPreset(insertItem: InsertHydrationPreset): Promise<HydrationPreset> {
+    const [item] = await db.insert(hydrationPresets).values(insertItem).returning();
+    return item;
+  }
+
+  async updateHydrationPreset(id: number, updateItem: Partial<InsertHydrationPreset>): Promise<HydrationPreset> {
+    const [item] = await db.update(hydrationPresets)
+      .set({ ...updateItem, updatedAt: new Date() })
+      .where(eq(hydrationPresets.id, id)).returning();
+    return item;
+  }
+
+  async deleteHydrationPreset(id: number): Promise<void> {
+    await db.delete(hydrationPresets).where(eq(hydrationPresets.id, id));
+  }
+
+  // Medication Service (centralized)
+  async getMedicationByNormalizedName(nameNormalized: string): Promise<Medication | undefined> {
+    const [item] = await db.select().from(medications)
+      .where(eq(medications.nameNormalized, nameNormalized));
+    return item;
+  }
+
+  async upsertMedication(item: InsertMedication): Promise<Medication> {
+    const normalized = this.normalizeText(item.name);
+    const existing = await this.getMedicationByNormalizedName(normalized);
+    if (existing) {
+      return await this.updateMedication(existing.id, { ...item, nameNormalized: normalized });
+    }
+    return await this.createMedication({ ...item, nameNormalized: normalized });
+  }
+
+  async searchMedicationsAdvanced(query: string, options?: { ageGroup?: string; category?: string }): Promise<Medication[]> {
+    const searchPattern = `%${query}%`;
+    const conditions = [
+      or(
+        ilike(medications.name, searchPattern),
+        ilike(medications.nameNormalized, searchPattern),
+        ilike(medications.category, searchPattern)
+      ),
+      eq(medications.isActive, true)
+    ];
+
+    if (options?.ageGroup) {
+      conditions.push(eq(medications.ageGroup, options.ageGroup));
+    }
+    if (options?.category) {
+      conditions.push(eq(medications.category, options.category));
+    }
+
+    return await db.select().from(medications)
+      .where(and(...conditions))
+      .orderBy(medications.name);
+  }
+
+  // Helper function for text normalization
+  private normalizeText(text: string): string {
+    return text
+      .toLowerCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
   }
 }
 

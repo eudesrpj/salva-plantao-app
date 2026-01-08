@@ -1,0 +1,445 @@
+Você é a IA do Replit. Faça melhorias no app com mudanças mínimas no fluxo atual, mas deixando o sistema mais rápido, organizado e consistente.
+
+CONTEXTO (já existe no app):
+- Há prescrições “oficiais” (imutáveis para usuários) e “minhas prescrições” (custom do usuário).
+- Usuário pode editar uma prescrição apenas momentaneamente (preview) e, se quiser, salvar como “minha prescrição” e/ou favoritar.
+- Admin é o único que pode alterar permanentemente o conteúdo oficial.
+
+OBJETIVOS DESTA ENTREGA (faça tudo):
+1) IMPORTAÇÃO EM MASSA DE PRESCRIÇÕES (ADMIN)
+2) IMPORTAÇÃO EM MASSA DE MEDICAÇÕES (ADMIN)
+3) SINCRONIZAÇÃO GLOBAL DE MEDICAÇÕES (aparece em prescrições, calculadora, interações, etc.)
+4) CALCULADORA: adicionar aba de HIDRATAÇÃO (adulto e pediatria)
+5) MEDICAÇÕES: adicionar aba “DILUIÇÃO/ADMINISTRAÇÃO” + integrações (interações, contraindicações)
+6) PRESCRIÇÕES/PATOLOGIAS: remover “classificação por categoria” e exibir lista alfabética
+7) NÃO QUEBRAR O FLUXO ATUAL: manter o modo “oficial” vs “minhas” e o preview editável sem alterar o oficial.
+
+--------------------------------------------
+A) MODELO DE DADOS (DB) — GARANTIR BASE SÓLIDA
+--------------------------------------------
+
+A1) Patologias (lista alfabética)
+- Tabela: pathologies
+  - id (PK)
+  - name (TEXT, unique, normalizado)
+  - name_normalized (TEXT, unique) // lower + sem acento + trim
+  - created_at / updated_at
+
+Remover/ignorar campo de categoria/classificação na UI. (Se existir no DB, manter por compatibilidade, mas não usar na tela.)
+
+A2) Prescrições oficiais por patologia (imutáveis p/ usuário)
+- Tabela: official_prescriptions
+  - id (PK)
+  - pathology_id (FK pathologies.id)
+  - title (TEXT) // opcional, ex: “Padrão UBS”
+  - notes (TEXT) // sinais de alarme/observações gerais
+  - created_by_admin (BOOL default true)
+  - version (INT) // para controlar atualização
+  - created_at/updated_at
+
+A3) Itens da prescrição (medicações + orientações + observações)
+- Tabela: prescription_items
+  - id (PK)
+  - prescription_id (FK official_prescriptions.id) OR (FK user_prescriptions.id) -> usar duas colunas nullable ou tabela polimórfica
+  - type (ENUM: 'MED' | 'GUIDANCE' | 'ALARM' | 'NOTE')
+  - medication_id (FK medications.id, nullable se não for MED)
+  - custom_text (TEXT, nullable) // para guidance/alarms/notas
+  - dose_text (TEXT) // “500 mg”
+  - quantity_text (TEXT) // “20 comprimidos”
+  - posology_text (TEXT) // “1 cp 8/8h”
+  - route (TEXT) // VO/IV/IM/INAL/etc
+  - duration_text (TEXT) // “7 dias”
+  - schedule_tips (TEXT) // “manhã/tarde/noite”
+  - sort_order (INT)
+  - created_at/updated_at
+
+A4) Prescrições do usuário (editáveis e persistentes)
+- Tabela: user_prescriptions
+  - id (PK)
+  - user_id (FK users.id)
+  - pathology_id (FK pathologies.id, nullable) // pode existir sem patologia
+  - name (TEXT) // “Minha prescrição bronquiolite”
+  - source_official_id (FK official_prescriptions.id, nullable) // quando copiou de oficial
+  - is_favorite (BOOL)
+  - created_at/updated_at
+
+Regras:
+- O usuário NUNCA altera official_prescriptions.
+- Ao editar no preview, gerar um “draft” temporário no front.
+- Se “Salvar em Minhas Prescrições”: cria user_prescriptions + itens correspondentes.
+
+A5) Medicações (fonte única do sistema)
+- Tabela: medications
+  - id (PK)
+  - name (TEXT)
+  - name_normalized (TEXT unique)
+  - form (TEXT) // cp, xarope, ampola, etc
+  - concentration_text (TEXT) // “250 mg/5 mL”, “1 g”
+  - routes (TEXT[]) // VO, IV, IM...
+  - default_dose_adult (TEXT) // texto padrão
+  - default_dose_peds (TEXT) // texto padrão
+  - max_dose (TEXT) // opcional
+  - renal_adjustment (TEXT) // opcional
+  - pregnancy_warning (TEXT) // opcional
+  - created_at/updated_at
+
+A6) Diluição/Administração (aba nova)
+- Tabela: medication_dilutions
+  - id (PK)
+  - medication_id (FK medications.id)
+  - dilution_needed (BOOL)
+  - dilution_how (TEXT) // “diluir em 100 mL SF 0,9%”
+  - infusion_time (TEXT) // “infundir em 30 min”
+  - compatibility (TEXT) // “compatível com...”
+  - administration_notes (TEXT) // “não misturar com...”
+  - created_at/updated_at
+
+A7) Interações e contraindicações (sincronizadas)
+- Tabela: medication_interactions
+  - id (PK)
+  - medication_id_a (FK medications.id)
+  - medication_id_b (FK medications.id)
+  - severity (ENUM: 'LOW'|'MODERATE'|'HIGH')
+  - description (TEXT)
+
+- Tabela: medication_contraindications
+  - id (PK)
+  - medication_id (FK medications.id)
+  - contraindication (TEXT)
+  - severity (ENUM: 'ABSOLUTE'|'RELATIVE')
+
+--------------------------------------------
+B) IMPORTAÇÃO EM MASSA — PRESCRIÇÕES (ADMIN)
+--------------------------------------------
+
+B1) Criar tela/admin modal “Importar Prescrições (em massa)”
+- Input: upload de arquivo .csv ou .json e também opção “colar texto” (textarea).
+- Mostrar preview antes de salvar.
+- Após importar:
+  - associar itens à patologia correspondente; se patologia não existir, criar automaticamente.
+  - criar official_prescriptions e seus prescription_items.
+
+B2) Formato recomendado (CSV) — suportar também JSON
+CSV colunas (obrigatório suportar estas):
+- pathology_name
+- prescription_title (opcional)
+- item_type (MED/GUIDANCE/ALARM/NOTE)
+- medication_name (se MED)
+- dose_text
+- quantity_text
+- posology_text
+- route
+- duration_text
+- schedule_tips
+- custom_text (para GUIDANCE/ALARM/NOTE)
+- sort_order (opcional)
+
+Regras do parser:
+- Normalizar pathology_name e medication_name (lower, sem acento, trim).
+- Se item_type=MED:
+  - fazer upsert em medications (se não existir) com name + name_normalized.
+  - criar prescription_item com medication_id.
+- Se item_type != MED:
+  - usar custom_text obrigatório.
+- Se faltar campo obrigatório: bloquear import e mostrar lista de erros por linha.
+
+B3) Deduplicação (sem duplicar patologia nem medicamento)
+- Upsert por name_normalized.
+- Não criar duas patologias iguais.
+- Não criar duas medicações iguais.
+- Permitir “atualizar” prescrição oficial existente:
+  - opção no UI: “substituir itens da patologia” OU “criar nova versão”.
+  - Se substituir: apagar itens antigos e inserir novos, incrementando version.
+
+--------------------------------------------
+C) IMPORTAÇÃO EM MASSA — MEDICAÇÕES (ADMIN)
+--------------------------------------------
+
+C1) Criar tela/admin modal “Importar Medicações (em massa)”
+- Upload CSV/JSON + colar texto.
+- Preview + validação.
+
+C2) CSV colunas:
+- name
+- form
+- concentration_text
+- routes (separadas por ;)
+- default_dose_adult
+- default_dose_peds
+- max_dose
+- renal_adjustment
+- pregnancy_warning
+
+Regras:
+- Upsert por name_normalized.
+- Após salvar, as medicações devem aparecer automaticamente:
+  - na tela de medicações
+  - no seletor de medicações ao montar prescrições
+  - na calculadora (adulto/pedi)
+  - em interações/contraindicações (quando aplicável)
+
+--------------------------------------------
+D) “OFICIAL VS MINHAS” — FLUXO LIMPO E IMUTABILIDADE
+--------------------------------------------
+
+D1) Tela de Prescrições:
+- Mostrar duas abas:
+  1) Oficiais (somente leitura)
+  2) Minhas prescrições (editável e favoritar)
+- Lista de patologias em ORDEM ALFABÉTICA (A–Z) pelo name_normalized.
+- Clicar numa patologia:
+  - abre a prescrição oficial com preview editável (remover item, ajustar dose/tempo etc) MAS sem salvar no oficial.
+  - Botões:
+    - “Copiar tudo”
+    - “Salvar como minha prescrição”
+    - “Favoritar” (apenas para minha prescrição; oficial não muda)
+
+D2) Preview editável:
+- Toda edição é “draft” (estado local).
+- Ao sair sem salvar: descarta.
+- Ao salvar: cria user_prescriptions + itens (clonados do draft) e marca source_official_id.
+
+D3) Admin:
+- Pode editar a prescrição oficial diretamente (com versionamento).
+- Usuário comum: sem permissão.
+
+--------------------------------------------
+E) MEDICAÇÕES — PAINEL MAIS RÁPIDO + DILUIÇÃO
+--------------------------------------------
+
+E1) Tela Medicações:
+- Busca por nome.
+- Botão “Adicionar medicação” com formulário rápido:
+  - nome, forma, concentração, via, dose adulto/pedi, posologia padrão, etc.
+- Botão “Importar em massa”.
+
+E2) Aba “Diluição/Administração” dentro da medicação:
+- Campos vinculados à medication_dilutions.
+- Mostrar sugestão de diluição, necessidade ou não, tempo de infusão, notas.
+
+E3) Integração com Interações/Contraindicações:
+- Na tela da medicação:
+  - sub-aba “Interações” (listar pares + severidade)
+  - sub-aba “Contraindicações”
+
+--------------------------------------------
+F) SINCRONIZAÇÃO GLOBAL — UM “MedicationService” CENTRAL
+--------------------------------------------
+
+Criar um único serviço/repositório:
+- MedicationService.getAll()
+- MedicationService.search(query)
+- MedicationService.getById()
+- MedicationService.upsertFromImport()
+E usar esse serviço em:
+- Prescrições (seleção de medicação)
+- Calculadora (listagem e cálculos)
+- Interações/contraindicações
+- Importadores
+
+Meta: evitar duplicação de lógica para não criar medicação em um lugar e “sumir” em outro.
+
+--------------------------------------------
+G) CALCULADORA — ABA HIDRATAÇÃO (ADULTO/PEDI)
+--------------------------------------------
+
+Adicionar uma aba “Hidratação” na calculadora:
+Inputs:
+- tipo: Adulto ou Pediatria
+- peso (kg)
+- motivo/gravidade (dropdown com presets configuráveis pelo admin)
+Outputs:
+- volume total (mL)
+- taxa (mL/h)
+- observações (texto)
+- opção de “copiar” resultado
+
+Implementar de forma modular:
+- hydration_presets (tabela):
+  - id
+  - label
+  - patient_type ('ADULT'|'PEDS')
+  - formula_type ('ML_PER_KG'|'FIXED'|'HOLLIDAY_SEGAR' etc)
+  - params JSON (ex: { "ml_per_kg": 30 })
+  - notes
+- Permitir admin editar presets depois.
+
+IMPORTANTE:
+- Não inventar condutas médicas novas automaticamente. A calculadora deve operar por presets configuráveis.
+
+--------------------------------------------
+H) QUALIDADE / SEM ERROS
+--------------------------------------------
+
+H1) Validações:
+- Nunca permitir inserir prescription_items MED sem medication_id válido.
+- Nunca permitir inserir official_prescriptions sem pathology_id válido.
+- Importação deve falhar com lista de erros por linha (não salvar metade).
+
+H2) Migração e compatibilidade:
+- Se já existem tabelas antigas, criar migrations sem quebrar dados.
+- Criar script de migração para:
+  - transformar categorias em lista (ignorar categoria na UI)
+  - normalizar nomes
+
+H3) Testes manuais (criar checklist):
+1) Importar CSV de prescrições com patologia existente -> atualiza/versão ok
+2) Importar CSV com patologia nova -> cria patologia e prescrição
+3) Importar medicações -> aparece em prescrições, calculadora e interações
+4) Usuário edita oficial no preview -> não muda oficial, só draft
+5) Usuário salva como “minha” -> aparece em Minhas + pode favoritar
+6) Admin edita oficial -> usuários veem novo versionamento
+7) Lista de patologias A–Z
+
+ENTREGA FINAL:
+- PRs/commits com migrations + telas admin + services + endpoints
+- Documentar rapidamente (README curto) com formatos CSV/JSON aceitos
+- Garantir que o erro não volta e que o fluxo permanece limpo.
+--------------------------------------------
+I) MEMORIZAÇÃO (CARDS / RESUMOS / MNEMÔNICOS / DICAS / CHECKPOINTS)
+--------------------------------------------
+
+CONTEXTO:
+Existe uma aba “Memorização” com filtros: Todos, Resumo, Mnemônico, Dica Rápida, Checkpoint.
+Objetivo: permitir que Admin importe em massa conteúdos oficiais e usuários criem os próprios conteúdos, com edição, favoritos, e “baralho de bolso” (mini-cards) por patologia.
+NÃO quebrar a UI atual; apenas evoluir com import/edição/padrão visual.
+
+I1) MODELO DE DADOS — CONTEÚDO OFICIAL VS CONTEÚDO DO USUÁRIO
+Criar tabelas (ou adaptar existentes) seguindo o mesmo conceito de “oficial imutável pelo usuário”:
+
+1) content_decks (baralhos/coleções)
+- id (PK)
+- owner_type (ENUM: 'ADMIN'|'USER')
+- owner_user_id (FK users.id, nullable) // se USER
+- title (TEXT) // ex: “Baralho Bronquiolite”
+- description (TEXT, nullable)
+- pathology_id (FK pathologies.id, nullable) // se vinculado à patologia
+- is_official (BOOL) // true para ADMIN
+- is_public (BOOL default true) // oficiais sempre true; usuário pode escolher
+- created_at/updated_at
+
+2) content_cards (itens do baralho)
+- id (PK)
+- deck_id (FK content_decks.id)
+- type (ENUM: 'RESUMO'|'MNEMONICO'|'DICA_RAPIDA'|'CHECKPOINT')
+- title (TEXT) // curto
+- body (TEXT) // suporte a Markdown (ou HTML simples)
+- tags (TEXT[], nullable)
+- sort_order (INT)
+- created_at/updated_at
+
+3) user_content_favorites
+- id (PK)
+- user_id (FK users.id)
+- card_id (FK content_cards.id)
+- created_at
+
+REGRAS:
+- Conteúdo OFFICIAL (owner_type=ADMIN, is_official=true): usuário não edita permanentemente.
+- Usuário pode “editar no preview” (draft local) e “Salvar como meu”:
+  - cria um deck USER com source (ver I2.4) e cria cards clonados.
+- Usuário pode criar do zero decks e cards.
+
+I2) TELA “MEMORIZAÇÃO” — UX SEM MUDAR MUITO
+Manter a estrutura atual:
+- Search
+- Filtros: Todos / Resumo / Mnemônico / Dica Rápida / Checkpoint
+- Botão “Novo Card” (já existe) -> expandir para “Novo Card” ou “Novo Baralho”
+
+Adicionar:
+- Seletor de “Origem”: Oficiais | Meus | Favoritos (default: Todos)
+- Visual “Baralho de bolso”:
+  - Quando deck_id existe (principalmente vinculado a uma patologia), mostrar cards como “mini-cards” roláveis (estilo pocket deck).
+  - Ao clicar em um mini-card: abre modal com conteúdo completo e botões: Copiar / Favoritar / Salvar como meu (se oficial).
+
+I2.1) Criar “Novo Baralho”
+- Campos: título, descrição, patologia vinculada (opcional), visibilidade (se for usuário)
+- Depois: adicionar cards dentro
+
+I2.2) Criar “Novo Card”
+- Selecionar o deck (ou criar na hora)
+- Tipo: RESUMO/MNEMONICO/DICA_RAPIDA/CHECKPOINT
+- Título + body + tags
+- Salvar
+
+I2.3) Edição
+- Oficiais: somente admin edita.
+- Usuário: edita os próprios.
+- Preview editável: permitir editar temporariamente um card oficial e oferecer “Salvar como meu card” (duplica para um deck do usuário).
+
+I2.4) Rastreamento de origem (opcional mas recomendado)
+Adicionar campos em content_decks e/ou content_cards:
+- source_deck_id (nullable)
+- source_card_id (nullable)
+Para saber que o usuário clonou de um oficial.
+
+I3) IMPORTAÇÃO EM MASSA (ADMIN E OPCIONAL PARA USUÁRIO)
+Adicionar botão “Importar” na aba Memorização:
+- ADMIN: importar como “Oficial”
+- USUÁRIO: importar como “Meu”
+
+I3.1) Formatos aceitos: CSV e JSON + “colar texto”
+CSV colunas (obrigatório suportar):
+- deck_title
+- deck_description (opcional)
+- pathology_name (opcional)
+- card_type (RESUMO/MNEMONICO/DICA_RAPIDA/CHECKPOINT)
+- card_title
+- card_body
+- tags (separadas por ;)
+- sort_order (opcional)
+
+Regras do importador:
+- Upsert de patologia por name_normalized (criar se não existir).
+- Upsert de deck por (owner + deck_title + pathology_id) para evitar duplicação.
+- Inserir cards; se modo “substituir deck”: apagar cards antigos do deck e inserir novos.
+- Validação por linha:
+  - card_type obrigatório e dentro do enum
+  - card_title e card_body obrigatórios
+  - deck_title obrigatório
+- Se qualquer linha falhar: não salvar nada (transação), retornar lista de erros por linha.
+
+I3.2) JSON
+Aceitar:
+{
+  "deck": { "title": "...", "description": "...", "pathology_name": "..." },
+  "cards": [
+    { "type": "RESUMO", "title": "...", "body": "...", "tags": ["..."], "sort_order": 1 }
+  ]
+}
+
+I4) PADRÃO CRIATIVO (SEM INVENTAR MEDICINA, SÓ FORMATAÇÃO)
+Implementar templates visuais por tipo na UI (renderização):
+- RESUMO: estrutura “o que é / quadro / diagnóstico / conduta / sinais de alarme” (apenas como layout; conteúdo vem do texto)
+- MNEMONICO: destaque para frase/história curta
+- DICA_RAPIDA: bullets curtos, estilo “pocket”
+- CHECKPOINT: lista de “itens para não esquecer” com checkboxes no front (estado local do usuário)
+
+IMPORTANTE:
+- Não gerar conteúdo automático médico sem o admin/usuário fornecer texto.
+- A IA do Replit só implementa os campos e a renderização por tipo.
+
+I5) PERMISSÕES
+- Somente admin pode:
+  - importar como oficial
+  - editar/deletar oficiais
+- Usuário pode:
+  - criar e editar “meus”
+  - favoritar oficiais ou meus
+  - clonar oficiais para “meus” ao editar
+
+I6) SINCRONIZAÇÃO COM PATOLOGIAS
+- Se um deck estiver vinculado a pathology_id:
+  - exibir link/atalho dentro da patologia (Prescrições -> “Memorização”)
+  - e na Memorização permitir filtro por patologia
+- Se o deck não tiver patologia, fica em “Geral”.
+
+I7) TESTES MANUAIS (CHECKLIST)
+1) Admin importa CSV criando deck oficial vinculado a patologia nova -> patologia criada + deck/cards ok
+2) Admin edita card oficial -> usuários veem atualização
+3) Usuário edita card oficial no preview -> oficial não muda; ao salvar, cria card do usuário
+4) Usuário cria deck próprio e adiciona cards -> aparece em “Meus”
+5) Favoritar -> aparece em “Favoritos”
+6) Filtros por tipo -> funcionam
+7) “Baralho de bolso” -> mini-cards roláveis e modal de leitura
+
