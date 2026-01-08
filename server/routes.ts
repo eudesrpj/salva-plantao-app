@@ -1247,6 +1247,86 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(204).send();
   });
 
+  // --- Medication Dilutions (Admin configurable) ---
+  app.get("/api/medication-dilutions", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const medicationName = req.query.medication as string | undefined;
+    const items = await storage.getMedicationDilutions(medicationName ? Number(medicationName) : undefined);
+    res.json(items);
+  });
+
+  app.get("/api/medication-dilutions/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const item = await storage.getMedicationDilution(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Diluição não encontrada" });
+    res.json(item);
+  });
+
+  app.get("/api/medication-dilutions/by-name/:name", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const item = await storage.getMedicationDilutionByName(req.params.name);
+    res.json(item || null);
+  });
+
+  app.post("/api/medication-dilutions", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.createMedicationDilution(req.body);
+    res.status(201).json(item);
+  });
+
+  app.put("/api/medication-dilutions/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.updateMedicationDilution(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/medication-dilutions/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteMedicationDilution(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.post("/api/medication-dilutions/bulk-import", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { data } = req.body;
+      if (!data || typeof data !== 'string') {
+        return res.status(400).json({ message: "Campo 'data' é obrigatório (texto CSV)" });
+      }
+
+      const lines = data.trim().split('\n').filter((line: string) => line.trim());
+      const items: any[] = [];
+      const parseErrors: string[] = [];
+
+      // Formato: medicationName;route;dilutionNeeded;dilutionHow;infusionTime;compatibility;administrationNotes
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || line.startsWith('#')) continue;
+
+        const parts = line.split(';').map((p: string) => p.trim());
+        if (parts.length < 2) {
+          parseErrors.push(`Linha ${i + 1}: formato inválido (mínimo: medicationName;route)`);
+          continue;
+        }
+
+        items.push({
+          medicationName: parts[0],
+          route: parts[1] || 'IV',
+          dilutionNeeded: parts[2]?.toLowerCase() === 'sim' || parts[2]?.toLowerCase() === 'true',
+          dilutionHow: parts[3] || null,
+          infusionTime: parts[4] || null,
+          compatibility: parts[5] || null,
+          administrationNotes: parts[6] || null,
+        });
+      }
+
+      if (items.length === 0) {
+        return res.status(400).json({ message: "Nenhum item válido para importar", errors: parseErrors });
+      }
+
+      const result = await storage.bulkImportMedicationDilutions(items);
+      res.json({ 
+        imported: result.imported, 
+        errors: [...parseErrors, ...result.errors] 
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao importar diluições", error: String(error) });
+    }
+  });
+
   // --- Promo Coupons (Admin only) ---
   app.get("/api/promo-coupons", isAuthenticated, checkAdmin, async (req, res) => {
     const items = await storage.getPromoCoupons();

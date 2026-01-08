@@ -1737,6 +1737,22 @@ export class DatabaseStorage implements IStorage {
     return await this.createMedicationDilution(item);
   }
 
+  async bulkImportMedicationDilutions(data: InsertMedicationDilution[]): Promise<{ imported: number; errors: string[] }> {
+    const errors: string[] = [];
+    let imported = 0;
+    
+    for (let i = 0; i < data.length; i++) {
+      try {
+        await this.upsertMedicationDilution(data[i]);
+        imported++;
+      } catch (error) {
+        errors.push(`Linha ${i + 1}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
+    }
+    
+    return { imported, errors };
+  }
+
   // Hydration Presets
   async getHydrationPresets(patientType?: string): Promise<HydrationPreset[]> {
     if (patientType) {
