@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Calculator, X, GripVertical, AlertTriangle, Copy, Check, Info, Baby, Syringe } from "lucide-react";
+import { Calculator, X, GripVertical, AlertTriangle, Copy, Check, Info, Baby, Syringe, User, Equal, Delete } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,11 +65,17 @@ export function FloatingCalculator() {
   const [weight, setWeight] = useState("");
   const [ageMonths, setAgeMonths] = useState("");
   const [selectedMed, setSelectedMed] = useState("");
+  const [selectedAdultMed, setSelectedAdultMed] = useState("");
   const [copied, setCopied] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef({ x: 0, y: 0 });
+  
+  const [calcDisplay, setCalcDisplay] = useState("0");
+  const [calcPrevValue, setCalcPrevValue] = useState<number | null>(null);
+  const [calcOperator, setCalcOperator] = useState<string | null>(null);
+  const [calcWaitingForOperand, setCalcWaitingForOperand] = useState(false);
 
   const { data: customMeds } = useQuery<CalculatorSetting[]>({
     queryKey: ["/api/calculator-settings"],
@@ -77,8 +83,9 @@ export function FloatingCalculator() {
   });
 
   const medications = useMemo((): PediatricMed[] => {
-    if (customMeds?.length) {
-      return customMeds.map(m => ({
+    const pediatricMeds = customMeds?.filter(m => m.calculatorMode === "pediatrico" || !m.calculatorMode);
+    if (pediatricMeds?.length) {
+      return pediatricMeds.map(m => ({
         medication: m.medication,
         dosePerKg: m.dosePerKg || "0",
         maxDose: m.maxDose || "9999",
@@ -93,9 +100,146 @@ export function FloatingCalculator() {
     return DEFAULT_PEDIATRIC_MEDS;
   }, [customMeds]);
 
+  const adultMedications = useMemo((): PediatricMed[] => {
+    const adultMeds = customMeds?.filter(m => m.calculatorMode === "adulto");
+    if (adultMeds?.length) {
+      return adultMeds.map(m => ({
+        medication: m.medication,
+        dosePerKg: m.dosePerKg || "0",
+        maxDose: m.maxDose || "9999",
+        unit: m.unit || "mg",
+        interval: m.interval || "",
+        pharmaceuticalForm: m.pharmaceuticalForm || "",
+        concentration: m.concentration || "",
+        minAge: 0,
+        maxWeight: 200,
+      }));
+    }
+    return [];
+  }, [customMeds]);
+
   const selectedMedData = useMemo(() => {
     return medications.find(m => m.medication === selectedMed);
   }, [medications, selectedMed]);
+
+  const selectedAdultMedData = useMemo(() => {
+    return adultMedications.find(m => m.medication === selectedAdultMed);
+  }, [adultMedications, selectedAdultMed]);
+
+  const adultCalculation = useMemo((): CalculationResult | null => {
+    if (!weight || !selectedAdultMedData) return null;
+
+    const weightNum = parseFloat(weight);
+    const dosePerKg = parseFloat(selectedAdultMedData.dosePerKg?.split("-")[0] || "0");
+    const maxDose = parseFloat(selectedAdultMedData.maxDose || "9999");
+    
+    let dose = weightNum * dosePerKg;
+    const maxDoseExceeded = dose > maxDose;
+    if (maxDoseExceeded) {
+      dose = maxDose;
+    }
+
+    let doseInMl: number | null = null;
+    const concentration = selectedAdultMedData.concentration;
+    if (concentration) {
+      const match = concentration.match(/(\d+(?:\.\d+)?)\s*(?:mg)\s*[/\\]\s*(\d+(?:\.\d+)?)\s*(?:ml)?/i);
+      if (match) {
+        const mgPer = parseFloat(match[1]);
+        const mlPer = parseFloat(match[2]);
+        if (mgPer && mlPer) {
+          doseInMl = (dose * mlPer) / mgPer;
+        }
+      }
+    }
+
+    return {
+      doseInMg: dose,
+      doseInMl,
+      dosePerKg,
+      maxDoseExceeded,
+      maxDose,
+      unit: selectedAdultMedData.unit || "mg",
+      interval: selectedAdultMedData.interval || "",
+      pharmaceuticalForm: selectedAdultMedData.pharmaceuticalForm || "",
+      concentration: selectedAdultMedData.concentration || null,
+      ageWarning: null,
+      weightWarning: null
+    };
+  }, [weight, selectedAdultMedData]);
+
+  const handleCalcDigit = (digit: string) => {
+    if (calcWaitingForOperand) {
+      setCalcDisplay(digit);
+      setCalcWaitingForOperand(false);
+    } else {
+      setCalcDisplay(calcDisplay === "0" ? digit : calcDisplay + digit);
+    }
+  };
+
+  const handleCalcDecimal = () => {
+    if (calcWaitingForOperand) {
+      setCalcDisplay("0.");
+      setCalcWaitingForOperand(false);
+    } else if (!calcDisplay.includes(".")) {
+      setCalcDisplay(calcDisplay + ".");
+    }
+  };
+
+  const handleCalcOperator = (op: string) => {
+    const current = parseFloat(calcDisplay);
+    
+    if (calcPrevValue !== null && calcOperator && !calcWaitingForOperand) {
+      const result = performCalculation(calcPrevValue, current, calcOperator);
+      setCalcDisplay(String(result));
+      setCalcPrevValue(result);
+    } else {
+      setCalcPrevValue(current);
+    }
+    
+    setCalcOperator(op);
+    setCalcWaitingForOperand(true);
+  };
+
+  const performCalculation = (prev: number, current: number, op: string): number => {
+    switch (op) {
+      case "+": return prev + current;
+      case "-": return prev - current;
+      case "*": return prev * current;
+      case "/": return current !== 0 ? prev / current : NaN;
+      case "%": return prev * (current / 100);
+      default: return current;
+    }
+  };
+
+  const handleCalcEquals = () => {
+    if (calcPrevValue === null || calcOperator === null) return;
+    
+    const current = parseFloat(calcDisplay);
+    const result = performCalculation(calcPrevValue, current, calcOperator);
+    if (isNaN(result) || !isFinite(result)) {
+      setCalcDisplay("Erro");
+    } else {
+      setCalcDisplay(String(parseFloat(result.toFixed(10))));
+    }
+    setCalcPrevValue(null);
+    setCalcOperator(null);
+    setCalcWaitingForOperand(true);
+  };
+
+  const handleCalcClear = () => {
+    setCalcDisplay("0");
+    setCalcPrevValue(null);
+    setCalcOperator(null);
+    setCalcWaitingForOperand(false);
+  };
+
+  const handleCalcBackspace = () => {
+    if (calcDisplay.length === 1) {
+      setCalcDisplay("0");
+    } else {
+      setCalcDisplay(calcDisplay.slice(0, -1));
+    }
+  };
 
   const calculation = useMemo((): CalculationResult | null => {
     if (!weight || !selectedMedData) return null;
@@ -340,14 +484,22 @@ export function FloatingCalculator() {
             </div>
 
             <Tabs defaultValue="pediatria" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-none border-b border-slate-200 dark:border-slate-700">
-                <TabsTrigger value="pediatria" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1.5">
-                  <Baby className="h-4 w-4" />
-                  Pediatria
+              <TabsList className="grid w-full grid-cols-4 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-none border-b border-slate-200 dark:border-slate-700">
+                <TabsTrigger value="pediatria" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
+                  <Baby className="h-3 w-3" />
+                  Pediátrico
                 </TabsTrigger>
-                <TabsTrigger value="emergencia" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1.5">
-                  <Syringe className="h-4 w-4" />
+                <TabsTrigger value="adulto" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
+                  <User className="h-3 w-3" />
+                  Adulto
+                </TabsTrigger>
+                <TabsTrigger value="emergencia" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
+                  <Syringe className="h-3 w-3" />
                   Emergência
+                </TabsTrigger>
+                <TabsTrigger value="comum" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
+                  <Calculator className="h-3 w-3" />
+                  Comum
                 </TabsTrigger>
               </TabsList>
               
@@ -462,6 +614,86 @@ export function FloatingCalculator() {
                   )}
                 </TabsContent>
 
+                <TabsContent value="adulto" className="space-y-3 mt-0">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Selecione a medicação adulta
+                    </Label>
+                    <Select value={selectedAdultMed} onValueChange={setSelectedAdultMed}>
+                      <SelectTrigger className="w-full" data-testid="select-adult-medication">
+                        <SelectValue placeholder="Escolha uma medicação..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {adultMedications.map((med) => (
+                          <SelectItem key={med.medication} value={med.medication || ""}>
+                            {med.medication} ({med.dosePerKg}mg/kg)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {adultCalculation && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-blue-700 dark:text-blue-400">{selectedAdultMed}</span>
+                          {adultCalculation.pharmaceuticalForm && (
+                            <Badge variant="outline" className="text-xs">
+                              {adultCalculation.pharmaceuticalForm}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white dark:bg-slate-800 rounded-lg p-3 text-center">
+                            <div className="text-2xl font-bold text-blue-600">
+                              {adultCalculation.doseInMg.toFixed(1)}
+                            </div>
+                            <div className="text-xs text-slate-500">{adultCalculation.unit}</div>
+                          </div>
+                          {adultCalculation.doseInMl && (
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-3 text-center">
+                              <div className="text-2xl font-bold text-emerald-600">
+                                {adultCalculation.doseInMl.toFixed(1)}
+                              </div>
+                              <div className="text-xs text-slate-500">ml</div>
+                            </div>
+                          )}
+                        </div>
+
+                        {adultCalculation.interval && (
+                          <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
+                            <Info className="h-3 w-3" />
+                            <span>Intervalo: {adultCalculation.interval}</span>
+                          </div>
+                        )}
+
+                        {adultCalculation.maxDoseExceeded && (
+                          <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 text-sm bg-orange-50 dark:bg-orange-950/30 rounded-lg p-2">
+                            <AlertTriangle className="h-4 w-4" />
+                            <span>Dose máxima: {adultCalculation.maxDose}{adultCalculation.unit}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {adultMedications.length === 0 && (
+                    <div className="text-center text-sm text-slate-400 py-8">
+                      <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>Nenhum medicamento adulto cadastrado.</p>
+                      <p className="text-xs mt-1">O administrador pode adicionar medicamentos adultos no painel admin.</p>
+                    </div>
+                  )}
+
+                  {adultMedications.length > 0 && !selectedAdultMed && (
+                    <div className="text-center text-sm text-slate-400 py-8">
+                      Selecione uma medicação para calcular a dose
+                    </div>
+                  )}
+                </TabsContent>
+
                 <TabsContent value="emergencia" className="space-y-2 mt-0">
                   {EMERGENCY_MEDS.map((med) => (
                     <DoseCard 
@@ -473,6 +705,51 @@ export function FloatingCalculator() {
                       color={med.color} 
                     />
                   ))}
+                </TabsContent>
+
+                <TabsContent value="comum" className="mt-0">
+                  <div className="space-y-3">
+                    <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 text-right">
+                      <div className="text-xs text-slate-500 h-4">
+                        {calcPrevValue !== null && calcOperator && (
+                          <span>{calcPrevValue} {calcOperator}</span>
+                        )}
+                      </div>
+                      <div className="text-3xl font-mono font-bold text-slate-800 dark:text-slate-100 truncate" data-testid="calc-display">
+                        {calcDisplay}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <Button variant="outline" size="sm" className="h-11 text-lg" onClick={handleCalcClear} data-testid="calc-clear">C</Button>
+                      <Button variant="outline" size="sm" className="h-11" onClick={handleCalcBackspace} data-testid="calc-backspace">
+                        <Delete className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-11 text-lg" onClick={() => handleCalcOperator("%")} data-testid="calc-percent">%</Button>
+                      <Button variant="secondary" size="sm" className="h-11 text-lg font-bold" onClick={() => handleCalcOperator("/")} data-testid="calc-divide">/</Button>
+
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("7")} data-testid="calc-7">7</Button>
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("8")} data-testid="calc-8">8</Button>
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("9")} data-testid="calc-9">9</Button>
+                      <Button variant="secondary" size="sm" className="h-11 text-lg font-bold" onClick={() => handleCalcOperator("*")} data-testid="calc-multiply">x</Button>
+
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("4")} data-testid="calc-4">4</Button>
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("5")} data-testid="calc-5">5</Button>
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("6")} data-testid="calc-6">6</Button>
+                      <Button variant="secondary" size="sm" className="h-11 text-lg font-bold" onClick={() => handleCalcOperator("-")} data-testid="calc-subtract">-</Button>
+
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("1")} data-testid="calc-1">1</Button>
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("2")} data-testid="calc-2">2</Button>
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={() => handleCalcDigit("3")} data-testid="calc-3">3</Button>
+                      <Button variant="secondary" size="sm" className="h-11 text-lg font-bold" onClick={() => handleCalcOperator("+")} data-testid="calc-add">+</Button>
+
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium col-span-2" onClick={() => handleCalcDigit("0")} data-testid="calc-0">0</Button>
+                      <Button variant="ghost" size="sm" className="h-11 text-lg font-medium" onClick={handleCalcDecimal} data-testid="calc-decimal">,</Button>
+                      <Button size="sm" className="h-11 text-lg font-bold" onClick={handleCalcEquals} data-testid="calc-equals">
+                        <Equal className="h-5 w-5" />
+                      </Button>
+                    </div>
+                  </div>
                 </TabsContent>
               </div>
             </Tabs>

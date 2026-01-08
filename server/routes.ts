@@ -1063,6 +1063,50 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(204).send();
   });
 
+  // --- Promo Coupons (Admin only) ---
+  app.get("/api/promo-coupons", isAuthenticated, checkAdmin, async (req, res) => {
+    const items = await storage.getPromoCoupons();
+    res.json(items);
+  });
+
+  app.get("/api/promo-coupons/validate/:code", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const coupon = await storage.getPromoCouponByCode(req.params.code);
+    if (!coupon) return res.status(404).json({ message: "Cupom não encontrado" });
+    if (!coupon.isActive) return res.status(400).json({ message: "Cupom inativo" });
+    if (coupon.validUntil && new Date(coupon.validUntil) < new Date()) {
+      return res.status(400).json({ message: "Cupom expirado" });
+    }
+    if (coupon.maxUses && coupon.currentUses && coupon.currentUses >= coupon.maxUses) {
+      return res.status(400).json({ message: "Cupom esgotado" });
+    }
+    res.json({ 
+      valid: true, 
+      discountType: coupon.discountType, 
+      discountValue: coupon.discountValue,
+      discountMonths: coupon.discountMonths 
+    });
+  });
+
+  app.post("/api/promo-coupons", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.createPromoCoupon(req.body);
+    res.status(201).json(item);
+  });
+
+  app.put("/api/promo-coupons/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.updatePromoCoupon(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/promo-coupons/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deletePromoCoupon(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.post("/api/promo-coupons/:id/use", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const usage = await storage.useCoupon(Number(req.params.id), getUserId(req));
+    res.status(201).json(usage);
+  });
+
   // --- Prescription Favorites (User personalized copies) ---
   app.get("/api/prescription-favorites", isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getPrescriptionFavorites(getUserId(req));

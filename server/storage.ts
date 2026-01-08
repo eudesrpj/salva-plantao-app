@@ -2,7 +2,7 @@ import {
   prescriptions, checklists, shifts, notes, tasks, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
   protocols, flashcards, favorites, adminSettings, doctorProfiles, interconsultMessages, usageStats,
   pathologies, pathologyMedications, patientHistory, calculatorSettings, medications, userPreferences,
-  drugInteractions, medicationContraindications, prescriptionFavorites,
+  drugInteractions, medicationContraindications, prescriptionFavorites, promoCoupons, couponUsages,
   evolutionModels, physicalExamTemplates, signsSymptoms, semiologicalSigns,
   medicalCertificates, attendanceDeclarations, medicalReferrals, referralDestinations, referralReasons,
   prescriptionModels, prescriptionModelMedications, monthlyExpenses, financialGoals,
@@ -44,7 +44,9 @@ import {
   type PrescriptionModel, type InsertPrescriptionModel,
   type PrescriptionModelMedication, type InsertPrescriptionModelMedication,
   type MonthlyExpense, type InsertMonthlyExpense,
-  type FinancialGoal, type InsertFinancialGoal
+  type FinancialGoal, type InsertFinancialGoal,
+  type PromoCoupon, type InsertPromoCoupon,
+  type CouponUsage, type InsertCouponUsage
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -196,6 +198,14 @@ export interface IStorage {
   createMedicationContraindication(item: InsertMedicationContraindication): Promise<MedicationContraindication>;
   updateMedicationContraindication(id: number, item: Partial<InsertMedicationContraindication>): Promise<MedicationContraindication>;
   deleteMedicationContraindication(id: number): Promise<void>;
+
+  // Promo Coupons
+  getPromoCoupons(): Promise<PromoCoupon[]>;
+  getPromoCouponByCode(code: string): Promise<PromoCoupon | undefined>;
+  createPromoCoupon(item: InsertPromoCoupon): Promise<PromoCoupon>;
+  updatePromoCoupon(id: number, item: Partial<InsertPromoCoupon>): Promise<PromoCoupon>;
+  deletePromoCoupon(id: number): Promise<void>;
+  useCoupon(couponId: number, userId: string): Promise<CouponUsage>;
 
   // Prescription Favorites
   getPrescriptionFavorites(userId: string): Promise<PrescriptionFavorite[]>;
@@ -989,6 +999,45 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMedicationContraindication(id: number): Promise<void> {
     await db.delete(medicationContraindications).where(eq(medicationContraindications.id, id));
+  }
+
+  // Promo Coupons
+  async getPromoCoupons(): Promise<PromoCoupon[]> {
+    return await db.select().from(promoCoupons).orderBy(desc(promoCoupons.createdAt));
+  }
+
+  async getPromoCouponByCode(code: string): Promise<PromoCoupon | undefined> {
+    const [item] = await db.select().from(promoCoupons).where(eq(promoCoupons.code, code.toUpperCase()));
+    return item;
+  }
+
+  async createPromoCoupon(insertItem: InsertPromoCoupon): Promise<PromoCoupon> {
+    const [item] = await db.insert(promoCoupons).values({
+      ...insertItem,
+      code: insertItem.code.toUpperCase()
+    }).returning();
+    return item;
+  }
+
+  async updatePromoCoupon(id: number, updateItem: Partial<InsertPromoCoupon>): Promise<PromoCoupon> {
+    const [item] = await db.update(promoCoupons).set({
+      ...updateItem,
+      ...(updateItem.code ? { code: updateItem.code.toUpperCase() } : {})
+    }).where(eq(promoCoupons.id, id)).returning();
+    return item;
+  }
+
+  async deletePromoCoupon(id: number): Promise<void> {
+    await db.delete(couponUsages).where(eq(couponUsages.couponId, id));
+    await db.delete(promoCoupons).where(eq(promoCoupons.id, id));
+  }
+
+  async useCoupon(couponId: number, userId: string): Promise<CouponUsage> {
+    const [usage] = await db.insert(couponUsages).values({ couponId, userId }).returning();
+    await db.update(promoCoupons).set({ 
+      currentUses: sql`${promoCoupons.currentUses} + 1` 
+    }).where(eq(promoCoupons.id, couponId));
+    return usage;
   }
 
   // Prescription Favorites

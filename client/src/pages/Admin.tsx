@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -36,12 +36,18 @@ export default function Admin() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-4xl grid-cols-7">
+        <TabsList className="flex flex-wrap gap-1 w-full max-w-5xl">
           <TabsTrigger value="users" className="gap-1">
             <Users className="h-4 w-4" /> Usuários
           </TabsTrigger>
           <TabsTrigger value="payment" className="gap-1">
             <CreditCard className="h-4 w-4" /> Pagamento
+          </TabsTrigger>
+          <TabsTrigger value="coupons" className="gap-1">
+            <Ticket className="h-4 w-4" /> Cupons
+          </TabsTrigger>
+          <TabsTrigger value="calculator" className="gap-1">
+            <Calculator className="h-4 w-4" /> Calculadora
           </TabsTrigger>
           <TabsTrigger value="models" className="gap-1">
             <FileText className="h-4 w-4" /> Modelos
@@ -66,6 +72,14 @@ export default function Admin() {
 
         <TabsContent value="payment">
           <PaymentSettingsTab />
+        </TabsContent>
+
+        <TabsContent value="coupons">
+          <CouponsTab />
+        </TabsContent>
+
+        <TabsContent value="calculator">
+          <CalculatorSettingsTab />
         </TabsContent>
 
         <TabsContent value="models">
@@ -1060,6 +1074,616 @@ function InteractionsTab() {
           </DialogContent>
         </Dialog>
       )}
+    </div>
+  );
+}
+
+interface PromoCoupon {
+  id: number;
+  code: string;
+  discountType: string | null;
+  discountValue: string;
+  discountMonths: number | null;
+  maxUses: number | null;
+  currentUses: number | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  isActive: boolean | null;
+  description: string | null;
+  createdAt: string | null;
+}
+
+function CouponsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState<PromoCoupon | null>(null);
+  const [code, setCode] = useState("");
+  const [discountType, setDiscountType] = useState("percentage");
+  const [discountValue, setDiscountValue] = useState("");
+  const [discountMonths, setDiscountMonths] = useState("1");
+  const [maxUses, setMaxUses] = useState("");
+  const [validUntilDays, setValidUntilDays] = useState("");
+  const [description, setDescription] = useState("");
+
+  const { data: coupons, isLoading } = useQuery<PromoCoupon[]>({
+    queryKey: ["/api/promo-coupons"],
+    queryFn: async () => {
+      const res = await fetch("/api/promo-coupons", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/promo-coupons", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/promo-coupons"] });
+      toast({ title: "Cupom criado!" });
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao criar cupom", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await apiRequest("PUT", `/api/promo-coupons/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/promo-coupons"] });
+      toast({ title: "Cupom atualizado!" });
+      setEditingCoupon(null);
+    },
+    onError: () => toast({ title: "Erro ao atualizar", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/promo-coupons/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/promo-coupons"] });
+      toast({ title: "Cupom excluído!" });
+    },
+    onError: () => toast({ title: "Erro ao excluir", variant: "destructive" }),
+  });
+
+  const resetForm = () => {
+    setCode("");
+    setDiscountType("percentage");
+    setDiscountValue("");
+    setDiscountMonths("1");
+    setMaxUses("");
+    setValidUntilDays("");
+    setDescription("");
+  };
+
+  const handleCreate = () => {
+    if (!code || !discountValue) return;
+    const validUntil = validUntilDays ? new Date(Date.now() + parseInt(validUntilDays) * 24 * 60 * 60 * 1000).toISOString() : null;
+    createMutation.mutate({
+      code: code.toUpperCase(),
+      discountType,
+      discountValue,
+      discountMonths: parseInt(discountMonths) || 1,
+      maxUses: maxUses ? parseInt(maxUses) : null,
+      validUntil,
+      description,
+      isActive: true,
+    });
+  };
+
+  if (isLoading) return <PageLoader text="Carregando cupons..." />;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Ticket className="h-5 w-5" /> Cupons de Desconto
+            </CardTitle>
+            <CardDescription>Gerencie cupons promocionais para pagamentos</CardDescription>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" data-testid="button-add-coupon">
+                <Plus className="h-4 w-4" /> Novo Cupom
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Criar Cupom de Desconto</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Código do Cupom *</label>
+                  <Input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    placeholder="EX: DESCONTO20"
+                    data-testid="input-coupon-code"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Tipo de Desconto</label>
+                    <Select value={discountType} onValueChange={setDiscountType}>
+                      <SelectTrigger data-testid="select-discount-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percentage">Porcentagem (%)</SelectItem>
+                        <SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Valor do Desconto *</label>
+                    <Input
+                      type="number"
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
+                      placeholder={discountType === "percentage" ? "Ex: 20" : "Ex: 50"}
+                      data-testid="input-discount-value"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Meses de Desconto</label>
+                    <Input
+                      type="number"
+                      value={discountMonths}
+                      onChange={(e) => setDiscountMonths(e.target.value)}
+                      placeholder="1"
+                      data-testid="input-discount-months"
+                    />
+                    <p className="text-xs text-muted-foreground">Por quantos meses o desconto será aplicado</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Limite de Usos</label>
+                    <Input
+                      type="number"
+                      value={maxUses}
+                      onChange={(e) => setMaxUses(e.target.value)}
+                      placeholder="Ilimitado"
+                      data-testid="input-max-uses"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Validade (dias)</label>
+                  <Input
+                    type="number"
+                    value={validUntilDays}
+                    onChange={(e) => setValidUntilDays(e.target.value)}
+                    placeholder="Ex: 30 (deixe vazio para sem validade)"
+                    data-testid="input-valid-days"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Descrição</label>
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Descrição interna do cupom"
+                    data-testid="input-coupon-description"
+                  />
+                </div>
+                <Button onClick={handleCreate} disabled={createMutation.isPending || !code || !discountValue} className="w-full" data-testid="button-create-coupon">
+                  {createMutation.isPending ? "Criando..." : "Criar Cupom"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          {coupons && coupons.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Desconto</TableHead>
+                  <TableHead>Meses</TableHead>
+                  <TableHead>Usos</TableHead>
+                  <TableHead>Validade</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {coupons.map((coupon) => (
+                  <TableRow key={coupon.id}>
+                    <TableCell className="font-mono font-bold">{coupon.code}</TableCell>
+                    <TableCell>
+                      {coupon.discountType === "percentage" ? `${coupon.discountValue}%` : `R$ ${coupon.discountValue}`}
+                    </TableCell>
+                    <TableCell>{coupon.discountMonths || 1} mês(es)</TableCell>
+                    <TableCell>
+                      {coupon.currentUses || 0}{coupon.maxUses ? `/${coupon.maxUses}` : ""}
+                    </TableCell>
+                    <TableCell>
+                      {coupon.validUntil ? new Date(coupon.validUntil).toLocaleDateString("pt-BR") : "Sem limite"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={coupon.isActive ? "default" : "secondary"}>
+                        {coupon.isActive ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => updateMutation.mutate({ id: coupon.id, data: { isActive: !coupon.isActive } })}
+                          title={coupon.isActive ? "Desativar" : "Ativar"}
+                        >
+                          {coupon.isActive ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteMutation.mutate(coupon.id)}
+                          className="text-red-500"
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Ticket className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhum cupom cadastrado.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+interface CalcSetting {
+  id: number;
+  medication: string;
+  indication: string | null;
+  dosePerKg: string;
+  doseFormula: string | null;
+  fixedDose: string | null;
+  maxDosePerDose: string | null;
+  maxDosePerDay: string | null;
+  maxDose: string | null;
+  unit: string | null;
+  interval: string | null;
+  notes: string | null;
+  ageGroup: string | null;
+  calculatorMode: string | null;
+  usageMode: string | null;
+  pharmaceuticalForm: string | null;
+  concentration: string | null;
+  route: string | null;
+  category: string | null;
+  isActive: boolean | null;
+}
+
+function CalculatorSettingsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingMed, setEditingMed] = useState<CalcSetting | null>(null);
+  const [medication, setMedication] = useState("");
+  const [indication, setIndication] = useState("");
+  const [dosePerKg, setDosePerKg] = useState("");
+  const [doseFormula, setDoseFormula] = useState("mg/kg/dose");
+  const [maxDose, setMaxDose] = useState("");
+  const [unit, setUnit] = useState("mg");
+  const [interval, setInterval] = useState("");
+  const [notes, setNotes] = useState("");
+  const [calculatorMode, setCalculatorMode] = useState("pediatrico");
+  const [pharmaceuticalForm, setPharmaceuticalForm] = useState("");
+  const [concentration, setConcentration] = useState("");
+  const [route, setRoute] = useState("VO");
+  const [category, setCategory] = useState("");
+
+  const { data: settings, isLoading } = useQuery<CalcSetting[]>({
+    queryKey: ["/api/calculator-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/calculator-settings", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/calculator-settings", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/calculator-settings"] });
+      toast({ title: "Medicamento adicionado!" });
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao adicionar", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await apiRequest("PUT", `/api/calculator-settings/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/calculator-settings"] });
+      toast({ title: "Medicamento atualizado!" });
+      setEditingMed(null);
+    },
+    onError: () => toast({ title: "Erro ao atualizar", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/calculator-settings/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/calculator-settings"] });
+      toast({ title: "Medicamento removido!" });
+    },
+    onError: () => toast({ title: "Erro ao remover", variant: "destructive" }),
+  });
+
+  const resetForm = () => {
+    setMedication("");
+    setIndication("");
+    setDosePerKg("");
+    setDoseFormula("mg/kg/dose");
+    setMaxDose("");
+    setUnit("mg");
+    setInterval("");
+    setNotes("");
+    setCalculatorMode("pediatrico");
+    setPharmaceuticalForm("");
+    setConcentration("");
+    setRoute("VO");
+    setCategory("");
+  };
+
+  const handleCreate = () => {
+    if (!medication || !dosePerKg) return;
+    createMutation.mutate({
+      medication,
+      indication,
+      dosePerKg,
+      doseFormula,
+      maxDose,
+      unit,
+      interval,
+      notes,
+      calculatorMode,
+      pharmaceuticalForm,
+      concentration,
+      route,
+      category,
+      isActive: true,
+    });
+  };
+
+  const modeLabels: Record<string, string> = {
+    pediatrico: "Pediátrico",
+    adulto: "Adulto",
+    emergencia: "Emergência",
+    comum: "Comum",
+  };
+
+  if (isLoading) return <PageLoader text="Carregando medicamentos..." />;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" /> Medicamentos da Calculadora
+            </CardTitle>
+            <CardDescription>Configure os medicamentos e cálculos disponíveis na calculadora</CardDescription>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" data-testid="button-add-calc-med">
+                <Plus className="h-4 w-4" /> Novo Medicamento
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Adicionar Medicamento à Calculadora</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Nome do Medicamento *</label>
+                    <Input value={medication} onChange={(e) => setMedication(e.target.value)} placeholder="Ex: Dipirona" data-testid="input-calc-medication" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Modo da Calculadora</label>
+                    <Select value={calculatorMode} onValueChange={setCalculatorMode}>
+                      <SelectTrigger data-testid="select-calc-mode">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pediatrico">Pediátrico</SelectItem>
+                        <SelectItem value="adulto">Adulto</SelectItem>
+                        <SelectItem value="emergencia">Emergência</SelectItem>
+                        <SelectItem value="comum">Comum</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Indicação</label>
+                  <Input value={indication} onChange={(e) => setIndication(e.target.value)} placeholder="Ex: Febre, dor" data-testid="input-calc-indication" />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Dose por Kg *</label>
+                    <Input value={dosePerKg} onChange={(e) => setDosePerKg(e.target.value)} placeholder="Ex: 10-15" data-testid="input-calc-dose-per-kg" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Fórmula</label>
+                    <Select value={doseFormula} onValueChange={setDoseFormula}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mg/kg/dose">mg/kg/dose</SelectItem>
+                        <SelectItem value="mg/kg/dia">mg/kg/dia</SelectItem>
+                        <SelectItem value="dose_fixa">Dose Fixa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Dose Máxima</label>
+                    <Input value={maxDose} onChange={(e) => setMaxDose(e.target.value)} placeholder="Ex: 1g" data-testid="input-calc-max-dose" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Unidade</label>
+                    <Select value={unit} onValueChange={setUnit}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mg">mg</SelectItem>
+                        <SelectItem value="ml">ml</SelectItem>
+                        <SelectItem value="mcg">mcg</SelectItem>
+                        <SelectItem value="UI">UI</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Intervalo</label>
+                    <Input value={interval} onChange={(e) => setInterval(e.target.value)} placeholder="Ex: 6/6h" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Via</label>
+                    <Select value={route} onValueChange={setRoute}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="VO">VO (Oral)</SelectItem>
+                        <SelectItem value="IV">IV (Intravenosa)</SelectItem>
+                        <SelectItem value="IM">IM (Intramuscular)</SelectItem>
+                        <SelectItem value="SC">SC (Subcutânea)</SelectItem>
+                        <SelectItem value="Retal">Retal</SelectItem>
+                        <SelectItem value="Inalatório">Inalatório</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Forma Farmacêutica</label>
+                    <Input value={pharmaceuticalForm} onChange={(e) => setPharmaceuticalForm(e.target.value)} placeholder="Ex: Gotas, Xarope" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Concentração</label>
+                    <Input value={concentration} onChange={(e) => setConcentration(e.target.value)} placeholder="Ex: 500mg/ml" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Categoria</label>
+                  <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex: Analgésico, Antibiótico" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Observações</label>
+                  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações sobre dosagem, contraindicações, etc." />
+                </div>
+                <Button onClick={handleCreate} disabled={createMutation.isPending || !medication || !dosePerKg} className="w-full" data-testid="button-create-calc-med">
+                  {createMutation.isPending ? "Adicionando..." : "Adicionar Medicamento"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          {settings && settings.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Medicamento</TableHead>
+                  <TableHead>Dose/Kg</TableHead>
+                  <TableHead>Máx.</TableHead>
+                  <TableHead>Intervalo</TableHead>
+                  <TableHead>Modo</TableHead>
+                  <TableHead>Via</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {settings.map((med) => (
+                  <TableRow key={med.id}>
+                    <TableCell className="font-medium">
+                      {med.medication}
+                      {med.indication && <span className="block text-xs text-muted-foreground">{med.indication}</span>}
+                    </TableCell>
+                    <TableCell>{med.dosePerKg} {med.unit || "mg"}</TableCell>
+                    <TableCell>{med.maxDose || "-"}</TableCell>
+                    <TableCell>{med.interval || "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{modeLabels[med.calculatorMode || "pediatrico"] || med.calculatorMode}</Badge>
+                    </TableCell>
+                    <TableCell>{med.route || "VO"}</TableCell>
+                    <TableCell>
+                      <Badge variant={med.isActive ? "default" : "secondary"}>
+                        {med.isActive ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => updateMutation.mutate({ id: med.id, data: { isActive: !med.isActive } })}
+                          title={med.isActive ? "Desativar" : "Ativar"}
+                        >
+                          {med.isActive ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteMutation.mutate(med.id)}
+                          className="text-red-500"
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Calculator className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhum medicamento cadastrado na calculadora.</p>
+              <p className="text-sm mt-2">Adicione medicamentos para aparecerem na calculadora de doses.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

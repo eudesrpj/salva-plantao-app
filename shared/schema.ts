@@ -198,6 +198,38 @@ export const insertMedicationContraindicationSchema = createInsertSchema(medicat
 export type MedicationContraindication = typeof medicationContraindications.$inferSelect;
 export type InsertMedicationContraindication = z.infer<typeof insertMedicationContraindicationSchema>;
 
+// Promotional Coupons (Admin created)
+export const promoCoupons = pgTable("promo_coupons", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(), // CUPOM10, DESCONTO50, etc.
+  discountType: text("discount_type").default("percentage"), // percentage, fixed
+  discountValue: decimal("discount_value").notNull(), // 10, 50, 100
+  discountMonths: integer("discount_months").default(1), // Number of months discount applies
+  maxUses: integer("max_uses"), // Maximum number of uses (null = unlimited)
+  currentUses: integer("current_uses").default(0),
+  validFrom: timestamp("valid_from").defaultNow(),
+  validUntil: timestamp("valid_until"), // null = no expiration
+  isActive: boolean("is_active").default(true),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPromoCouponSchema = createInsertSchema(promoCoupons).omit({ id: true, createdAt: true, currentUses: true });
+export type PromoCoupon = typeof promoCoupons.$inferSelect;
+export type InsertPromoCoupon = z.infer<typeof insertPromoCouponSchema>;
+
+// Coupon Usage Tracking
+export const couponUsages = pgTable("coupon_usages", {
+  id: serial("id").primaryKey(),
+  couponId: integer("coupon_id").notNull().references(() => promoCoupons.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  usedAt: timestamp("used_at").defaultNow(),
+});
+
+export const insertCouponUsageSchema = createInsertSchema(couponUsages).omit({ id: true, usedAt: true });
+export type CouponUsage = typeof couponUsages.$inferSelect;
+export type InsertCouponUsage = z.infer<typeof insertCouponUsageSchema>;
+
 // Prescriptions (Updated with structured fields)
 export const prescriptions = pgTable("prescriptions", {
   id: serial("id").primaryKey(),
