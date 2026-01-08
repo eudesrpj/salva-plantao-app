@@ -1036,3 +1036,103 @@ export const insertPaymentSchema = createInsertSchema(payments, {
 }).omit({ id: true, createdAt: true });
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+
+// Calculator Allowed Medications (Admin-authorized for quick calculator)
+export const calculatorAllowedMeds = pgTable("calculator_allowed_meds", {
+  id: serial("id").primaryKey(),
+  patientType: text("patient_type").notNull().default("pediatrico"), // adulto, pediatrico
+  medicationId: integer("medication_id").references(() => medications.id),
+  calculatorSettingId: integer("calculator_setting_id").references(() => calculatorSettings.id),
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCalculatorAllowedMedSchema = createInsertSchema(calculatorAllowedMeds).omit({ id: true, createdAt: true });
+export type CalculatorAllowedMed = typeof calculatorAllowedMeds.$inferSelect;
+export type InsertCalculatorAllowedMed = z.infer<typeof insertCalculatorAllowedMedSchema>;
+
+// Dashboard Configuration (Admin configurable widgets)
+export const dashboardConfig = pgTable("dashboard_config", {
+  id: serial("id").primaryKey(),
+  scope: text("scope").notNull().default("user_default"), // admin, user_default
+  widgets: jsonb("widgets"), // Array of widget configs
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDashboardConfigSchema = createInsertSchema(dashboardConfig).omit({ id: true, updatedAt: true });
+export type DashboardConfig = typeof dashboardConfig.$inferSelect;
+export type InsertDashboardConfig = z.infer<typeof insertDashboardConfigSchema>;
+
+// Quick Access Configuration (Admin configurable shortcuts)
+export const quickAccessConfig = pgTable("quick_access_config", {
+  id: serial("id").primaryKey(),
+  patientType: text("patient_type").notNull().default("ambos"), // adulto, pediatrico, ambos
+  items: jsonb("items"), // Array of module references
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertQuickAccessConfigSchema = createInsertSchema(quickAccessConfig).omit({ id: true, updatedAt: true });
+export type QuickAccessConfig = typeof quickAccessConfig.$inferSelect;
+export type InsertQuickAccessConfig = z.infer<typeof insertQuickAccessConfigSchema>;
+
+// Donation Causes (Admin configurable)
+export const donationCauses = pgTable("donation_causes", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category"), // saude, animais, carentes, etc.
+  destinationType: text("destination_type").notNull().default("PIX"), // PIX, BANK, LINK, INTERNAL
+  destinationPayload: jsonb("destination_payload"), // { pixKey, bankInfo, etc. }
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDonationCauseSchema = createInsertSchema(donationCauses).omit({ id: true, createdAt: true, updatedAt: true });
+export type DonationCause = typeof donationCauses.$inferSelect;
+export type InsertDonationCause = z.infer<typeof insertDonationCauseSchema>;
+
+// Donations (User donations tracking)
+export const donations = pgTable("donations", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  causeId: integer("cause_id").notNull().references(() => donationCauses.id),
+  amountCents: integer("amount_cents").notNull(),
+  status: text("status").notNull().default("CREATED"), // CREATED, PAID, TRANSFERRED, FAILED, REFUNDED
+  provider: text("provider").default("ASAAS"),
+  providerPaymentId: text("provider_payment_id"),
+  providerTransferId: text("provider_transfer_id"),
+  pixQrCode: text("pix_qr_code"),
+  pixCopyPaste: text("pix_copy_paste"),
+  paidAt: timestamp("paid_at"),
+  transferredAt: timestamp("transferred_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDonationSchema = createInsertSchema(donations, {
+  paidAt: z.coerce.date().optional().nullable(),
+  transferredAt: z.coerce.date().optional().nullable(),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+export type Donation = typeof donations.$inferSelect;
+export type InsertDonation = z.infer<typeof insertDonationSchema>;
+
+// Donation Receipts (Transfer confirmations)
+export const donationReceipts = pgTable("donation_receipts", {
+  id: serial("id").primaryKey(),
+  donationId: integer("donation_id").notNull().references(() => donations.id),
+  receiptUrl: text("receipt_url"),
+  receiptText: text("receipt_text"),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDonationReceiptSchema = createInsertSchema(donationReceipts, {
+  deliveredAt: z.coerce.date().optional().nullable(),
+}).omit({ id: true, createdAt: true });
+export type DonationReceipt = typeof donationReceipts.$inferSelect;
+export type InsertDonationReceipt = z.infer<typeof insertDonationReceiptSchema>;

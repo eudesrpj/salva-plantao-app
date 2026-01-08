@@ -1,0 +1,241 @@
+Você é a IA do Replit. Implementar as mudanças abaixo com impacto mínimo, mantendo a arquitetura “biblioteca única” para medicamentos e conteúdo oficial vs usuário. Não refatorar grandes áreas; adicionar camadas e telas.
+
+=====================================================
+1) MEDICAÇÕES: separar ADULTO e PEDIATRIA por abas + filtro por categoria
+=====================================================
+
+OBJETIVO:
+- No painel do ADMIN e do USUÁRIO, a seção “Medicações” deve ter:
+  - Aba: Pediatria | Adulto | Ambos (opcional)
+  - Filtro por Categoria (Antibióticos, Analgésicos, etc.)
+- Quando o admin estiver criando/editando uma Patologia (adulto ou pediátrica), o seletor de medicamentos deve mostrar SOMENTE medicações da mesma aba (adulto/pedi).
+
+AÇÕES:
+
+1.1) Banco (garantir campos na tabela medications)
+- Adicionar campos (se não existirem):
+  - age_group (ENUM/TEXT): 'adulto' | 'pediatrico' | 'ambos'
+  - category (TEXT) // ex: "Antibióticos"
+  - is_active (BOOL)
+  - normalized_name (TEXT unique)
+- Migrar registros antigos:
+  - se não tiver age_group: set 'ambos'
+  - se não tiver category: set 'Outros'
+
+1.2) UI Medicações (Admin e Usuário)
+- Tabs: "Pediatria" | "Adulto" | "Ambos"
+- Drop-down categoria
+- Search por nome
+- Mostrar lista filtrada por (age_group + category + search)
+- Botão “Selecionar” (ver item 4)
+
+1.3) Patologias (adulto vs pedi)
+- Na entidade “patologia”, garantir campo:
+  - patient_type: 'adulto'|'pediatrico'
+- No formulário de patologia:
+  - ao selecionar patient_type, o seletor de medicações filtra por:
+    - meds.age_group == patient_type OR meds.age_group == 'ambos'
+- Persistir relação patologia -> meds via IDs (nunca texto)
+
+=====================================================
+2) BIBLIOTECA ÚNICA DE MEDICAÇÃO (com interações e contraindicações acopladas)
+=====================================================
+
+OBJETIVO:
+- Ao “subir/criar” uma medicação em qualquer lugar, ela deve ser 1 só no sistema e já suportar:
+  - contraindicações
+  - interações medicamentosas
+- Isso deve refletir automaticamente em:
+  - calculadora rápida
+  - prescrições
+  - seleção em patologias
+  - telas de interações/contraindicações
+
+AÇÕES:
+
+2.1) Normalização e upsert
+- Toda criação/importação usa normalized_name para evitar duplicatas.
+- Se existir -> update; se não -> insert.
+
+2.2) Interações e contraindicações (telas e modelos)
+- Manter tabelas:
+  - medication_contraindications (medication_id, severity, text)
+  - medication_interactions (medA_id, medB_id, severity, text)
+- Tela Admin:
+  - ao abrir uma medicação, ter abas:
+    - “Dados”
+    - “Diluição/Admin”
+    - “Contraindicações”
+    - “Interações”
+- Implementar importação em massa dessas duas tabelas também (CSV/JSON) seguindo o padrão do app.
+
+2.3) Regras de consistência
+- Interação é simétrica:
+  - se cadastrar A-B, garantir que consulta retorne também quando pesquisar B-A
+  - não duplicar A-B e B-A no banco (armazenar ordenando IDs)
+
+=====================================================
+3) CALCULADORA RÁPIDA: medicações autorizadas pelo administrador + filtro adulto/pedi
+=====================================================
+
+OBJETIVO:
+- Admin escolhe quais medicamentos aparecem na calculadora rápida (por aba adulto/pedi).
+- Usuário vê somente o que o admin autorizou, respeitando patient_type.
+
+AÇÕES:
+
+3.1) Banco
+- Criar tabela:
+  - calculator_allowed_meds:
+    - id
+    - patient_type ('adulto'|'pediatrico')
+    - medication_id
+    - sort_order
+    - is_active
+
+3.2) Admin UI (Painel > Calculadora)
+- Seção “Medicamentos autorizados”
+- Tabs: Pediatria | Adulto
+- Botão “Adicionar” (abre search de meds filtrado por age_group compatível)
+- Botão “Excluir” por item
+- Drag/drop ou set sort_order (opcional)
+
+3.3) App UI (Calculadora rápida)
+- Tabs: Pediatria | Adulto
+- Lista vem do endpoint allowed meds (não do catálogo completo)
+
+=====================================================
+4) BOTÃO “SELECIONAR” + AÇÕES EM MASSA (medicações, patologias, cards, etc.)
+=====================================================
+
+OBJETIVO:
+- Tornar o app mais maleável com seleção múltipla e ações em lote.
+
+AÇÕES:
+
+4.1) Padrão de UI
+- Em listas (Medicações, Patologias, Memorização/Cards, Protocolos, Checklists):
+  - adicionar “Selecionar”
+  - modo seleção mostra checkboxes nas linhas/cards
+  - barra de ações aparece com:
+    - Ativar/Desativar
+    - Excluir (com confirmação)
+    - Duplicar (para usuário/copiar para minhas)
+    - Exportar selecionados (CSV/JSON)
+    - Mover categoria (quando aplicável)
+- Respeitar permissões:
+  - usuário não pode excluir oficial; só pode “copiar para minhas” ou “ocultar” localmente (se já houver)
+  - admin pode tudo
+
+4.2) Backend
+- Endpoints batch:
+  - POST /admin/batch/{entity}/activate
+  - POST /admin/batch/{entity}/deactivate
+  - POST /admin/batch/{entity}/delete
+  - POST /admin/batch/{entity}/export
+
+=====================================================
+5) ADMIN: configurar o que aparece no DASHBOARD e no ACESSO RÁPIDO
+=====================================================
+
+OBJETIVO:
+- Admin escolhe quais cards/atalhos aparecem no dashboard/home e no acesso rápido.
+
+AÇÕES:
+
+5.1) Banco
+- dashboard_config:
+  - id
+  - scope ('admin'|'user_default')
+  - widgets JSON (lista de blocos)
+- quick_access_config:
+  - id
+  - patient_type ('adulto'|'pediatrico'|'ambos')
+  - items JSON (referências a módulos: calculadora, meds, patologias, memorização, etc.)
+  - sort_order
+
+5.2) Admin UI
+- Tela “Configurar Dashboard”
+  - toggles e ordem (drag/drop)
+- Tela “Configurar Acesso Rápido”
+  - escolher itens + ordem
+  - separar por Pediatria/Adulto
+
+5.3) App UI
+- Dashboard e acesso rápido renderizam por config.
+
+=====================================================
+6) BOTÃO “DOAÇÃO” (chamativo) + rastreio + notificação quando chegar ao destino
+=====================================================
+
+OBJETIVO:
+- Adicionar botão fixo no canto: “Doação”
+- Usuário escolhe destino:
+  - entidades carentes
+  - causas animais
+  - + 3 causas saúde (ex: câncer, saúde mental, crianças hospitalizadas) — configuráveis pelo admin
+- Pagamento (usar provedor já integrado — Asaas ou outro)
+- Garantir transparência:
+  - texto/termo configurável no admin explicando repasse, taxas, prazos
+- Notificar usuário quando o dinheiro chegar ao destino selecionado (status confirmado)
+
+AÇÕES:
+
+6.1) Banco
+- donation_causes:
+  - id, title, description, category, is_active
+  - destination_type ('PIX'|'BANK'|'LINK'|'INTERNAL')
+  - destination_payload JSON (dados do repasse)
+- donations:
+  - id, user_id, cause_id
+  - amount_cents
+  - status ('CREATED'|'PAID'|'TRANSFERRED'|'FAILED'|'REFUNDED')
+  - provider ('ASAAS')
+  - provider_payment_id
+  - provider_transfer_id (se houver)
+  - created_at/updated_at
+- donation_receipts:
+  - id, donation_id
+  - receipt_url or receipt_text
+  - delivered_at
+
+6.2) UI (App)
+- Botão chamativo “Doação” fixo no canto
+- Tela:
+  - selecionar causa
+  - escolher valor
+  - pagar (PIX/cartão, conforme provedor)
+  - mostrar termo: “texto configurável pelo admin”
+- Após pagamento confirmado: mostrar “obrigado” e status “Aguardando repasse”
+
+6.3) Admin UI (Painel)
+- Gerenciar causas (CRUD)
+- Configurar “Termo de doação” (texto)
+- Ver lista de doações e status
+- Disparar/registrar repasse (dependendo do fluxo)
+
+6.4) Webhooks e notificação
+- Integrar webhook do provedor:
+  - payment confirmed -> donations.status='PAID'
+- Repasse ao destino:
+  - Se houver API de transferência: registrar e atualizar status para 'TRANSFERRED' quando confirmado
+  - Se repasse for manual: admin marca como TRANSFERRED e anexa comprovante/descrição
+- Notificação ao usuário quando virar TRANSFERRED:
+  - criar notificação in-app + opcional push/email
+  - mensagem inclui causa, valor, data, e “detalhes do investimento” (campo vindo do admin/receipt_text)
+- Importante: nunca prometer “100% sem taxa”; usar texto configurável e neutro, e exibir taxas reais quando possível.
+
+=====================================================
+ENTREGA / TESTES
+=====================================================
+
+Checklist de teste:
+1) Medicações: tabs Adulto/Pedi filtrando corretamente
+2) Patologia com patient_type=adulto só mostra meds adulto/ambos
+3) Interações/contraindicações aparecem dentro do perfil da medicação
+4) Calculadora rápida mostra apenas “autorizadas” por patient_type
+5) Seleção múltipla funciona (ativar/desativar/exportar)
+6) Dashboard e acesso rápido mudam conforme config do admin
+7) Doação: criar pagamento -> webhook -> status PAID -> repasse -> status TRANSFERRED -> notificação enviada ao usuário
+
+Fazer migrations com segurança e sem quebrar dados existentes.
