@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2261,6 +2261,199 @@ function CalculatorSettingsTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Medicamentos Autorizados na Calculadora */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" /> Medicamentos Autorizados
+            </CardTitle>
+            <CardDescription>Controle quais medicamentos aparecem na calculadora rápida para usuários.</CardDescription>
+          </div>
+          <AllowedMedsDialog onSuccess={() => qc.invalidateQueries({ queryKey: ["/api/calculator-allowed-meds"] })} />
+        </CardHeader>
+        <CardContent>
+          <AllowedMedsList />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AllowedMedsDialog({ onSuccess }: { onSuccess: () => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [patientType, setPatientType] = useState<string>("pediatrico");
+  const [selectedSettingId, setSelectedSettingId] = useState<number | null>(null);
+
+  const { data: settings } = useQuery<CalcSetting[]>({
+    queryKey: ["/api/calculator-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/calculator-settings", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const filteredSettings = useMemo(() => {
+    if (!settings) return [];
+    return settings.filter(s => 
+      s.calculatorMode === patientType || s.calculatorMode === "comum" || s.ageGroup === "ambos"
+    );
+  }, [settings, patientType]);
+
+  const addMutation = useMutation({
+    mutationFn: async (data: { patientType: string; calculatorSettingId: number }) => {
+      const res = await apiRequest("POST", "/api/admin/calculator-allowed-meds", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Medicamento autorizado!" });
+      onSuccess();
+      setOpen(false);
+      setSelectedSettingId(null);
+    },
+    onError: () => toast({ title: "Erro ao autorizar", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="gap-2" data-testid="button-add-allowed-med">
+          <Plus className="h-4 w-4" /> Adicionar
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Autorizar Medicamento na Calculadora</DialogTitle>
+          <DialogDescription>Escolha o modo e o medicamento para autorizar.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Modo</label>
+            <Select value={patientType} onValueChange={setPatientType}>
+              <SelectTrigger data-testid="select-allowed-patient-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pediatrico">Pediátrico</SelectItem>
+                <SelectItem value="adulto">Adulto</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Medicamento</label>
+            <Select 
+              value={selectedSettingId?.toString() || ""} 
+              onValueChange={(v) => setSelectedSettingId(parseInt(v))}
+            >
+              <SelectTrigger data-testid="select-allowed-med">
+                <SelectValue placeholder="Selecione um medicamento" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredSettings.map(s => (
+                  <SelectItem key={s.id} value={s.id.toString()}>{s.medication}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button 
+              onClick={() => selectedSettingId && addMutation.mutate({ patientType, calculatorSettingId: selectedSettingId })}
+              disabled={!selectedSettingId || addMutation.isPending}
+              data-testid="button-confirm-allowed-med"
+            >
+              {addMutation.isPending ? "Adicionando..." : "Adicionar"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AllowedMedsList() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [activeTab, setActiveTab] = useState<string>("pediatrico");
+
+  const { data: allowedMeds, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/calculator-allowed-meds"],
+    queryFn: async () => {
+      const res = await fetch("/api/calculator-allowed-meds", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const { data: settings } = useQuery<CalcSetting[]>({
+    queryKey: ["/api/calculator-settings"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/calculator-allowed-meds/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/calculator-allowed-meds"] });
+      toast({ title: "Medicamento removido!" });
+    },
+    onError: () => toast({ title: "Erro ao remover", variant: "destructive" }),
+  });
+
+  const filteredMeds = useMemo(() => {
+    if (!allowedMeds) return [];
+    return allowedMeds.filter(m => m.patientType === activeTab);
+  }, [allowedMeds, activeTab]);
+
+  const getMedName = (settingId: number) => {
+    return settings?.find(s => s.id === settingId)?.medication || `ID: ${settingId}`;
+  };
+
+  if (isLoading) return <div className="py-4 text-center text-muted-foreground">Carregando...</div>;
+
+  return (
+    <div className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="pediatrico" data-testid="tab-allowed-pedi">Pediátrico</TabsTrigger>
+          <TabsTrigger value="adulto" data-testid="tab-allowed-adulto">Adulto</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <div className="border rounded-md">
+        {filteredMeds.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Medicamento</TableHead>
+                <TableHead className="w-[80px]">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredMeds.map(m => (
+                <TableRow key={m.id}>
+                  <TableCell>{getMedName(m.calculatorSettingId)}</TableCell>
+                  <TableCell>
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="text-destructive"
+                      onClick={() => deleteMutation.mutate(m.id)}
+                      data-testid={`button-remove-allowed-${m.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="py-8 text-center text-muted-foreground">
+            Nenhum medicamento autorizado para {activeTab === "pediatrico" ? "pediátrico" : "adulto"}.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -3938,10 +4131,29 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [bulkImportText, setBulkImportText] = useState("");
   const [importMode, setImportMode] = useState<"upsert" | "create">("upsert");
+  const [ageGroupFilter, setAgeGroupFilter] = useState<"all" | "adulto" | "pediatrico" | "ambos">("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: medicationsList, isLoading } = useQuery<any[]>({
     queryKey: ["/api/medications"],
   });
+
+  const categories = useMemo(() => {
+    if (!medicationsList) return [];
+    const cats = new Set(medicationsList.map(m => m.category).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [medicationsList]);
+
+  const filteredMedications = useMemo(() => {
+    if (!medicationsList) return [];
+    return medicationsList.filter(m => {
+      if (ageGroupFilter !== "all" && m.ageGroup !== ageGroupFilter && m.ageGroup !== "ambos") return false;
+      if (categoryFilter !== "all" && m.category !== categoryFilter) return false;
+      if (searchQuery && !m.name?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      return true;
+    });
+  }, [medicationsList, ageGroupFilter, categoryFilter, searchQuery]);
 
   const bulkImportMutation = useMutation({
     mutationFn: async ({ medications, mode }: { medications: any[]; mode: string }) => {
@@ -4186,8 +4398,37 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
           <Button variant="outline" onClick={onBack}>Voltar</Button>
         </div>
       </CardHeader>
-      <CardContent>
-        {medicationsList && medicationsList.length > 0 ? (
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <Tabs value={ageGroupFilter} onValueChange={(v) => setAgeGroupFilter(v as any)} className="flex-shrink-0">
+            <TabsList>
+              <TabsTrigger value="all" data-testid="tab-med-all">Todos</TabsTrigger>
+              <TabsTrigger value="adulto" data-testid="tab-med-adulto">Adulto</TabsTrigger>
+              <TabsTrigger value="pediatrico" data-testid="tab-med-pediatrico">Pediatria</TabsTrigger>
+              <TabsTrigger value="ambos" data-testid="tab-med-ambos">Ambos</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[180px]" data-testid="select-med-category">
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas categorias</SelectItem>
+              {categories.map(cat => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder="Buscar por nome..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-xs"
+            data-testid="input-med-search"
+          />
+          <Badge variant="secondary" className="ml-auto">{filteredMedications.length} medicações</Badge>
+        </div>
+        {filteredMedications.length > 0 ? (
           <Table>
             <TableHeader>
               <TableRow>
@@ -4200,7 +4441,7 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {medicationsList.map((m) => (
+              {filteredMedications.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell className="font-medium">
                     {m.name}
@@ -4221,7 +4462,9 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
           </Table>
         ) : (
           <div className="text-center py-8 text-muted-foreground">
-            Nenhuma medicação cadastrada. Clique em "Nova Medicação" para criar sua biblioteca de medicamentos.
+            {medicationsList && medicationsList.length > 0 
+              ? "Nenhuma medicação encontrada com os filtros selecionados."
+              : "Nenhuma medicação cadastrada. Clique em \"Nova Medicação\" para criar sua biblioteca de medicamentos."}
           </div>
         )}
       </CardContent>
