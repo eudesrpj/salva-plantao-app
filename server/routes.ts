@@ -20,6 +20,9 @@ export async function registerRoutes(
   registerChatRoutes(app);
   registerImageRoutes(app);
   registerAiRoutes(app);
+  
+  // Seed default plans on startup
+  await storage.upsertPlans().catch(err => console.error('Failed to seed plans:', err));
 
   const getUserId = (req: any) => req.user?.claims?.sub;
   
@@ -1174,7 +1177,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
   // --- Subscription System ---
   
-  // Get current plan
+  // Get current plan (legacy)
   app.get("/api/subscription/plan", async (req, res) => {
     const plan = await storage.getActivePlan();
     if (!plan) {
@@ -1185,6 +1188,22 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       });
     }
     res.json(plan);
+  });
+
+  // Get all available plans
+  app.get("/api/subscription/plans", async (_req, res) => {
+    const allPlans = await storage.getPlans();
+    const activePlans = allPlans.filter(p => p.isActive);
+    
+    if (activePlans.length === 0) {
+      // Return default plans if none exist
+      return res.json([
+        { id: 0, slug: 'mensal', name: 'Plano Mensal', priceCents: 2990, billingPeriod: 'monthly', cycle: 'MONTHLY' },
+        { id: 0, slug: 'semestral', name: 'Plano Semestral', priceCents: 14990, billingPeriod: 'semiannually', cycle: 'SEMIANNUALLY' },
+        { id: 0, slug: 'anual', name: 'Plano Anual', priceCents: 27990, billingPeriod: 'yearly', cycle: 'YEARLY' },
+      ]);
+    }
+    res.json(activePlans);
   });
 
   // Get user subscription status
@@ -1233,14 +1252,31 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       const user = await authStorage.getUser(userId);
       if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
 
-      const { paymentMethod, couponCode, name, cpfCnpj, phone } = req.body;
+      const { paymentMethod, couponCode, name, cpfCnpj, phone, planSlug } = req.body;
       
       if (!paymentMethod || !['PIX', 'CREDIT_CARD'].includes(paymentMethod)) {
         return res.status(400).json({ message: "Método de pagamento inválido" });
       }
 
-      const plan = await storage.getActivePlan();
-      let priceCents = plan?.priceCents || 2990;
+      if (!cpfCnpj || cpfCnpj.replace(/\D/g, '').length < 11) {
+        return res.status(400).json({ message: "CPF inválido" });
+      }
+
+      // Lookup plan by slug or fall back to monthly plan
+      const planSlugToUse = planSlug || 'mensal';
+      let plan = await storage.getPlanBySlug(planSlugToUse);
+      
+      if (!plan) {
+        // If plan not found, try to seed plans and retry
+        await storage.upsertPlans();
+        plan = await storage.getPlanBySlug(planSlugToUse);
+      }
+      
+      if (!plan) {
+        return res.status(400).json({ message: `Plano '${planSlugToUse}' não encontrado. Contate o suporte.` });
+      }
+
+      let priceCents = plan.priceCents;
       let discountCents = 0;
       let couponId: number | null = null;
 
@@ -1264,7 +1300,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
       const subscription = await storage.createSubscription({
         userId,
-        planId: plan?.id || 1,
+        planId: plan.id,
         status: 'pending',
         currentPeriodStart: now,
         currentPeriodEnd: nextMonth,
@@ -1292,7 +1328,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
           billingType: paymentMethod as 'PIX' | 'CREDIT_CARD',
           value: finalAmount / 100,
           dueDate,
-          description: `Assinatura Salva Plantão - ${plan?.name || 'Premium'}`,
+          description: `Assinatura Salva Plantão - ${plan.name}`,
           externalReference: `subscription-${subscription.id}`
         });
 

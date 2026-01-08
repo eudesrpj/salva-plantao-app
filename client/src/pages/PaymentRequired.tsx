@@ -18,9 +18,12 @@ interface PaymentSettings {
 }
 
 interface PlanData {
+  id: number;
+  slug: string;
   name: string;
   priceCents: number;
   billingPeriod: string;
+  cycle: string;
 }
 
 interface CouponData {
@@ -51,14 +54,17 @@ export default function PaymentRequired() {
   const [cpf, setCpf] = useState("");
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [paymentData, setPaymentData] = useState<CreateSubscriptionResponse | null>(null);
+  const [selectedPlanSlug, setSelectedPlanSlug] = useState<string>("mensal");
 
   const { data: settings, isLoading: loadingSettings } = useQuery<PaymentSettings>({
     queryKey: ["/api/public/payment-settings"],
   });
 
-  const { data: plan } = useQuery<PlanData>({
-    queryKey: ["/api/subscription/plan"],
+  const { data: plans = [] } = useQuery<PlanData[]>({
+    queryKey: ["/api/subscription/plans"],
   });
+
+  const selectedPlan = plans.find(p => p.slug === selectedPlanSlug) || plans[0];
 
   const validateCouponMutation = useMutation({
     mutationFn: async (code: string) => {
@@ -100,6 +106,7 @@ export default function PaymentRequired() {
         couponCode: appliedCoupon?.code,
         name: user?.firstName,
         cpfCnpj: cpfClean,
+        planSlug: selectedPlanSlug,
       });
       return res.json();
     },
@@ -127,7 +134,7 @@ export default function PaymentRequired() {
     },
   });
 
-  const priceCents = plan?.priceCents || 2990;
+  const priceCents = selectedPlan?.priceCents || 2990;
   const discountCents = appliedCoupon
     ? appliedCoupon.discountType === "percentage"
       ? Math.floor(priceCents * (Number(appliedCoupon.discountValue) / 100))
@@ -285,8 +292,53 @@ export default function PaymentRequired() {
             </div>
           ) : (
             <>
+              <div className="space-y-3">
+                <Label>Escolha seu plano</Label>
+                <div className="grid gap-2">
+                  {(plans.length > 0 ? plans : [
+                    { slug: 'mensal', name: 'Plano Mensal', priceCents: 2990, billingPeriod: 'monthly' },
+                    { slug: 'semestral', name: 'Plano Semestral', priceCents: 14990, billingPeriod: 'semiannually' },
+                    { slug: 'anual', name: 'Plano Anual', priceCents: 27990, billingPeriod: 'yearly' },
+                  ]).map((p: any) => {
+                    const isSelected = selectedPlanSlug === p.slug;
+                    const periodLabel = p.billingPeriod === 'monthly' ? '/mês' : 
+                                        p.billingPeriod === 'semiannually' ? '/semestre' : '/ano';
+                    const savings = p.billingPeriod === 'semiannually' ? '16% de desconto' :
+                                   p.billingPeriod === 'yearly' ? '22% de desconto' : null;
+                    return (
+                      <div
+                        key={p.slug}
+                        onClick={() => setSelectedPlanSlug(p.slug)}
+                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'border-primary bg-primary/5' 
+                            : 'border-border hover-elevate'
+                        }`}
+                        data-testid={`plan-option-${p.slug}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              isSelected ? 'border-primary' : 'border-muted-foreground'
+                            }`}>
+                              {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
+                            </div>
+                            <span className="font-medium">{p.name}</span>
+                            {savings && <Badge variant="secondary" className="text-xs">{savings}</Badge>}
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold">R$ {(p.priceCents / 100).toFixed(2).replace(".", ",")}</span>
+                            <span className="text-muted-foreground text-sm">{periodLabel}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="bg-muted/50 p-4 rounded-lg text-center space-y-2">
-                <Badge variant="secondary" className="mb-2">Plano Mensal</Badge>
+                <Badge variant="secondary" className="mb-2">{selectedPlan?.name || 'Plano Mensal'}</Badge>
                 <div className="flex items-center justify-center gap-2">
                   {discountCents > 0 && (
                     <span className="text-lg text-muted-foreground line-through">
@@ -296,7 +348,6 @@ export default function PaymentRequired() {
                   <span className="text-3xl font-bold text-foreground" data-testid="text-final-price">
                     R$ {finalPrice.toFixed(2).replace(".", ",")}
                   </span>
-                  <span className="text-muted-foreground">/mês</span>
                 </div>
                 {appliedCoupon && (
                   <Badge variant="default" className="mt-2">
