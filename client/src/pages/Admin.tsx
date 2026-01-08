@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
@@ -68,6 +68,9 @@ export default function Admin() {
           <TabsTrigger value="stats" className="gap-1">
             <BarChart3 className="h-4 w-4" /> Stats
           </TabsTrigger>
+          <TabsTrigger value="dashboard-config" className="gap-1">
+            <Layout className="h-4 w-4" /> Dashboard
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -108,6 +111,10 @@ export default function Admin() {
 
         <TabsContent value="stats">
           <StatsTab />
+        </TabsContent>
+
+        <TabsContent value="dashboard-config">
+          <DashboardConfigTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -5340,6 +5347,233 @@ function PrescriptionModelsTab() {
                 <p className="text-sm text-muted-foreground py-4 text-center">Selecione um modelo</p>
               )}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function DashboardConfigTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: dashboardItems, isLoading: dashboardLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/dashboard-config"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/dashboard-config", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const { data: quickAccessItems, isLoading: qaLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/quick-access-config"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/quick-access-config", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const dashboardMutation = useMutation({
+    mutationFn: async (data: { itemType: string; itemId: string; label: string; order: number; isActive: boolean }) => {
+      const res = await apiRequest("POST", "/api/admin/dashboard-config", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/dashboard-config"] });
+      toast({ title: "Item do dashboard salvo!" });
+    },
+    onError: () => toast({ title: "Erro ao salvar", variant: "destructive" }),
+  });
+
+  const quickAccessMutation = useMutation({
+    mutationFn: async (data: { itemType: string; itemId: string; label: string; icon: string; order: number; isActive: boolean }) => {
+      const res = await apiRequest("POST", "/api/admin/quick-access-config", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/quick-access-config"] });
+      toast({ title: "Item de acesso rápido salvo!" });
+    },
+    onError: () => toast({ title: "Erro ao salvar", variant: "destructive" }),
+  });
+
+  const deleteDashboardItem = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/dashboard-config/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/dashboard-config"] });
+      toast({ title: "Item removido!" });
+    },
+  });
+
+  const deleteQuickAccessItem = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/quick-access-config/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/quick-access-config"] });
+      toast({ title: "Item removido!" });
+    },
+  });
+
+  const [newDashboardItem, setNewDashboardItem] = useState({ itemType: "protocol", itemId: "", label: "", order: 1, isActive: true });
+  const [newQuickAccessItem, setNewQuickAccessItem] = useState({ itemType: "route", itemId: "", label: "", icon: "FileText", order: 1, isActive: true });
+
+  if (dashboardLoading || qaLoading) return <PageLoader text="Carregando configurações..." />;
+
+  return (
+    <div className="space-y-6">
+      {/* Dashboard Config */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Layout className="h-5 w-5" /> Itens do Dashboard
+            </CardTitle>
+            <CardDescription>Configure quais itens aparecem no dashboard do usuário.</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Tipo</label>
+              <Select value={newDashboardItem.itemType} onValueChange={(v) => setNewDashboardItem({...newDashboardItem, itemType: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="protocol">Protocolo</SelectItem>
+                  <SelectItem value="checklist">Checklist</SelectItem>
+                  <SelectItem value="prescription">Prescrição</SelectItem>
+                  <SelectItem value="calculator">Calculadora</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">ID do Item</label>
+              <Input value={newDashboardItem.itemId} onChange={(e) => setNewDashboardItem({...newDashboardItem, itemId: e.target.value})} placeholder="ex: 1" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Rótulo</label>
+              <Input value={newDashboardItem.label} onChange={(e) => setNewDashboardItem({...newDashboardItem, label: e.target.value})} placeholder="Nome exibido" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Ordem</label>
+              <Input type="number" value={newDashboardItem.order} onChange={(e) => setNewDashboardItem({...newDashboardItem, order: parseInt(e.target.value) || 1})} />
+            </div>
+            <Button onClick={() => dashboardMutation.mutate(newDashboardItem)} disabled={!newDashboardItem.label} data-testid="button-add-dashboard-item">
+              <Plus className="h-4 w-4 mr-1" /> Adicionar
+            </Button>
+          </div>
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Rótulo</TableHead>
+                  <TableHead>Ordem</TableHead>
+                  <TableHead>Ativo</TableHead>
+                  <TableHead className="w-[60px]">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dashboardItems?.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell><Badge variant="outline">{item.itemType}</Badge></TableCell>
+                    <TableCell>{item.itemId}</TableCell>
+                    <TableCell>{item.label}</TableCell>
+                    <TableCell>{item.order}</TableCell>
+                    <TableCell>{item.isActive ? <Badge>Sim</Badge> : <Badge variant="secondary">Não</Badge>}</TableCell>
+                    <TableCell>
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteDashboardItem.mutate(item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(!dashboardItems || dashboardItems.length === 0) && (
+                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum item configurado.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quick Access Config */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="h-5 w-5" /> Acesso Rápido
+          </CardTitle>
+          <CardDescription>Configure os atalhos do menu de acesso rápido.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Tipo</label>
+              <Select value={newQuickAccessItem.itemType} onValueChange={(v) => setNewQuickAccessItem({...newQuickAccessItem, itemType: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="route">Rota</SelectItem>
+                  <SelectItem value="action">Ação</SelectItem>
+                  <SelectItem value="external">Link Externo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">ID/Rota</label>
+              <Input value={newQuickAccessItem.itemId} onChange={(e) => setNewQuickAccessItem({...newQuickAccessItem, itemId: e.target.value})} placeholder="/prescricoes" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Rótulo</label>
+              <Input value={newQuickAccessItem.label} onChange={(e) => setNewQuickAccessItem({...newQuickAccessItem, label: e.target.value})} placeholder="Nome" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Ícone</label>
+              <Input value={newQuickAccessItem.icon} onChange={(e) => setNewQuickAccessItem({...newQuickAccessItem, icon: e.target.value})} placeholder="FileText" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Ordem</label>
+              <Input type="number" value={newQuickAccessItem.order} onChange={(e) => setNewQuickAccessItem({...newQuickAccessItem, order: parseInt(e.target.value) || 1})} />
+            </div>
+            <Button onClick={() => quickAccessMutation.mutate(newQuickAccessItem)} disabled={!newQuickAccessItem.label} data-testid="button-add-qa-item">
+              <Plus className="h-4 w-4 mr-1" /> Adicionar
+            </Button>
+          </div>
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>ID/Rota</TableHead>
+                  <TableHead>Rótulo</TableHead>
+                  <TableHead>Ícone</TableHead>
+                  <TableHead>Ordem</TableHead>
+                  <TableHead className="w-[60px]">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {quickAccessItems?.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell><Badge variant="outline">{item.itemType}</Badge></TableCell>
+                    <TableCell>{item.itemId}</TableCell>
+                    <TableCell>{item.label}</TableCell>
+                    <TableCell>{item.icon}</TableCell>
+                    <TableCell>{item.order}</TableCell>
+                    <TableCell>
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteQuickAccessItem.mutate(item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(!quickAccessItems || quickAccessItems.length === 0) && (
+                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum item configurado.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>
