@@ -821,6 +821,64 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(201).json(item);
   });
 
+  app.post("/api/pathologies/bulk", isAuthenticated, checkAdmin, async (req, res) => {
+    const { pathologies: items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Array de patologias vazio ou inválido" });
+    }
+    
+    const results = { created: 0, skipped: 0, errors: [] as string[] };
+    const toInsert: any[] = [];
+    
+    for (const item of items) {
+      if (!item.name || !item.ageGroup) {
+        results.errors.push(`Patologia inválida: ${item.name || 'sem nome'}`);
+        continue;
+      }
+      
+      const existing = await storage.getPathologyByNameAndAgeGroup(item.name, item.ageGroup);
+      if (existing) {
+        results.skipped++;
+        continue;
+      }
+      
+      toInsert.push({
+        name: item.name,
+        description: item.description || null,
+        ageGroup: item.ageGroup,
+        clinicalCategory: item.clinicalCategory || null,
+        sourceGroup: item.sourceGroup || null,
+        category: item.category || null,
+        specialty: item.specialty || null,
+        tags: item.tags || null,
+        isPublic: true,
+        isLocked: true,
+        userId: null,
+      });
+    }
+    
+    if (toInsert.length > 0) {
+      await storage.createPathologiesBulk(toInsert);
+      results.created = toInsert.length;
+    }
+    
+    res.status(201).json(results);
+  });
+
+  app.post("/api/pathologies/:id/duplicate", isAuthenticated, checkAdmin, async (req, res) => {
+    const { targetAgeGroup } = req.body;
+    if (!targetAgeGroup || !['adulto', 'pediatrico'].includes(targetAgeGroup)) {
+      return res.status(400).json({ message: "targetAgeGroup deve ser 'adulto' ou 'pediatrico'" });
+    }
+    
+    const duplicated = await storage.duplicatePathologyToAgeGroup(Number(req.params.id), targetAgeGroup);
+    if (!duplicated) {
+      return res.status(409).json({ message: "Patologia já existe no grupo de idade alvo ou original não encontrada" });
+    }
+    
+    res.status(201).json(duplicated);
+  });
+
   app.put("/api/pathologies/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));

@@ -1,0 +1,399 @@
+### PATOLOGIAS_ADULTO
+Hipertensão arterial sistêmica
+Diabetes mellitus tipo 2
+Dislipidemia
+Obesidade
+Síndrome metabólica
+Doença arterial coronariana
+Angina estável
+Infarto agudo do miocárdio
+Insuficiência cardíaca
+Arritmias supraventriculares
+Fibrilação atrial
+AVC isquêmico
+AVC hemorrágico
+Trombose venosa profunda
+Embolia pulmonar
+DPOC
+Asma
+Pneumonia comunitária
+Bronquite aguda
+Sinusite aguda
+Faringoamigdalite
+Tuberculose pulmonar
+Covid-19
+Gastrite
+Doença do refluxo gastroesofágico (DRGE)
+Dispepsia funcional
+Úlcera péptica
+Síndrome do intestino irritável
+Constipação crônica
+Diarreia aguda
+Hepatite alcoólica
+Esteatose hepática
+Cirrose hepática
+Pancreatite aguda
+Colelitíase
+Colecistite
+Doença renal crônica
+Pielonefrite
+Cistite
+Hiperplasia prostática benigna
+Litíase renal
+Infecção de pele (celulite/erisipela)
+Abscesso cutâneo
+Herpes zoster
+Hanseníase
+Dermatites (inclui dermatite de contato e atópica em adulto)
+Psoríase
+Micoses superficiais
+Osteoartrose
+Lombalgia mecânica
+Gota
+Artrite reumatoide
+Bursite
+Tendinite
+Osteoporose
+Anemia ferropriva
+Anemia por doença crônica
+Deficiência de vitamina B12
+Hipotireoidismo
+Hipertireoidismo
+Nódulo tireoidiano
+Síndrome do ovário policístico
+Endometriose
+Sangramento uterino anormal
+Doença inflamatória pélvica
+Infecções sexualmente transmissíveis
+HPV / verrugas genitais
+Transtorno de ansiedade generalizada
+Depressão maior
+Síndrome do pânico
+Insônia
+Dependência alcoólica
+Dependência de tabaco
+Cefaleia tensional
+Enxaqueca (migrânea)
+Nevralgia do trigêmeo
+Neuropatia periférica
+Doença venosa crônica
+Varizes
+Insuficiência vascular periférica
+Doença arterial periférica
+Urticária em adulto
+Reação medicamentosa
+Doenças autoimunes sistêmicas iniciais (ex.: LES inicial)
+Síndrome gripal
+Dengue em adulto
+Zika em adulto
+Chikungunya em adulto
+Febre maculosa em adulto
+Parasitose intestinal em adulto
+Intoxicação alimentar em adulto
+Queimaduras leves em adulto
+Traumas leves / entorses
+Anemia hemolítica leve em adulto
+Doença pulmonar intersticial inicial
+Sarcoidose leve
+Doença ocupacional respiratória
+Dor crônica musculoesquelética
+
+### PATOLOGIAS_PEDIATRIA
+Infecção de vias aéreas superiores (IVAS) / resfriado comum
+Bronquiolite
+Pneumonia comunitária pediátrica
+Asma / crise asmática pediátrica
+Laringite viral
+Sinusite aguda pediátrica
+Otite média aguda
+Faringoamigdalite pediátrica
+Coqueluche
+Tuberculose pediátrica
+Diarreia aguda infecciosa pediátrica
+Gastroenterite viral
+Constipação funcional pediátrica
+Refluxo gastroesofágico infantil
+Desidratação em criança
+Alergia alimentar em criança
+Alergia à proteína do leite de vaca (APLV)
+Dermatite atópica pediátrica
+Urticária pediátrica
+Escabiose pediátrica
+Impetigo
+Micoses cutâneas pediátricas
+Anemia ferropriva pediátrica
+Deficiência de B12 infantil
+Doenças carenciais na infância
+Baixo peso / desnutrição infantil
+Obesidade infantil
+Puberdade precoce
+Puberdade tardia
+Diabetes tipo 1
+Hipoglicemia pediátrica
+Hipotireoidismo congênito
+Hipotireoidismo adquirido na infância
+Criptorquidia
+Fimose
+Infecção do trato urinário pediátrica
+Pielonefrite pediátrica
+Refluxo vesicoureteral
+Nefropatia por IgA pediátrica
+Síndrome nefrótica pediátrica
+Asma induzida por exercício em criança
+Chiado recorrente na infância
+Convulsão febril
+Epilepsia na infância
+Cefaleia primária pediátrica
+TDAH
+Transtorno do espectro autista (conduta geral)
+Atraso do desenvolvimento neuropsicomotor
+Transtornos do sono infantil
+Escarlatina
+Varicela (catapora)
+Sarampo
+Rubéola
+Eritema infeccioso
+Exantema súbito
+Dengue pediátrica
+Zika pediátrica
+Covid-19 pediátrico
+Parasitoses intestinais em crianças
+Corpo estranho nasal
+Corpo estranho em via aérea pediátrica
+Otite externa pediátrica
+Queimaduras leves em crianças
+Politrauma leve pediátrico
+Entorses e fraturas simples pediátricas
+Dor abdominal funcional pediátrica
+Apendicite (suspeita em criança)
+Intussuscepção
+Invaginação intestinal
+Estenose hipertrófica de piloro (síndrome pilórica)
+Doença celíaca em criança
+Intolerância à lactose em criança
+Enurese noturna
+Distúrbios miccionais funcionais
+Crises alérgicas pediátricas
+Anafilaxia pediátrica
+Púrpura de Henoch-Schönlein
+Trombocitopenia imune pediátrica
+Anemia hemolítica pediátrica
+Leucocitose reacional pediátrica
+Pancitopenia leve em criança (investigação inicial)
+Febre sem foco em criança
+Síndrome febril prolongada pediátrica
+Síndrome gripal pediátrica
+Mialgias pós-virais pediátricas
+Doenças exantemáticas virais variadas
+Doenças vacinopreveníveis – avaliação em pediatria
+Retardo constitucional do crescimento
+Baixa estatura em criança
+Alterações comportamentais na infância
+Transtornos de ansiedade infantil
+Depressão infantil inicial
+Dor musculoesquelética benigna na infância
+Dores de crescimento
+Espasmo do choro
+Refluxo fisiológico do lactente
+Prematuridade – seguimento ambulatorial
+Alterações do teste do pezinho – triagem inicial
+
+### PATOLOGIAS_OUTRAS_PREVALENTES
+Conjuntivite viral
+Conjuntivite bacteriana
+Glaucoma crônico (seguimento)
+Catarata (avaliação inicial)
+Otite externa
+Labirintite
+Vertigem posicional paroxística
+Rinite alérgica
+Sinusite crônica
+Desvio de septo (avaliação clínica)
+Hérnia inguinal
+Hérnia umbilical
+Hérnia epigástrica
+Hemorroidas
+Fissura anal
+Doença diverticular
+Diverticulite não complicada
+Retocolite ulcerativa leve
+Doença de Crohn leve
+Hemorragia digestiva alta – avaliação inicial
+Hemorragia digestiva baixa leve
+Doença arterial periférica
+Claudicação intermitente
+Síndrome vasovagal
+Hipotensão postural
+Síncope indeterminada leve
+Hiperuricemia
+Síndrome dolorosa miofascial
+Fibromialgia
+Dor crônica inespecífica
+Neuropatia diabética
+Neuralgia pós-herpética
+Síndrome do túnel do carpo
+Tendinopatias crônicas
+Epicondilite
+Bursite de ombro
+Condromalácia patelar
+Fascite plantar
+Varizes sintomáticas
+Linfedema
+Tromboflebite superficial
+Dermatite seborreica
+Dermatite de contato
+Acne vulgar
+Rosácea
+Hiperidrose
+Melasma
+Verrugas virais
+Onicomicose
+Paroníquia
+Micoses interdigitais
+Infecção urinária recorrente
+Incontinência urinária
+Síndrome dolorosa pélvica crônica
+Dispareunia
+Vaginose bacteriana
+Candidíase vaginal recorrente
+Tricomoníase
+Uretrite
+Sífilis
+Gonorreia
+Infecção pelo HIV – seguimento ambulatorial
+Hepatite B crônica leve
+Hepatite C crônica
+Leishmaniose cutânea
+Toxoplasmose aguda
+Parasitoses intestinais múltiplas
+Escabiose familiar
+Pediculose
+Zoonoses leves variadas
+Exposição a animal agressor (profilaxia raiva/tétano)
+Picadas de inseto com reação local
+Reações alérgicas leves
+Anafilaxia (atendimento agudo)
+Intoxicação medicamentosa leve
+Intoxicação alimentar
+Exposição ocupacional a material biológico
+Acidentes perfurocortantes
+Queimaduras leves e moderadas
+Trauma contuso leve
+Luxações articulares
+Entorse de tornozelo
+Fraturas fechadas simples
+Cefaleia secundária leve
+Transtornos de adaptação
+Episódios depressivos leves
+Transtornos ansiosos
+Síndrome de burnout
+Transtornos somatoformes
+Transtornos do sono em adulto
+Deficiência de vitamina D
+Deficiências nutricionais múltiplas
+Doenças ocupacionais musculoesqueléticas
+Lombalgia ocupacional
+Alterações laboratoriais inespecíficas
+Avaliação pré-operatória clínica
+Condições crônicas estáveis em seguimento
+
+### PATOLOGIAS_PLANTAO_URGENCIA
+Crise hipertensiva
+Urgência hipertensiva
+Emergência hipertensiva
+Dor torácica inespecífica
+Angina instável
+Taquicardia supraventricular paroxística
+Taquicardia sinusal
+Bradicardia sinusal
+Síndrome vasovagal em pronto-atendimento
+Hipotensão por desidratação
+Choque hipovolêmico inicial
+Choque séptico inicial
+Choque anafilático
+Crise asmática moderada
+Reagudização de DPOC
+Edema agudo de pulmão
+Insuficiência respiratória aguda
+Hipoxemia aguda
+Crise de ansiedade com hiperventilação
+Corpo estranho em via aérea
+Corpo estranho esofágico
+Epiglotite – suspeita
+Pneumotórax espontâneo
+Pneumotórax traumático
+Derrame pleural não complicado
+Atelectasia aguda
+Dor abdominal aguda inespecífica
+Abdome agudo inflamatório inicial
+Diverticulite complicada – suspeita
+Apendicite avançada – suspeita
+Perfuração intestinal – suspeita
+Hematêmese aguda
+Melena
+Hematoquezia
+Pancreatite alcoólica
+Hepatite medicamentosa aguda
+Icterícia aguda
+Colecistite enfisematosa – suspeita
+Abdome pós-operatório doloroso – suspeita complicação
+Retenção urinária aguda
+Cólica renal intensa
+Prostatite aguda
+Epididimite aguda
+Orquite aguda
+Torção testicular – suspeita
+Priapismo
+Doença inflamatória pélvica aguda
+Sangramento uterino agudo
+Gravidez ectópica – suspeita
+Ameaça de aborto
+Hipoglicemia sintomática
+Crise hiperglicêmica
+Cetoacidose diabética inicial
+Síndrome hiperosmolar hiperglicêmica – suspeita
+Hiponatremia aguda grave
+Hipernatremia aguda
+Hipercalemia aguda
+Hipocalemia aguda
+Hipomagnesemia aguda
+Acidose metabólica aguda
+Alcalose respiratória aguda
+Hipertermia infecciosa
+Febre de origem indeterminada em pronto-atendimento
+Sepse comunitária inicial
+Meningite – suspeita
+Encefalite – suspeita
+Síndrome meníngea
+Crise convulsiva aguda
+Estado pós-ictal
+Déficit neurológico focal agudo
+Paralisia facial periférica aguda
+TCE leve
+TCE moderado
+Fratura exposta
+Ferimento por arma branca superficial
+Ferimento corto-contuso
+Luxação de ombro
+Luxação de patela
+Entorse grave de joelho
+Trauma torácico fechado
+Contusão pulmonar – suspeita
+Trauma abdominal fechado
+Rabdomiólise inicial
+Síndrome compartimental – suspeita
+Picada de escorpião
+Picada de aranha
+Mordedura de cão
+Mordedura de gato
+Acidente com animal peçonhento – conduta inicial
+Intoxicação alcoólica aguda
+Intoxicação por benzodiazepínico
+Overdose medicamentosa polifarmacológica
+Reação extrapiramidal por neuroléptico
+Síndrome serotoninérgica inicial
+Síndrome colinérgica – suspeita
+Retenção fecal / fecaloma
+Hemorroida trombosada
+Fissura anal aguda dolorosa
+Proctite aguda infecciosa ou inflamatória

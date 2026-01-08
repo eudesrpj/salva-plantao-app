@@ -1,0 +1,136 @@
+Você é um assistente de código no Replit.
+
+Abaixo neste arquivo há uma grande lista de patologias, divididas em 4 blocos:
+- PATOLOGIAS_ADULTO
+- PATOLOGIAS_PEDIATRIA
+- PATOLOGIAS_OUTRAS_PREVALENTES
+- PATOLOGIAS_PLANTAO_URGENCIA
+
+TAREFA GERAL:
+1. Ler TODAS essas patologias.
+2. Integrar com as patologias que JÁ existem no aplicativo.
+3. Organizar tudo em uma estrutura de dados única, bem organizada, SEM REPETIÇÃO de patologia dentro da mesma faixa etária (adulto ou pediátrica).
+4. Manter as abas de Adulto e Pediatria separadas:
+   - Se uma patologia existir em Adulto e Pediatria, ela deve estar PRESENTE nas duas abas, com registros distintos (um em Adulto, outro em Pediatria).
+5. Adicionar, na interface, um botão para DUPLICAR patologias entre Adulto ↔ Pediatria.
+
+---
+
+### 1. ESTRUTURA DE DADOS / MODELO
+
+Crie (ou atualize) a estrutura de dados de patologias seguindo um modelo semelhante a este (ajuste para o framework/linguagem já usado no projeto):
+
+- Tabela/coleção `pathologies` com campos:
+  - `id` (chave primária)
+  - `name` (nome da patologia)
+  - `age_group` (string: "adulto" ou "pediatrico")
+  - `source_group` (ex.: "adulto_base", "pediatrico_base", "outras_prevalentes", "plantao_urgencia" – apenas para referência)
+  - `clinical_category` (string: ex.: "Cardiologia", "Pneumologia", "Gastro/Hepato", "Nefro/Uro", "Endócrino/Metabólico", "Infectologia", "Reumatologia/Ortopedia", "Dermatologia", "Neurologia", "Psiquiatria", "Gineco/Obstetrícia", "Pediatria Geral", "Trauma/Urgência", "Toxicológico", "Outros")
+  - `is_active` (boolean)
+
+Use as listas fornecidas para:
+- Inserir novas patologias
+- Não duplicar nomes dentro do mesmo `age_group`
+- Preencher o campo `clinical_category` de forma coerente com o nome (pode ser por mapeamento manual ou lógica simples baseada em palavras-chave, de forma robusta, sem travar o app).
+
+Integre isso com o que JÁ existe no app:
+- Leia qualquer lista ou tabela de patologias existente.
+- Faça um merge:
+  - Evite duplicar nomes dentro do mesmo `age_group`.
+  - Se já existir uma patologia, não crie outra com o mesmo nome e mesmo `age_group`.
+
+---
+
+### 2. ORGANIZAÇÃO POR ABA (ADULTO x PEDIATRIA)
+
+O aplicativo já possui pelo menos duas abas: uma para ADULTO e outra para PEDIATRIA.
+
+- Na aba **Adulto**:
+  - Mostrar todas as patologias com `age_group = "adulto"`, organizadas por `clinical_category`.
+- Na aba **Pediatria**:
+  - Mostrar todas as patologias com `age_group = "pediatrico"`, organizadas por `clinical_category`.
+
+Dentro de cada aba:
+- Agrupar por `clinical_category`, por exemplo:
+  - Cardíacas
+  - Respiratórias
+  - Gastro/Hepato
+  - Nefro/Uro
+  - Endócrino/Metabólico
+  - Infecto
+  - Reumato/Ortopedia
+  - Trauma/Urgência
+  - Pediatria Geral
+  - etc.
+
+A interface deve mostrar:
+- Cabeçalho da categoria
+- Lista de patologias daquela categoria
+- Ações possíveis (ex.: abrir detalhes, vincular prescrições, duplicar entre abas)
+
+---
+
+### 3. BOTÃO DE "DUPLICAR PARA PEDIATRIA" / "DUPLICAR PARA ADULTO"
+
+Em cada item de patologia, adicione:
+
+- Na aba Adulto:
+  - Um botão: **"Duplicar para Pediatria"**
+- Na aba Pediatria:
+  - Um botão: **"Duplicar para Adulto"**
+
+Comportamento do botão:
+1. Quando o usuário clicar em "Duplicar para Pediatria" em uma patologia adulta:
+   - Verifique se já existe uma patologia com o MESMO `name` e `age_group = "pediatrico"`.
+   - Se NÃO existir:
+     - Crie um novo registro em `pathologies` com:
+       - `name` igual
+       - `age_group = "pediatrico"`
+       - `clinical_category` adequado (pode herdar o mesmo ou ajustar se for necessário)
+       - `source_group` marcado como algo como `"duplicado_de_adulto"`
+   - Se já existir, apenas notificar visualmente que já existe na pediatria (sem criar duplicata).
+
+2. Quando clicar em "Duplicar para Adulto" em uma patologia pediátrica:
+   - Mesmo comportamento ao contrário:
+     - Se não existir em adulto, criar.
+     - Se já existir, não duplicar.
+
+Importante:
+- Esse botão NÃO apaga nada.
+- Ele apenas facilita preencher a outra aba com a mesma patologia para poder configurar prescrições específicas.
+
+---
+
+### 4. INTEGRAÇÃO COM PRESCRIÇÕES (SE JÁ HOUVER VÍNCULO)
+
+Se o app já tem relação entre patologia e prescrições:
+- Mantenha essa relação, mas não copie automaticamente as prescrições ao duplicar a patologia (a menos que isso já seja padrão no projeto, então comente no código e mantenha o comportamento mais seguro).
+- A duplicação aqui é pelo nome da patologia e pela categoria (apenas criar o "slot" na outra aba).
+- O administrador poderá, depois, associar as prescrições apropriadas para adulto e pediatria separadamente.
+
+---
+
+### 5. ORGANIZAR TAMBÉM AS PATOLOGIAS JÁ EXISTENTES
+
+Além das listas fornecidas neste arquivo, o app já possui patologias cadastradas.
+
+- Leia a fonte atual (banco, JSON, arquivo ou qualquer estrutura existente).
+- Inclua essas patologias na nova estrutura `pathologies` com:
+  - `age_group` adequado (adulto ou pediatrico), conforme já estiver no app
+  - `clinical_category` inferido ou manualmente mapeado
+- Elimine duplicatas internas:
+  - Mesma patologia + mesmo `age_group` → deve existir só uma vez.
+
+---
+
+### 6. CUIDADOS GERAIS
+
+- Não quebrar funcionalidades já existentes.
+- Não alterar estruturas de dados sem atualizar todas as partes que as usam.
+- Manter o estilo de código, padrão de componentes e arquitetura já em uso no projeto (frontend e backend).
+- Deixar o código novo comentado de forma sucinta, explicando onde:
+  - Foram criadas/atualizadas as estruturas de patologias
+  - Foram organizadas por `clinical_category`
+  - Foi implementado o botão de "Duplicar para Pediatria"/"Duplicar para Adulto"
+
+Implemente tudo isso de ponta a ponta, garantindo que o projeto continue a rodar sem erros.

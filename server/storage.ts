@@ -148,10 +148,14 @@ export interface IStorage {
 
   // Pathologies
   getPathologies(userId?: string, ageGroup?: string): Promise<Pathology[]>;
+  getPublicPathologies(ageGroup?: string): Promise<Pathology[]>;
   getUserPathologies(userId: string, ageGroup?: string): Promise<Pathology[]>;
   searchPathologies(query: string, userId?: string): Promise<Pathology[]>;
   getPathology(id: number): Promise<Pathology | undefined>;
+  getPathologyByNameAndAgeGroup(name: string, ageGroup: string): Promise<Pathology | undefined>;
   createPathology(item: InsertPathology): Promise<Pathology>;
+  createPathologiesBulk(items: InsertPathology[]): Promise<Pathology[]>;
+  duplicatePathologyToAgeGroup(id: number, targetAgeGroup: string): Promise<Pathology | null>;
   updatePathology(id: number, item: UpdatePathologyRequest): Promise<Pathology>;
   deletePathology(id: number): Promise<void>;
 
@@ -778,6 +782,14 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(pathologies).where(and(...conditions)).orderBy(pathologies.name);
   }
 
+  async getPublicPathologies(ageGroup?: string): Promise<Pathology[]> {
+    const conditions = [eq(pathologies.isPublic, true)];
+    if (ageGroup) {
+      conditions.push(eq(pathologies.ageGroup, ageGroup));
+    }
+    return await db.select().from(pathologies).where(and(...conditions)).orderBy(pathologies.clinicalCategory, pathologies.name);
+  }
+
   async getUserPathologies(userId: string, ageGroup?: string): Promise<Pathology[]> {
     const conditions = [
       eq(pathologies.userId, userId),
@@ -803,9 +815,47 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
+  async getPathologyByNameAndAgeGroup(name: string, ageGroup: string): Promise<Pathology | undefined> {
+    const [item] = await db.select().from(pathologies).where(
+      and(eq(pathologies.name, name), eq(pathologies.ageGroup, ageGroup))
+    );
+    return item;
+  }
+
   async createPathology(insertItem: InsertPathology): Promise<Pathology> {
     const [item] = await db.insert(pathologies).values(insertItem).returning();
     return item;
+  }
+
+  async createPathologiesBulk(items: InsertPathology[]): Promise<Pathology[]> {
+    if (items.length === 0) return [];
+    const inserted = await db.insert(pathologies).values(items).returning();
+    return inserted;
+  }
+
+  async duplicatePathologyToAgeGroup(id: number, targetAgeGroup: string): Promise<Pathology | null> {
+    const original = await this.getPathology(id);
+    if (!original) return null;
+    
+    const existing = await this.getPathologyByNameAndAgeGroup(original.name, targetAgeGroup);
+    if (existing) return null;
+    
+    const sourceGroup = targetAgeGroup === 'adulto' ? 'duplicado_de_pediatrico' : 'duplicado_de_adulto';
+    const newPathology: InsertPathology = {
+      name: original.name,
+      description: original.description,
+      ageGroup: targetAgeGroup,
+      clinicalCategory: original.clinicalCategory,
+      sourceGroup: sourceGroup,
+      category: original.category,
+      specialty: original.specialty,
+      tags: original.tags,
+      isPublic: original.isPublic,
+      isLocked: original.isLocked,
+      userId: original.userId,
+    };
+    
+    return await this.createPathology(newPathology);
   }
 
   async updatePathology(id: number, updateItem: UpdatePathologyRequest): Promise<Pathology> {

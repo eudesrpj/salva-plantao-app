@@ -40,7 +40,9 @@ export const pathologies = pgTable("pathologies", {
   name: text("name").notNull(),
   description: text("description"),
   ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
-  category: text("category"), // Emergência, Clínica, Pediatria, etc.
+  clinicalCategory: text("clinical_category"), // Cardiologia, Pneumologia, Gastro/Hepato, etc.
+  sourceGroup: text("source_group"), // adulto_base, pediatrico_base, outras_prevalentes, plantao_urgencia, duplicado_de_adulto, duplicado_de_pediatrico
+  category: text("category"), // Legacy: Emergência, Clínica, Pediatria, etc.
   specialty: text("specialty"),
   tags: text("tags").array(),
   isPublic: boolean("is_public").default(false),
