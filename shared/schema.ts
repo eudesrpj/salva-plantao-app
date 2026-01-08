@@ -861,10 +861,12 @@ export type InsertFinancialGoal = z.infer<typeof insertFinancialGoalSchema>;
 // Plans (Planos de assinatura)
 export const plans = pgTable("plans", {
   id: serial("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   description: text("description"),
   priceCents: integer("price_cents").notNull().default(2990),
   billingPeriod: text("billing_period").default("monthly"),
+  cycle: text("cycle").notNull().default("MONTHLY"),
   providerPlanId: text("provider_plan_id"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),

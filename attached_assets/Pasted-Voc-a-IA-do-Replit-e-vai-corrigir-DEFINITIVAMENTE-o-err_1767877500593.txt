@@ -1,0 +1,150 @@
+Você é a IA do Replit e vai corrigir DEFINITIVAMENTE o erro 500 ao criar assinatura e também estruturar planos + cupons.
+
+ERRO ATUAL:
+"insert or update on table 'subscriptions' violates foreign key constraint 'subscriptions_plan_id_plans_id_fk'"
+
+DIAGNÓSTICO:
+O backend está inserindo `subscriptions.plan_id` com um valor que NÃO existe em `plans.id`. Isso quebra a FK e gera 500. Não é Asaas — é banco/backend.
+
+OBJETIVO GERAL:
+1) Nunca mais dar 500 por FK. Se algo estiver errado, retornar 400/422 com mensagem clara.
+2) Não confiar no front para mandar `plan_id` numérico.
+3) Garantir que existam 3 planos no banco: mensal (R$ 29,90), semestral e anual.
+4) Suportar cupom de desconto com: nome/código, tipo (R$ fixo ou %), valor, início/fim (validade), limite total e limite por usuário, e planos permitidos.
+5) Aplicar cupom no cálculo do preço final ANTES de criar cobrança/assinatura no Asaas, e salvar o que foi aplicado (auditoria).
+
+TAREFAS (faça todas, sem pular):
+
+A) LOCALIZAR E CORRIGIR O ENDPOINT DE ASSINATURA
+- Encontre o endpoint que dispara ao clicar "Assinar" (ex: POST /subscribe, /subscriptions, /create-subscription).
+- Hoje ele deve estar salvando `plan_id` direto do body. Isso está errado.
+
+B) PADRÃO DE REQUEST DO FRONT (NÃO USAR plan_id)
+- Mude o front para enviar:
+  {
+    "cpf": "...",
+    "planSlug": "mensal" | "semestral" | "anual",
+    "paymentMethod": "PIX" | "CREDIT_CARD",
+    "couponCode": "JULIA10" (opcional)
+  }
+- O front NÃO deve enviar plan_id numérico.
+
+C) BUSCA DO PLANO NO BACKEND (GARANTIR FK)
+- No backend, antes de inserir subscription:
+  - Faça query: SELECT id, slug, price_cents, cycle FROM plans WHERE slug = $1 AND is_active = true
+  - Se não achar: retornar HTTP 400 JSON { "message": "Plano não encontrado" }
+  - Use SOMENTE o `plans.id` retornado para preencher `subscriptions.plan_id`.
+- Se o planSlug vier vazio: retornar 422 { "message": "planSlug é obrigatório" }.
+
+D) CRIAR/ATUALIZAR SEED/MIGRATION DE PLANOS (3 PLANOS)
+- Garanta a existência dos planos abaixo (id pode variar, mas slug tem que ser único):
+  1) Mensal:
+     slug: "mensal"
+     name: "Plano Mensal"
+     price_cents: 2990
+     cycle: "MONTHLY"
+     is_active: true
+  2) Semestral:
+     slug: "semestral"
+     name: "Plano Semestral"
+     price_cents: 14990   (pode ajustar depois; colocar valor padrão agora)
+     cycle: "SEMIANNUALLY"
+     is_active: true
+  3) Anual:
+     slug: "anual"
+     name: "Plano Anual"
+     price_cents: 27990   (pode ajustar depois; colocar valor padrão agora)
+     cycle: "YEARLY"
+     is_active: true
+
+- Use UPSERT para não duplicar:
+  - Postgres: INSERT ... ON CONFLICT (slug) DO UPDATE ...
+- Se a tabela `plans` não tiver esses campos, crie migration adicionando:
+  - slug (unique)
+  - name
+  - price_cents (int)
+  - cycle (text)
+  - is_active (bool)
+  - created_at/updated_at
+
+E) CUPONS (SUPORTAR TODOS OS VALORES E TEMPO QUE O ADMIN DEFINIR)
+- Criar tabela `coupons` (ou ajustar existente) com:
+  - id (pk)
+  - code (unique, upper)
+  - discount_type ('FIXED' | 'PERCENT')
+  - discount_value_cents (int, nullable)   // se FIXED
+  - discount_percent (int, nullable)       // se PERCENT (0-100)
+  - starts_at (timestamp, nullable)
+  - ends_at (timestamp, nullable)
+  - max_redemptions (int, nullable)
+  - max_redemptions_per_user (int, nullable)
+  - is_active (bool)
+  - allowed_plan_slugs (text[] ou join table coupon_plans)
+  - created_at/updated_at
+
+- Criar tabela de uso para auditoria:
+  - coupon_redemptions:
+    - id
+    - coupon_id (fk)
+    - user_id (fk)
+    - subscription_id (fk, nullable até criar)
+    - redeemed_at
+    - amount_discounted_cents
+- Validações no backend ao aplicar cupom:
+  1) Existe e está ativo
+  2) Dentro de starts_at/ends_at
+  3) Não excedeu max_redemptions
+  4) Não excedeu max_redemptions_per_user
+  5) É permitido para o plano selecionado (mensal/semestral/anual)
+
+F) CÁLCULO DO PREÇO FINAL (NUNCA NEGATIVO)
+- Calcular price_final_cents:
+  - base = plan.price_cents
+  - se cupom FIXED: final = max(0, base - discount_value_cents)
+  - se cupom PERCENT: final = max(0, base - round(base * discount_percent/100))
+- Retornar erro 422 se cupom inválido com motivo claro:
+  { "message": "Cupom expirado" } / "Cupom inválido" / "Cupom não permitido para este plano" etc.
+
+G) CRIAÇÃO DA ASSINATURA/COBRANÇA NO ASAAS (SEM VAZAR CHAVE NO FRONT)
+- Garantir que a chamada ao Asaas ocorra SOMENTE no backend.
+- Depois de validar plano + cupom:
+  1) Garantir customer no Asaas (cpf)
+  2) Criar subscription no Asaas usando:
+     - customer
+     - billingType (PIX ou CREDIT_CARD)
+     - value (price_final em reais)
+     - cycle (mapear do nosso cycle para o aceito no Asaas)
+     - nextDueDate (definir corretamente)
+  3) Salvar no nosso banco:
+     - subscriptions: user_id, plan_id, asaas_subscription_id, status, price_base_cents, price_final_cents, coupon_id (nullable)
+  4) Se cupom foi aplicado, registrar coupon_redemptions (auditoria)
+- Se o Asaas falhar, retornar erro 502 com o body do Asaas (sem expor API key).
+
+H) TRATAMENTO DE ERROS (NUNCA MAIS 500 “mudo”)
+- Envolver o fluxo em try/catch.
+- Erros de validação: 400/422.
+- Erros de FK/DB: capturar e retornar 409 com mensagem "Plano inválido. Contate o suporte."
+- Logar no servidor:
+  - payload recebido (sem dados sensíveis)
+  - planSlug
+  - couponCode
+  - user_id
+  - SQL error code quando ocorrer
+
+I) TESTES RÁPIDOS (MÍNIMO)
+Criar 3 testes (ou scripts) para provar que resolveu:
+1) Assinar mensal sem cupom → cria subscription e não dá FK
+2) Assinar mensal com cupom válido → final menor e registra redemption
+3) Assinar com planSlug inexistente → 400 "Plano não encontrado" (sem 500)
+
+IMPORTANTE:
+- Não mudar a separação Adulto/Pediatria (se existir) sem necessidade.
+- Não duplicar planos.
+- Garantir que o `plans.slug` seja o identificador estável e único.
+- Garantir que `subscriptions.plan_id` sempre venha do SELECT em `plans`.
+
+ENTREGA:
+- Commit com as migrations/seeds
+- Correção no endpoint
+- Ajuste no front para enviar planSlug/couponCode
+- Logs e mensagens de erro amigáveis

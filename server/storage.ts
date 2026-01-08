@@ -297,8 +297,10 @@ export interface IStorage {
   getPlans(): Promise<Plan[]>;
   getActivePlan(): Promise<Plan | undefined>;
   getPlan(id: number): Promise<Plan | undefined>;
+  getPlanBySlug(slug: string): Promise<Plan | undefined>;
   createPlan(item: InsertPlan): Promise<Plan>;
   updatePlan(id: number, item: Partial<InsertPlan>): Promise<Plan>;
+  upsertPlans(): Promise<void>;
 
   // Subscriptions
   getUserSubscription(userId: string): Promise<Subscription | undefined>;
@@ -1557,6 +1559,13 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
+  async getPlanBySlug(slug: string): Promise<Plan | undefined> {
+    const [item] = await db.select().from(plans).where(
+      and(eq(plans.slug, slug), eq(plans.isActive, true))
+    );
+    return item;
+  }
+
   async createPlan(insertItem: InsertPlan): Promise<Plan> {
     const [item] = await db.insert(plans).values(insertItem).returning();
     return item;
@@ -1565,6 +1574,23 @@ export class DatabaseStorage implements IStorage {
   async updatePlan(id: number, updateItem: Partial<InsertPlan>): Promise<Plan> {
     const [item] = await db.update(plans).set(updateItem).where(eq(plans.id, id)).returning();
     return item;
+  }
+
+  async upsertPlans(): Promise<void> {
+    const defaultPlans = [
+      { slug: 'mensal', name: 'Plano Mensal', priceCents: 2990, billingPeriod: 'monthly', cycle: 'MONTHLY', isActive: true },
+      { slug: 'semestral', name: 'Plano Semestral', priceCents: 14990, billingPeriod: 'semiannually', cycle: 'SEMIANNUALLY', isActive: true },
+      { slug: 'anual', name: 'Plano Anual', priceCents: 27990, billingPeriod: 'yearly', cycle: 'YEARLY', isActive: true },
+    ];
+
+    for (const plan of defaultPlans) {
+      const existing = await db.select().from(plans).where(eq(plans.slug, plan.slug)).limit(1);
+      if (existing.length === 0) {
+        await db.insert(plans).values(plan);
+      } else {
+        await db.update(plans).set(plan).where(eq(plans.slug, plan.slug));
+      }
+    }
   }
 
   // Subscriptions
