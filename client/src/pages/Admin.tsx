@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest } from "@/lib/queryClient";
 import type { User } from "@shared/models/auth";
@@ -3122,10 +3122,67 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [bulkImportText, setBulkImportText] = useState("");
+  const [importMode, setImportMode] = useState<"upsert" | "create">("upsert");
 
   const { data: medicationsList, isLoading } = useQuery<any[]>({
     queryKey: ["/api/medications"],
   });
+
+  const bulkImportMutation = useMutation({
+    mutationFn: async ({ medications, mode }: { medications: any[]; mode: string }) => {
+      const res = await apiRequest("POST", "/api/medications/bulk-import", { medications, mode });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/medications"] });
+      toast({ 
+        title: "Importação concluída!", 
+        description: `${data.success} de ${data.total} medicações importadas.${data.errors.length > 0 ? ` ${data.errors.length} erros.` : ''}`
+      });
+      setBulkImportOpen(false);
+      setBulkImportText("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleBulkImport = () => {
+    try {
+      const lines = bulkImportText.trim().split('\n').filter(l => l.trim());
+      if (lines.length === 0) {
+        toast({ title: "Nenhum dado para importar", variant: "destructive" });
+        return;
+      }
+
+      const medications = lines.map(line => {
+        const parts = line.split(';').map(p => p.trim());
+        return {
+          name: parts[0] || '',
+          category: parts[1] || null,
+          dose: parts[2] || null,
+          interval: parts[3] || null,
+          route: parts[4] || null,
+          dosePerKg: parts[5] || null,
+          maxDose: parts[6] || null,
+          duration: parts[7] || null,
+          ageGroup: parts[8] || 'adulto',
+          observations: parts[9] || null
+        };
+      }).filter(m => m.name);
+
+      if (medications.length === 0) {
+        toast({ title: "Nenhuma medicação válida encontrada", variant: "destructive" });
+        return;
+      }
+
+      bulkImportMutation.mutate({ medications, mode: importMode });
+    } catch (err) {
+      toast({ title: "Erro ao processar dados", description: "Verifique o formato do texto", variant: "destructive" });
+    }
+  };
 
   const createMedication = useMutation({
     mutationFn: async (data: any) => {
@@ -3181,7 +3238,54 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
           <CardTitle>Biblioteca de Medicações</CardTitle>
           <CardDescription>Crie medicamentos reutilizáveis para associar às patologias.</CardDescription>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Dialog open={bulkImportOpen} onOpenChange={setBulkImportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-1" data-testid="button-bulk-import-medications">
+                <Upload className="h-4 w-4" /> Importar em Massa
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Importação em Massa de Medicações</DialogTitle>
+                <DialogDescription>
+                  Cole os dados das medicações no formato: Nome;Categoria;Dose;Intervalo;Via;Dose/kg;DoseMáx;Duração;FaixaEtária;Observações
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="p-3 bg-muted rounded-md text-sm">
+                  <p className="font-medium mb-2">Formato (separado por ponto-e-vírgula):</p>
+                  <code className="text-xs block">Dipirona 500mg;Analgésicos;1g;6/6h;VO;;;;</code>
+                  <code className="text-xs block">Amoxicilina;Antibióticos;50mg/kg/dia;8/8h;VO;50mg/kg;3g/dia;7 dias;pediatrico;</code>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Modo de Importação</label>
+                  <select 
+                    value={importMode} 
+                    onChange={(e) => setImportMode(e.target.value as "upsert" | "create")}
+                    className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="upsert">Atualizar existentes e criar novos</option>
+                    <option value="create">Apenas criar novos (ignorar duplicados)</option>
+                  </select>
+                </div>
+                <Textarea 
+                  value={bulkImportText}
+                  onChange={(e) => setBulkImportText(e.target.value)}
+                  placeholder="Cole aqui as medicações (uma por linha)..."
+                  rows={10}
+                  className="font-mono text-sm"
+                  data-testid="textarea-bulk-import"
+                />
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setBulkImportOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleBulkImport} disabled={bulkImportMutation.isPending || !bulkImportText.trim()}>
+                    {bulkImportMutation.isPending ? "Importando..." : "Importar Medicações"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button className="gap-1" data-testid="button-add-library-medication">

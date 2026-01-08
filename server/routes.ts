@@ -1024,6 +1024,66 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(204).send();
   });
 
+  app.post("/api/medications/bulk-import", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { medications, mode = "upsert" } = req.body;
+      
+      if (!Array.isArray(medications) || medications.length === 0) {
+        return res.status(400).json({ message: "Forneça uma lista de medicações" });
+      }
+
+      const results = { success: 0, errors: [] as string[], imported: [] as any[] };
+      
+      for (let i = 0; i < medications.length; i++) {
+        const med = medications[i];
+        try {
+          if (!med.name) {
+            results.errors.push(`Linha ${i + 1}: Nome é obrigatório`);
+            continue;
+          }
+
+          const importData = {
+            name: med.name.trim(),
+            nameNormalized: med.name.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+            category: med.category || null,
+            ageGroup: med.ageGroup || 'adulto',
+            dose: med.dose || null,
+            dosePerKg: med.dosePerKg || null,
+            maxDose: med.maxDose || null,
+            interval: med.interval || null,
+            duration: med.duration || null,
+            route: med.route || null,
+            quantity: med.quantity || null,
+            timing: med.timing || null,
+            observations: med.observations || null,
+            isActive: true
+          };
+
+          let item;
+          if (mode === "upsert") {
+            item = await storage.upsertMedication(importData);
+          } else {
+            item = await storage.createMedication(importData);
+          }
+          results.imported.push(item);
+          results.success++;
+        } catch (err: any) {
+          results.errors.push(`Linha ${i + 1}: ${err.message || 'Erro desconhecido'}`);
+        }
+      }
+
+      res.json({
+        message: `Importação concluída: ${results.success} de ${medications.length} medicações processadas`,
+        success: results.success,
+        total: medications.length,
+        errors: results.errors,
+        imported: results.imported
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Erro ao importar medicações" });
+    }
+  });
+
   // --- Patient History ---
   app.get("/api/patient-history", isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getPatientHistory(getUserId(req));
