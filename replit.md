@@ -50,6 +50,14 @@ Key database entities include: prescriptions, protocols, checklists, shifts, not
 - **AI Assistant for Content Generation** (Admin only): Generates prescription model drafts using OpenAI, with preview/edit before saving - never auto-saves
 - **Enhanced Calculator Settings**: Extended database schema with dose formulas, usage modes (home/unit), multiple routes (IV/IM/SC), dilution info, and available pharmaceutical forms
 
+### Version 2.1 Features (January 2026)
+- **Calculator Allowed Meds**: Admin controls which medications appear in the quick calculator for each patient type (pediatric/adult)
+- **Dashboard/Quick Access Config**: Admin can configure custom dashboard items and quick access shortcuts for users
+- **Donation System**: Donation causes management with destination types (PIX, Bank, Link, Internal), target amounts, and donation tracking
+- **Enhanced Medications Library**: Age group tabs (Todos/Adulto/Pediatria/Ambos), category filter, search, and batch selection mode
+- **Batch Operations**: Select multiple medications to activate, deactivate, delete, or export as CSV/JSON
+- **Pathology Medication Filter**: Filter medications by age group when assigning to pathologies
+
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)
 - **User Roles**: `user` (default) and `admin`

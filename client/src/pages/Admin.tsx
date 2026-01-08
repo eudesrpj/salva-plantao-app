@@ -3554,7 +3554,11 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
                         >
                           <option value="">-- Escolha uma medicação --</option>
                           {libraryMedications
-                            .filter(m => medAgeFilter === "all" || m.ageGroup === medAgeFilter || m.ageGroup === "ambos")
+                            .filter(m => {
+                              if (medAgeFilter === "all") return true;
+                              const group = m.ageGroup ?? "adulto";
+                              return group === medAgeFilter || group === "ambos";
+                            })
                             .map(m => (
                               <option key={m.id} value={m.id}>
                                 {m.name} {m.presentation && `(${m.presentation})`} - {m.dose || "sem dose"} {m.route || ""} [{m.ageGroup || "adulto"}]
@@ -4182,7 +4186,8 @@ function MedicationLibraryManagement({ onBack }: { onBack: () => void }) {
   const filteredMedications = useMemo(() => {
     if (!medicationsList) return [];
     return medicationsList.filter(m => {
-      if (ageGroupFilter !== "all" && m.ageGroup !== ageGroupFilter && m.ageGroup !== "ambos") return false;
+      const group = m.ageGroup ?? "adulto";
+      if (ageGroupFilter !== "all" && group !== ageGroupFilter && group !== "ambos") return false;
       if (categoryFilter !== "all" && m.category !== categoryFilter) return false;
       if (searchQuery && !m.name?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
