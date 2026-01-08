@@ -395,6 +395,55 @@ export const insertFlashcardSchema = createInsertSchema(flashcards).omit({ id: t
 export type Flashcard = typeof flashcards.$inferSelect;
 export type InsertFlashcard = z.infer<typeof insertFlashcardSchema>;
 
+// Memorization Decks (groups of flashcards)
+export const memorizeDecks = pgTable("memorize_decks", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category"),
+  specialty: text("specialty"),
+  cardCount: integer("card_count").default(0),
+  isPublic: boolean("is_public").default(false),
+  isLocked: boolean("is_locked").default(false), // Admin-created decks
+  userId: text("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMemorizeDeckSchema = createInsertSchema(memorizeDecks).omit({ id: true, createdAt: true, cardCount: true });
+export type MemorizeDeck = typeof memorizeDecks.$inferSelect;
+export type InsertMemorizeDeck = z.infer<typeof insertMemorizeDeckSchema>;
+
+// Memorization Cards (cards within a deck)
+export const memorizeCards = pgTable("memorize_cards", {
+  id: serial("id").primaryKey(),
+  deckId: integer("deck_id").notNull().references(() => memorizeDecks.id, { onDelete: "cascade" }),
+  front: text("front").notNull(), // Question or term
+  back: text("back").notNull(), // Answer or explanation
+  hint: text("hint"), // Optional hint
+  tags: text("tags").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMemorizeCardSchema = createInsertSchema(memorizeCards).omit({ id: true, createdAt: true });
+export type MemorizeCard = typeof memorizeCards.$inferSelect;
+export type InsertMemorizeCard = z.infer<typeof insertMemorizeCardSchema>;
+
+// User Card Progress (spaced repetition tracking)
+export const cardProgress = pgTable("card_progress", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  cardId: integer("card_id").notNull().references(() => memorizeCards.id, { onDelete: "cascade" }),
+  ease: decimal("ease", { precision: 4, scale: 2 }).default("2.5"), // SM-2 ease factor
+  interval: integer("interval").default(1), // Days until next review
+  repetitions: integer("repetitions").default(0), // Number of successful reviews
+  nextReviewAt: timestamp("next_review_at").defaultNow(), // When to show card again
+  lastReviewedAt: timestamp("last_reviewed_at"),
+});
+
+export const insertCardProgressSchema = createInsertSchema(cardProgress).omit({ id: true });
+export type CardProgress = typeof cardProgress.$inferSelect;
+export type InsertCardProgress = z.infer<typeof insertCardProgressSchema>;
+
 // User Favorites (junction table)
 export const favorites = pgTable("favorites", {
   id: serial("id").primaryKey(),
@@ -762,6 +811,12 @@ export type UpdateChecklistRequest = Partial<InsertChecklist>;
 
 export type CreateFlashcardRequest = InsertFlashcard;
 export type UpdateFlashcardRequest = Partial<InsertFlashcard>;
+
+export type CreateMemorizeDeckRequest = InsertMemorizeDeck;
+export type UpdateMemorizeDeckRequest = Partial<InsertMemorizeDeck>;
+
+export type CreateMemorizeCardRequest = InsertMemorizeCard;
+export type UpdateMemorizeCardRequest = Partial<InsertMemorizeCard>;
 
 export type CreateShiftRequest = InsertShift;
 export type UpdateShiftRequest = Partial<InsertShift>;

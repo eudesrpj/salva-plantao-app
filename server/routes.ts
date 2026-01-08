@@ -1327,6 +1327,213 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
+  // --- Memorization System ---
+  // Decks
+  app.get("/api/memorize/decks", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const items = await storage.getMemorizeDecks(userId);
+    res.json(items);
+  });
+
+  app.get("/api/memorize/decks/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const item = await storage.getMemorizeDeck(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Deck não encontrado" });
+    res.json(item);
+  });
+
+  app.post("/api/memorize/decks", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const isAdmin = user?.role === "admin";
+    const item = await storage.createMemorizeDeck({
+      ...req.body,
+      userId: isAdmin ? null : userId,
+      isPublic: isAdmin,
+      isLocked: isAdmin,
+    });
+    res.status(201).json(item);
+  });
+
+  app.put("/api/memorize/decks/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const deck = await storage.getMemorizeDeck(Number(req.params.id));
+    if (!deck) return res.status(404).json({ message: "Deck não encontrado" });
+    if (deck.isLocked && user?.role !== "admin") {
+      return res.status(403).json({ message: "Deck bloqueado para edição" });
+    }
+    if (deck.userId !== userId && user?.role !== "admin") {
+      return res.status(403).json({ message: "Sem permissão para editar este deck" });
+    }
+    const item = await storage.updateMemorizeDeck(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/memorize/decks/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const deck = await storage.getMemorizeDeck(Number(req.params.id));
+    if (!deck) return res.status(404).json({ message: "Deck não encontrado" });
+    if (deck.isLocked && user?.role !== "admin") {
+      return res.status(403).json({ message: "Deck bloqueado para exclusão" });
+    }
+    if (deck.userId !== userId && user?.role !== "admin") {
+      return res.status(403).json({ message: "Sem permissão para excluir este deck" });
+    }
+    await storage.deleteMemorizeDeck(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Cards
+  app.get("/api/memorize/decks/:deckId/cards", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getMemorizeCards(Number(req.params.deckId));
+    res.json(items);
+  });
+
+  app.get("/api/memorize/cards/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const item = await storage.getMemorizeCard(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Card não encontrado" });
+    res.json(item);
+  });
+
+  app.post("/api/memorize/decks/:deckId/cards", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const deck = await storage.getMemorizeDeck(Number(req.params.deckId));
+    if (!deck) return res.status(404).json({ message: "Deck não encontrado" });
+    if (deck.isLocked && user?.role !== "admin") {
+      return res.status(403).json({ message: "Deck bloqueado para edição" });
+    }
+    const item = await storage.createMemorizeCard({
+      ...req.body,
+      deckId: Number(req.params.deckId),
+    });
+    res.status(201).json(item);
+  });
+
+  app.post("/api/memorize/decks/:deckId/cards/bulk", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const deckId = Number(req.params.deckId);
+    const deck = await storage.getMemorizeDeck(deckId);
+    if (!deck) return res.status(404).json({ message: "Deck não encontrado" });
+    if (deck.isLocked && user?.role !== "admin") {
+      return res.status(403).json({ message: "Deck bloqueado para edição" });
+    }
+
+    const { data } = req.body;
+    if (!data || typeof data !== 'string') {
+      return res.status(400).json({ message: "Campo 'data' é obrigatório (texto)" });
+    }
+
+    const lines = data.trim().split('\n').filter((line: string) => line.trim());
+    const items: any[] = [];
+    const errors: string[] = [];
+
+    // Format: front;back;hint;tags (tags comma-separated)
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line || line.startsWith('#')) continue;
+
+      const parts = line.split(';').map((p: string) => p.trim());
+      if (parts.length < 2) {
+        errors.push(`Linha ${i + 1}: formato inválido (mínimo: frente;verso)`);
+        continue;
+      }
+
+      items.push({
+        deckId,
+        front: parts[0],
+        back: parts[1],
+        hint: parts[2] || null,
+        tags: parts[3] ? parts[3].split(',').map((t: string) => t.trim()) : null,
+      });
+    }
+
+    if (items.length === 0) {
+      return res.status(400).json({ message: "Nenhum card válido para importar", errors });
+    }
+
+    const created = await storage.createMemorizeCardsBulk(items);
+    res.json({ imported: created.length, errors });
+  });
+
+  app.put("/api/memorize/cards/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const card = await storage.getMemorizeCard(Number(req.params.id));
+    if (!card) return res.status(404).json({ message: "Card não encontrado" });
+    const deck = await storage.getMemorizeDeck(card.deckId);
+    if (deck?.isLocked && user?.role !== "admin") {
+      return res.status(403).json({ message: "Deck bloqueado para edição" });
+    }
+    const item = await storage.updateMemorizeCard(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/memorize/cards/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const card = await storage.getMemorizeCard(Number(req.params.id));
+    if (!card) return res.status(404).json({ message: "Card não encontrado" });
+    const deck = await storage.getMemorizeDeck(card.deckId);
+    if (deck?.isLocked && user?.role !== "admin") {
+      return res.status(403).json({ message: "Deck bloqueado para exclusão" });
+    }
+    await storage.deleteMemorizeCard(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Study / Spaced Repetition
+  app.get("/api/memorize/decks/:deckId/study", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const cards = await storage.getCardsToReview(userId, Number(req.params.deckId));
+    res.json(cards);
+  });
+
+  app.post("/api/memorize/cards/:cardId/review", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const { quality } = req.body; // 0-5 SM-2 quality rating
+
+    const existing = await storage.getCardProgress(userId, Number(req.params.cardId));
+    
+    // SM-2 Algorithm
+    let ease = existing ? Number(existing.ease) : 2.5;
+    let interval = existing?.interval || 1;
+    let repetitions = existing?.repetitions || 0;
+
+    if (quality < 3) {
+      repetitions = 0;
+      interval = 1;
+    } else {
+      repetitions++;
+      if (repetitions === 1) {
+        interval = 1;
+      } else if (repetitions === 2) {
+        interval = 6;
+      } else {
+        interval = Math.round(interval * ease);
+      }
+    }
+
+    ease = ease + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+    if (ease < 1.3) ease = 1.3;
+
+    const nextReviewAt = new Date();
+    nextReviewAt.setDate(nextReviewAt.getDate() + interval);
+
+    const progress = await storage.upsertCardProgress({
+      userId,
+      cardId: Number(req.params.cardId),
+      ease: String(ease),
+      interval,
+      repetitions,
+      nextReviewAt,
+    });
+
+    res.json(progress);
+  });
+
   // --- Promo Coupons (Admin only) ---
   app.get("/api/promo-coupons", isAuthenticated, checkAdmin, async (req, res) => {
     const items = await storage.getPromoCoupons();

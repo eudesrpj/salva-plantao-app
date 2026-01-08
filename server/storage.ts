@@ -7,7 +7,7 @@ import {
   medicalCertificates, attendanceDeclarations, medicalReferrals, referralDestinations, referralReasons,
   prescriptionModels, prescriptionModelMedications, monthlyExpenses, financialGoals,
   plans, subscriptions, payments,
-  medicationDilutions, hydrationPresets,
+  medicationDilutions, hydrationPresets, memorizeDecks, memorizeCards, cardProgress,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -53,7 +53,10 @@ import {
   type Subscription, type InsertSubscription,
   type Payment, type InsertPayment,
   type MedicationDilution, type InsertMedicationDilution,
-  type HydrationPreset, type InsertHydrationPreset
+  type HydrationPreset, type InsertHydrationPreset,
+  type MemorizeDeck, type InsertMemorizeDeck,
+  type MemorizeCard, type InsertMemorizeCard,
+  type CardProgress, type InsertCardProgress
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
@@ -341,6 +344,26 @@ export interface IStorage {
   getMedicationByNormalizedName(nameNormalized: string): Promise<Medication | undefined>;
   upsertMedication(item: InsertMedication): Promise<Medication>;
   searchMedicationsAdvanced(query: string, options?: { ageGroup?: string; category?: string }): Promise<Medication[]>;
+
+  // Memorization Decks
+  getMemorizeDecks(userId?: string): Promise<MemorizeDeck[]>;
+  getMemorizeDeck(id: number): Promise<MemorizeDeck | undefined>;
+  createMemorizeDeck(item: InsertMemorizeDeck): Promise<MemorizeDeck>;
+  updateMemorizeDeck(id: number, item: Partial<InsertMemorizeDeck>): Promise<MemorizeDeck>;
+  deleteMemorizeDeck(id: number): Promise<void>;
+
+  // Memorization Cards
+  getMemorizeCards(deckId: number): Promise<MemorizeCard[]>;
+  getMemorizeCard(id: number): Promise<MemorizeCard | undefined>;
+  createMemorizeCard(item: InsertMemorizeCard): Promise<MemorizeCard>;
+  createMemorizeCardsBulk(items: InsertMemorizeCard[]): Promise<MemorizeCard[]>;
+  updateMemorizeCard(id: number, item: Partial<InsertMemorizeCard>): Promise<MemorizeCard>;
+  deleteMemorizeCard(id: number): Promise<void>;
+
+  // Card Progress (Spaced Repetition)
+  getCardProgress(userId: string, cardId: number): Promise<CardProgress | undefined>;
+  getCardsToReview(userId: string, deckId: number): Promise<(MemorizeCard & { progress?: CardProgress })[]>;
+  upsertCardProgress(item: InsertCardProgress): Promise<CardProgress>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1832,6 +1855,125 @@ export class DatabaseStorage implements IStorage {
       .trim()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  // Memorization Decks
+  async getMemorizeDecks(userId?: string): Promise<MemorizeDeck[]> {
+    if (userId) {
+      return await db.select().from(memorizeDecks)
+        .where(or(eq(memorizeDecks.isPublic, true), eq(memorizeDecks.userId, userId)))
+        .orderBy(desc(memorizeDecks.createdAt));
+    }
+    return await db.select().from(memorizeDecks)
+      .where(eq(memorizeDecks.isPublic, true))
+      .orderBy(desc(memorizeDecks.createdAt));
+  }
+
+  async getMemorizeDeck(id: number): Promise<MemorizeDeck | undefined> {
+    const [item] = await db.select().from(memorizeDecks).where(eq(memorizeDecks.id, id));
+    return item;
+  }
+
+  async createMemorizeDeck(item: InsertMemorizeDeck): Promise<MemorizeDeck> {
+    const [created] = await db.insert(memorizeDecks).values(item).returning();
+    return created;
+  }
+
+  async updateMemorizeDeck(id: number, item: Partial<InsertMemorizeDeck>): Promise<MemorizeDeck> {
+    const [updated] = await db.update(memorizeDecks)
+      .set(item)
+      .where(eq(memorizeDecks.id, id)).returning();
+    return updated;
+  }
+
+  async deleteMemorizeDeck(id: number): Promise<void> {
+    await db.delete(memorizeDecks).where(eq(memorizeDecks.id, id));
+  }
+
+  // Memorization Cards
+  async getMemorizeCards(deckId: number): Promise<MemorizeCard[]> {
+    return await db.select().from(memorizeCards)
+      .where(eq(memorizeCards.deckId, deckId))
+      .orderBy(memorizeCards.id);
+  }
+
+  async getMemorizeCard(id: number): Promise<MemorizeCard | undefined> {
+    const [item] = await db.select().from(memorizeCards).where(eq(memorizeCards.id, id));
+    return item;
+  }
+
+  async createMemorizeCard(item: InsertMemorizeCard): Promise<MemorizeCard> {
+    const [created] = await db.insert(memorizeCards).values(item).returning();
+    await db.update(memorizeDecks)
+      .set({ cardCount: sql`card_count + 1` })
+      .where(eq(memorizeDecks.id, item.deckId));
+    return created;
+  }
+
+  async createMemorizeCardsBulk(items: InsertMemorizeCard[]): Promise<MemorizeCard[]> {
+    if (items.length === 0) return [];
+    const created = await db.insert(memorizeCards).values(items).returning();
+    const deckId = items[0].deckId;
+    await db.update(memorizeDecks)
+      .set({ cardCount: sql`card_count + ${items.length}` })
+      .where(eq(memorizeDecks.id, deckId));
+    return created;
+  }
+
+  async updateMemorizeCard(id: number, item: Partial<InsertMemorizeCard>): Promise<MemorizeCard> {
+    const [updated] = await db.update(memorizeCards)
+      .set(item)
+      .where(eq(memorizeCards.id, id)).returning();
+    return updated;
+  }
+
+  async deleteMemorizeCard(id: number): Promise<void> {
+    const card = await this.getMemorizeCard(id);
+    if (card) {
+      await db.delete(memorizeCards).where(eq(memorizeCards.id, id));
+      await db.update(memorizeDecks)
+        .set({ cardCount: sql`GREATEST(card_count - 1, 0)` })
+        .where(eq(memorizeDecks.id, card.deckId));
+    }
+  }
+
+  // Card Progress (Spaced Repetition)
+  async getCardProgress(userId: string, cardId: number): Promise<CardProgress | undefined> {
+    const [item] = await db.select().from(cardProgress)
+      .where(and(eq(cardProgress.userId, userId), eq(cardProgress.cardId, cardId)));
+    return item;
+  }
+
+  async getCardsToReview(userId: string, deckId: number): Promise<(MemorizeCard & { progress?: CardProgress })[]> {
+    const cards = await this.getMemorizeCards(deckId);
+    const cardIds = cards.map(c => c.id);
+    
+    if (cardIds.length === 0) return [];
+    
+    const progresses = await db.select().from(cardProgress)
+      .where(and(
+        eq(cardProgress.userId, userId),
+        sql`${cardProgress.cardId} = ANY(${cardIds})`
+      ));
+    
+    const progressMap = new Map(progresses.map(p => [p.cardId, p]));
+    
+    return cards.map(card => ({
+      ...card,
+      progress: progressMap.get(card.id)
+    }));
+  }
+
+  async upsertCardProgress(item: InsertCardProgress): Promise<CardProgress> {
+    const existing = await this.getCardProgress(item.userId, item.cardId);
+    if (existing) {
+      const [updated] = await db.update(cardProgress)
+        .set({ ...item, lastReviewedAt: new Date() })
+        .where(eq(cardProgress.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(cardProgress).values(item).returning();
+    return created;
   }
 }
 
