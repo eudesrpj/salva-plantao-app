@@ -853,3 +853,75 @@ export const insertFinancialGoalSchema = createInsertSchema(financialGoals, {
 }).omit({ id: true, createdAt: true });
 export type FinancialGoal = typeof financialGoals.$inferSelect;
 export type InsertFinancialGoal = z.infer<typeof insertFinancialGoalSchema>;
+
+// ============================================
+// SUBSCRIPTION & PAYMENT SYSTEM
+// ============================================
+
+// Plans (Planos de assinatura)
+export const plans = pgTable("plans", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  priceCents: integer("price_cents").notNull().default(2990),
+  billingPeriod: text("billing_period").default("monthly"),
+  providerPlanId: text("provider_plan_id"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
+export type Plan = typeof plans.$inferSelect;
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
+
+// Subscriptions (Assinaturas)
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  planId: integer("plan_id").notNull().references(() => plans.id),
+  providerSubscriptionId: text("provider_subscription_id"),
+  providerCustomerId: text("provider_customer_id"),
+  status: text("status").notNull().default("pending"),
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  nextBillingDate: timestamp("next_billing_date"),
+  lastPaymentStatus: text("last_payment_status"),
+  appliedCouponId: integer("applied_coupon_id").references(() => promoCoupons.id),
+  canceledAt: timestamp("canceled_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions, {
+  currentPeriodStart: z.coerce.date().optional().nullable(),
+  currentPeriodEnd: z.coerce.date().optional().nullable(),
+  nextBillingDate: z.coerce.date().optional().nullable(),
+  canceledAt: z.coerce.date().optional().nullable(),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+
+// Payments (Pagamentos)
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  subscriptionId: integer("subscription_id").references(() => subscriptions.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  providerPaymentId: text("provider_payment_id"),
+  amountCents: integer("amount_cents").notNull(),
+  discountCents: integer("discount_cents").default(0),
+  status: text("status").notNull().default("pending"),
+  method: text("method"),
+  pixQrCode: text("pix_qr_code"),
+  pixCopyPaste: text("pix_copy_paste"),
+  pixExpiresAt: timestamp("pix_expires_at"),
+  invoiceUrl: text("invoice_url"),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPaymentSchema = createInsertSchema(payments, {
+  pixExpiresAt: z.coerce.date().optional().nullable(),
+  paidAt: z.coerce.date().optional().nullable(),
+}).omit({ id: true, createdAt: true });
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;

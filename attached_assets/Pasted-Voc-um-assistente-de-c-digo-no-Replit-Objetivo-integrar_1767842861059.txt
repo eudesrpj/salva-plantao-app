@@ -1,0 +1,256 @@
+Você é um assistente de código no Replit.
+
+Objetivo: integrar um sistema de ASSINATURA MENSAL com valor padrão de R$ 29,90 no meu app web, usando um PROVEDOR DE PAGAMENTOS (como ASAAS ou similar), com:
+- pagamento por PIX e cartão de crédito
+- sistema de CUPONS DE DESCONTO completo
+- controle de assinatura ativa/inativa dentro do app
+- painel para o ADMINISTRADOR criar e gerenciar cupons.
+
+IMPORTANTE:
+- NÃO QUEBRAR o que já existe no app.
+- Reutilizar a stack atual (framework, linguagem, estilo de código).
+- Toda lógica sensível (API keys etc.) deve ficar em variáveis de ambiente.
+
+---
+
+## 1. MODELO DE ASSINATURA
+
+Crie (ou ajuste) os modelos de dados no backend com algo próximo disso (adaptar à tecnologia usada):
+
+### Tabelas / coleções
+
+1) `plans` (planos)
+- `id`
+- `name` (ex.: "Plano Mensal")
+- `price_cents` (ex.: 2990)
+- `billing_period` (ex.: "monthly")
+- `provider_plan_id` (id do plano no gateway, se existir)
+- `is_active` (boolean)
+
+2) `coupons`
+- `id`
+- `code` (string) → nome do cupom, definido pelo administrador (ex.: SALVA10, DR-EUDES-INDICA)
+- `description` (opcional)
+- `discount_type` (string: "percent" ou "fixed")
+- `discount_value`:
+  - se `percent`: 0–100 (porcentagem)
+  - se `fixed`: valor em centavos (ex.: 990 = R$ 9,90)
+- `max_uses_global` (número máximo total de usos do cupom – pode ser null para ilimitado)
+- `max_uses_per_user` (quantas vezes o mesmo usuário pode usar – pode ser 1 por padrão)
+- `valid_from` (data/hora início)
+- `valid_until` (data/hora fim)
+- `min_value_cents` (opcional, valor mínimo para aplicar)
+- `duration_type` (string: "single", "repeating", "forever")
+  - `single` = só no primeiro pagamento
+  - `repeating` = por X ciclos
+  - `forever` = enquanto a assinatura estiver ativa
+- `duration_in_cycles` (quando `duration_type = "repeating"`)
+- `is_active` (boolean)
+
+3) `coupon_usages`
+- `id`
+- `coupon_id`
+- `user_id`
+- `used_at`
+
+4) `subscriptions`
+- `id`
+- `user_id`
+- `plan_id`
+- `provider_subscription_id` (ID da assinatura no gateway ASAAS ou outro)
+- `status` (string: "active", "pending", "canceled", "expired", "past_due", etc.)
+- `current_period_start`
+- `current_period_end`
+- `next_billing_date`
+- `last_payment_status` (ex.: "paid", "failed")
+- `applied_coupon_id` (opcional)
+- `created_at`
+- `updated_at`
+
+5) `payments`
+- `id`
+- `subscription_id`
+- `provider_payment_id`
+- `amount_cents`
+- `status` ("pending", "paid", "failed", "refunded")
+- `method` ("pix", "card", "boleto", etc.)
+- `paid_at`
+- `created_at`
+
+---
+
+## 2. FLUXO DA ASSINATURA NO APP
+
+### 2.1. Tela de assinatura
+
+Crie/ajuste uma tela no frontend tipo:
+
+- Mostrar:
+  - Plano: "Plano Mensal"
+  - Preço cheio: R$ 29,90
+- Campos:
+  - campo para inserir CUPOM (`coupon_code`)
+  - botão "Validar cupom"
+  - campo para escolher MÉTODO DE PAGAMENTO: PIX ou Cartão
+- Após validar cupom:
+  - Mostrar o preço cheio
+  - Mostrar desconto aplicado
+  - Mostrar valor final
+
+### 2.2. Validação de cupom (backend)
+
+Crie uma rota tipo `POST /api/coupons/validate` que receba:
+- `user_id`
+- `coupon_code`
+- `plan_id`
+
+A rota deve:
+1. Buscar o cupom pelo `coupon_code` (case-insensitive).
+2. Verificar:
+   - se `is_active = true`
+   - se está dentro do período (`valid_from` ≤ agora ≤ `valid_until`, se existirem)
+   - se não excedeu `max_uses_global` (contar em `coupon_usages`)
+   - se o usuário não ultrapassou `max_uses_per_user`
+3. Retornar:
+   - `valid: true/false`
+   - motivo se inválido
+   - valor do desconto
+   - preço final sugerido
+
+Não deve aplicar ainda, apenas simular.
+
+---
+
+## 3. INTEGRAÇÃO COM GATEWAY (ASAAS OU SIMILAR)
+
+Usar o gateway de pagamentos como ASAAS (ou outro), seguindo a documentação oficial, mas deixar o código organizado de forma que seja fácil trocar o provedor.
+
+### 3.1. Criar assinatura
+
+Crie uma rota backend tipo `POST /api/subscriptions/create` que receba:
+- `user_id`
+- `plan_id`
+- `coupon_code` (opcional)
+- método de pagamento (PIX ou cartão)
+- dados de cartão se for cartão (não armazenar diretamente no banco; seguir modelo do gateway)
+
+Fluxo:
+1. Validar plano e usuário.
+2. Se veio `coupon_code`, chamar o validador de cupom.
+3. Calcular valor final.
+4. Criar a assinatura no gateway:
+   - valor base = R$ 29,90
+   - desconto aplicado via cupom → ajustar valor do primeiro pagamento ou da recorrência conforme regra (`duration_type`).
+5. Salvar em `subscriptions`:
+   - status inicial (ex.: "pending" ou "active", conforme o gateway)
+   - `provider_subscription_id`
+   - vínculo com `coupon_id`, se houver.
+6. Salvar (se aplicável) em `coupon_usages` quando o pagamento for confirmado (não antes).
+
+### 3.2. PIX / cartão
+
+- Para PIX:
+  - gerar PIX dinâmico (QR code ou copia-e-cola) via gateway.
+  - retornar para o frontend a imagem ou o código e um `payment_id`.
+- Para cartão:
+  - seguir fluxo do gateway (tokenização ou dados diretos via API).
+  - retornar status de pagamento inicial.
+
+---
+
+## 4. WEBHOOKS (ATUALIZAÇÃO AUTOMÁTICA)
+
+Crie uma rota de webhook, ex.: `POST /api/payments/webhook`, que:
+
+- Receba notificações do gateway (pagamento aprovado, recusado, vencido, cancelado).
+- Localize:
+  - o `payment` pelo `provider_payment_id`
+  - a `subscription` relacionada
+- Atualize:
+  - `payments.status`
+  - `subscriptions.status`
+  - `current_period_end` e `next_billing_date` se o pagamento foi aprovado.
+- Registre uso de cupom em `coupon_usages` apenas quando o pagamento for **realmente aprovado**.
+
+Também:
+- Se o gateway enviar eventos de cancelamento → atualizar `subscriptions.status = "canceled"`.
+- Se houver atraso excessivo → marcar `past_due` conforme a lógica do gateway.
+
+---
+
+## 5. SISTEMA DE CUPONS – PAINEL DO ADMINISTRADOR
+
+Crie uma área de ADMIN (somente para usuário com role `admin`) com:
+
+### 5.1. Tela "Gerenciar Cupons"
+
+Funcionalidades:
+- Listar cupons existentes
+- Criar novo cupom
+- Editar cupom
+- Desativar cupom (`is_active = false`)
+
+### 5.2. Formulário de criação de cupom
+
+Campos obrigatórios:
+- `code` (string) → texto que o usuário digita (ex.: SALVA10, DR-EUDES-29, etc.)
+- `discount_type` (select: "percent" | "fixed")
+- `discount_value` (porcentagem ou valor em reais → converter para centavos no backend)
+- `valid_from` (data/hora)
+- `valid_until` (data/hora)
+- `max_uses_global` (pode ser vazio = ilimitado)
+- `max_uses_per_user` (default 1)
+- `duration_type` (select: "single", "repeating", "forever")
+- `duration_in_cycles` (apenas se `duration_type = "repeating"`)
+- `min_value_cents` (opcional)
+- `is_active` (checkbox)
+
+Deve ser possível:
+- criar cupons de **primeiro mês mais barato** (ex.: R$ 9,90 no primeiro ciclo)
+- cupons de **X% por X meses**
+- cupons de **desconto permanente** (forever)
+
+---
+
+## 6. REGRAS DE NEGÓCIO PARA CUPONS
+
+- Um usuário só pode usar UM cupom por assinatura.
+- Cupom:
+  - não pode deixar valor negativo,
+  - valor mínimo final = 0 (R$ 0,00).
+- Se `discount_type = "percent"` → aplicar sobre o valor do plano (29,90).
+- Se `discount_type = "fixed"` → subtrair o valor em reais.
+- Respeitar:
+  - data de validade
+  - limite total de usos
+  - limite por usuário
+
+---
+
+## 7. LADO DO USUÁRIO NO APP
+
+Na tela do assinante:
+- Mostrar:
+  - Status da assinatura (Ativa, Pendente, Cancelada, Vencida)
+  - Próxima data de cobrança
+- Botões:
+  - “Gerenciar pagamento” ou “Cancelar assinatura” (seguindo suporte do gateway)
+- Se assinatura não estiver ativa:
+  - Exibir chamada para assinar novamente.
+
+---
+
+## 8. CUIDADOS GERAIS
+
+- Colocar as chaves do gateway (ASAAS ou outro) em variáveis de ambiente (.env).
+- Não logar dados sensíveis de cartão.
+- Não bloquear a UI em erros simples: retornar mensagens tratadas.
+- Manter padrão de código e componentes já usados no app.
+
+Implemente todas essas modificações (backend + frontend + modelos de dados), garantindo que:
+- o app continue compilando e rodando sem erros,
+- o fluxo completo de assinatura funcione:
+  - criar assinatura
+  - aplicar cupom
+  - receber webhook
+  - atualizar acesso do usuário.
