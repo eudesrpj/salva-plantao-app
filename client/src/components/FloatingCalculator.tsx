@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Calculator, X, GripVertical, AlertTriangle, Copy, Check, Info, Baby, Syringe, User, Equal, Delete } from "lucide-react";
+import { Calculator, X, GripVertical, AlertTriangle, Copy, Check, Info, Baby, Syringe, User, Equal, Delete, Droplets } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -484,10 +484,10 @@ export function FloatingCalculator() {
             </div>
 
             <Tabs defaultValue="pediatria" className="w-full">
-              <TabsList className="grid w-full grid-cols-4 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-none border-b border-slate-200 dark:border-slate-700">
+              <TabsList className="grid w-full grid-cols-5 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-none border-b border-slate-200 dark:border-slate-700">
                 <TabsTrigger value="pediatria" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
                   <Baby className="h-3 w-3" />
-                  Pediátrico
+                  Pedi
                 </TabsTrigger>
                 <TabsTrigger value="adulto" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
                   <User className="h-3 w-3" />
@@ -495,11 +495,15 @@ export function FloatingCalculator() {
                 </TabsTrigger>
                 <TabsTrigger value="emergencia" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
                   <Syringe className="h-3 w-3" />
-                  Emergência
+                  Emerg
+                </TabsTrigger>
+                <TabsTrigger value="hidratacao" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs" data-testid="tab-hydration">
+                  <Droplets className="h-3 w-3" />
+                  Hidra
                 </TabsTrigger>
                 <TabsTrigger value="comum" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
                   <Calculator className="h-3 w-3" />
-                  Comum
+                  Calc
                 </TabsTrigger>
               </TabsList>
               
@@ -707,6 +711,10 @@ export function FloatingCalculator() {
                   ))}
                 </TabsContent>
 
+                <TabsContent value="hidratacao" className="space-y-3 mt-0">
+                  <HydrationCalculator weight={weight} />
+                </TabsContent>
+
                 <TabsContent value="comum" className="mt-0">
                   <div className="space-y-3">
                     <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 text-right">
@@ -757,6 +765,139 @@ export function FloatingCalculator() {
         </div>
       )}
     </>
+  );
+}
+
+function HydrationCalculator({ weight }: { weight: string }) {
+  const [hydrationMethod, setHydrationMethod] = useState("holliday");
+  const [dehydrationLevel, setDehydrationLevel] = useState("leve");
+  
+  const weightNum = parseFloat(weight) || 0;
+  
+  const maintenanceFluid = useMemo(() => {
+    if (weightNum <= 0) return { totalMl24h: 0, mlPerHour: 0, mlPerKg24h: 0 };
+    
+    let totalMl24h: number;
+    
+    if (hydrationMethod === "holliday") {
+      if (weightNum <= 10) {
+        totalMl24h = weightNum * 100;
+      } else if (weightNum <= 20) {
+        totalMl24h = 1000 + (weightNum - 10) * 50;
+      } else {
+        totalMl24h = 1500 + (weightNum - 20) * 20;
+      }
+    } else {
+      totalMl24h = weightNum * 30;
+    }
+    
+    return {
+      totalMl24h: Math.round(totalMl24h),
+      mlPerHour: Math.round(totalMl24h / 24),
+      mlPerKg24h: Math.round(totalMl24h / weightNum)
+    };
+  }, [weightNum, hydrationMethod]);
+  
+  const dehydrationRepair = useMemo(() => {
+    if (weightNum <= 0) return { repairMl: 0, totalMl: 0, mlPerHour4h: 0, mlPerHour8h: 0 };
+    
+    const percentDeficit = dehydrationLevel === "leve" ? 5 : dehydrationLevel === "moderada" ? 7.5 : 10;
+    const repairMl = weightNum * 10 * percentDeficit;
+    const totalMl = maintenanceFluid.totalMl24h + repairMl;
+    
+    return {
+      repairMl: Math.round(repairMl),
+      totalMl: Math.round(totalMl),
+      mlPerHour4h: Math.round(repairMl / 4),
+      mlPerHour8h: Math.round(repairMl / 8),
+      percentDeficit
+    };
+  }, [weightNum, dehydrationLevel, maintenanceFluid.totalMl24h]);
+
+  if (!weight || weightNum <= 0) {
+    return (
+      <div className="text-center text-sm text-slate-400 py-8">
+        <Droplets className="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <p>Insira o peso acima para calcular a hidratação.</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <Label className="text-xs">Método</Label>
+          <Select value={hydrationMethod} onValueChange={setHydrationMethod}>
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="holliday">Holliday-Segar</SelectItem>
+              <SelectItem value="30ml">30 ml/kg/dia</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1">
+          <Label className="text-xs">Desidratação</Label>
+          <Select value={dehydrationLevel} onValueChange={setDehydrationLevel}>
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="leve">Leve (5%)</SelectItem>
+              <SelectItem value="moderada">Moderada (7.5%)</SelectItem>
+              <SelectItem value="grave">Grave (10%)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      
+      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 rounded-lg p-3">
+        <h4 className="font-semibold text-sm text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
+          <Droplets className="h-4 w-4" />
+          Manutenção (24h)
+        </h4>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="bg-white dark:bg-slate-800 rounded p-2">
+            <p className="text-lg font-bold text-blue-600">{maintenanceFluid.totalMl24h}</p>
+            <p className="text-xs text-slate-500">ml/24h</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded p-2">
+            <p className="text-lg font-bold text-blue-600">{maintenanceFluid.mlPerHour}</p>
+            <p className="text-xs text-slate-500">ml/h</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded p-2">
+            <p className="text-lg font-bold text-blue-600">{maintenanceFluid.mlPerKg24h}</p>
+            <p className="text-xs text-slate-500">ml/kg/24h</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 rounded-lg p-3">
+        <h4 className="font-semibold text-sm text-amber-700 dark:text-amber-300 mb-2">
+          Reposição + Manutenção ({dehydrationRepair.percentDeficit}%)
+        </h4>
+        <div className="grid grid-cols-2 gap-2 text-center text-sm">
+          <div className="bg-white dark:bg-slate-800 rounded p-2">
+            <p className="text-base font-bold text-amber-600">{dehydrationRepair.repairMl}</p>
+            <p className="text-xs text-slate-500">ml (déficit)</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded p-2">
+            <p className="text-base font-bold text-amber-600">{dehydrationRepair.totalMl}</p>
+            <p className="text-xs text-slate-500">ml total/24h</p>
+          </div>
+        </div>
+        <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+          Reposição: {dehydrationRepair.mlPerHour4h} ml/h (4h) ou {dehydrationRepair.mlPerHour8h} ml/h (8h)
+        </div>
+      </div>
+      
+      <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded p-2">
+        <p className="font-medium mb-1">Soluções comuns:</p>
+        <p>SF 0.9% + SG 5% (1:1) ou SF + SG + KCl 10% (40mEq/L)</p>
+      </div>
+    </div>
   );
 }
 
