@@ -2786,6 +2786,8 @@ function ContentManagementSection() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [prescBulkImportOpen, setPrescBulkImportOpen] = useState(false);
   const [prescBulkImportText, setPrescBulkImportText] = useState("");
+  const [protocolImportDialogOpen, setProtocolImportDialogOpen] = useState(false);
+  const [protocolImporting, setProtocolImporting] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -2995,6 +2997,26 @@ function ContentManagementSection() {
             <CardDescription>Gerencie protocolos oficiais do sistema.</CardDescription>
           </div>
           <div className="flex gap-2">
+            <Dialog open={protocolImportDialogOpen} onOpenChange={setProtocolImportDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-1" data-testid="button-import-protocols">
+                  <Upload className="h-4 w-4" /> Importar em massa
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Importar Protocolos em Massa</DialogTitle>
+                  <DialogDescription>Cole dados em CSV ou JSON para importar múltiplos protocolos.</DialogDescription>
+                </DialogHeader>
+                <ProtocolBulkImportContent 
+                  onClose={() => setProtocolImportDialogOpen(false)}
+                  importing={protocolImporting}
+                  setImporting={setProtocolImporting}
+                  qc={qc}
+                  toast={toast}
+                />
+              </DialogContent>
+            </Dialog>
             <NewProtocolDialog />
             <Button variant="outline" onClick={() => setActiveSection(null)}>Voltar</Button>
           </div>
@@ -3398,6 +3420,26 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
           <CardDescription>Gerencie patologias com suas medicações associadas.</CardDescription>
         </div>
         <div className="flex gap-2">
+          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-1" data-testid="button-import-pathologies">
+                <Upload className="h-4 w-4" /> Importar em massa
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Importar Patologias em Massa</DialogTitle>
+                <DialogDescription>Cole dados em CSV ou JSON para importar múltiplas patologias.</DialogDescription>
+              </DialogHeader>
+              <PathologyBulkImportContent 
+                onClose={() => setImportDialogOpen(false)}
+                importing={importing}
+                setImporting={setImporting}
+                qc={qc}
+                toast={toast}
+              />
+            </DialogContent>
+          </Dialog>
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
               <Button className="gap-1" data-testid="button-add-pathology">
@@ -3541,6 +3583,351 @@ function PathologyManagement({ onBack }: { onBack: () => void }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+interface BulkImportResult {
+  created: number;
+  updated: number;
+  errors: string[];
+}
+
+function PathologyBulkImportContent({ 
+  onClose, 
+  importing, 
+  setImporting, 
+  qc, 
+  toast 
+}: { 
+  onClose: () => void; 
+  importing: boolean; 
+  setImporting: (v: boolean) => void; 
+  qc: ReturnType<typeof useQueryClient>;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  const [importData, setImportData] = useState("");
+  const [importFormat, setImportFormat] = useState<"csv" | "json">("csv");
+  const [upsert, setUpsert] = useState(false);
+  const [preview, setPreview] = useState<any[]>([]);
+  const [result, setResult] = useState<BulkImportResult | null>(null);
+
+  const parseData = () => {
+    if (!importData.trim()) {
+      setPreview([]);
+      return;
+    }
+    try {
+      if (importFormat === "json") {
+        const parsed = JSON.parse(importData);
+        const items = parsed.pathologies || [];
+        setPreview(items.slice(0, 5));
+      } else {
+        const lines = importData.trim().split('\n').filter(l => l.trim());
+        const items = lines.map(line => {
+          const parts = line.split(';').map(p => p.trim());
+          return {
+            name: parts[0] || '',
+            description: parts[1] || '',
+            ageGroup: parts[2] || 'adulto',
+            specialty: parts[3] || '',
+            tags: parts[4] ? parts[4].split(',').map(t => t.trim()) : []
+          };
+        }).filter(p => p.name);
+        setPreview(items.slice(0, 5));
+      }
+    } catch {
+      setPreview([]);
+    }
+  };
+
+  useEffect(() => {
+    parseData();
+  }, [importData, importFormat]);
+
+  const handleImport = async () => {
+    if (!importData.trim()) {
+      toast({ title: "Dados vazios", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    setResult(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/import/pathologies", {
+        data: importData,
+        format: importFormat,
+        upsert
+      });
+      const data = await res.json();
+      setResult(data);
+      qc.invalidateQueries({ queryKey: ["/api/pathologies"] });
+      toast({ 
+        title: "Importação concluída!", 
+        description: `${data.created} criadas, ${data.updated} atualizadas${data.errors?.length > 0 ? `, ${data.errors.length} erros` : ''}`
+      });
+    } catch (err: any) {
+      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 py-2">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Formato</label>
+        <Select value={importFormat} onValueChange={(v) => setImportFormat(v as "csv" | "json")}>
+          <SelectTrigger data-testid="select-pathology-format">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="csv">CSV (separado por ;)</SelectItem>
+            <SelectItem value="json">JSON</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {importFormat === "csv" 
+            ? "Formato: name;description;ageGroup;specialty;tags (separadas por vírgula)"
+            : 'Formato: { "pathologies": [{ "name": "...", "description": "...", "ageGroup": "adulto", "specialty": "...", "tags": [] }] }'
+          }
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Dados para importar</label>
+        <Textarea
+          value={importData}
+          onChange={(e) => setImportData(e.target.value)}
+          placeholder={importFormat === "csv" 
+            ? "Pneumonia;Pneumonia comunitária;adulto;Pneumologia;infecção,respiratório\nITU;Infecção urinária;adulto;Infectologia;infecção"
+            : '{\n  "pathologies": [\n    { "name": "Pneumonia", "ageGroup": "adulto" }\n  ]\n}'
+          }
+          rows={6}
+          data-testid="textarea-pathology-import"
+        />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Checkbox 
+          id="upsert-pathology" 
+          checked={upsert} 
+          onCheckedChange={(c) => setUpsert(c === true)} 
+          data-testid="checkbox-pathology-upsert"
+        />
+        <label htmlFor="upsert-pathology" className="text-sm cursor-pointer">
+          Adicionar e atualizar existentes (upsert)
+        </label>
+      </div>
+
+      {preview.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Pré-visualização ({preview.length} itens)</label>
+          <div className="max-h-32 overflow-y-auto border rounded-md p-2 bg-muted/50 text-xs space-y-1">
+            {preview.map((p, i) => (
+              <div key={i} className="flex gap-2">
+                <Badge variant="outline">{p.ageGroup || 'adulto'}</Badge>
+                <span className="font-medium">{p.name}</span>
+                {p.specialty && <span className="text-muted-foreground">({p.specialty})</span>}
+              </div>
+            ))}
+            {preview.length === 5 && <div className="text-muted-foreground">... e mais itens</div>}
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Badge variant="default">{result.created} criadas</Badge>
+            <Badge variant="secondary">{result.updated} atualizadas</Badge>
+            {result.errors?.length > 0 && <Badge variant="destructive">{result.errors.length} erros</Badge>}
+          </div>
+          {result.errors?.length > 0 && (
+            <div className="max-h-24 overflow-y-auto border rounded-md p-2 bg-destructive/10 text-xs">
+              {result.errors.map((e, i) => (
+                <div key={i} className="text-destructive">{e}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variant="outline" onClick={onClose}>Fechar</Button>
+        <Button onClick={handleImport} disabled={importing || !importData.trim()} className="gap-1">
+          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {importing ? "Importando..." : "Importar"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ProtocolBulkImportContent({ 
+  onClose, 
+  importing, 
+  setImporting, 
+  qc, 
+  toast 
+}: { 
+  onClose: () => void; 
+  importing: boolean; 
+  setImporting: (v: boolean) => void; 
+  qc: ReturnType<typeof useQueryClient>;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  const [importData, setImportData] = useState("");
+  const [importFormat, setImportFormat] = useState<"csv" | "json">("csv");
+  const [upsert, setUpsert] = useState(false);
+  const [preview, setPreview] = useState<any[]>([]);
+  const [result, setResult] = useState<BulkImportResult | null>(null);
+
+  const parseData = () => {
+    if (!importData.trim()) {
+      setPreview([]);
+      return;
+    }
+    try {
+      if (importFormat === "json") {
+        const parsed = JSON.parse(importData);
+        const items = parsed.protocols || [];
+        setPreview(items.slice(0, 5));
+      } else {
+        const lines = importData.trim().split('\n').filter(l => l.trim());
+        const items = lines.map(line => {
+          const parts = line.split(';').map(p => p.trim());
+          return {
+            title: parts[0] || '',
+            content: parts[1] || '',
+            specialty: parts[2] || '',
+            category: parts[3] || '',
+            tags: parts[4] ? parts[4].split(',').map(t => t.trim()) : []
+          };
+        }).filter(p => p.title);
+        setPreview(items.slice(0, 5));
+      }
+    } catch {
+      setPreview([]);
+    }
+  };
+
+  useEffect(() => {
+    parseData();
+  }, [importData, importFormat]);
+
+  const handleImport = async () => {
+    if (!importData.trim()) {
+      toast({ title: "Dados vazios", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    setResult(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/import/protocols", {
+        data: importData,
+        format: importFormat,
+        upsert
+      });
+      const data = await res.json();
+      setResult(data);
+      qc.invalidateQueries({ queryKey: ["/api/protocols"] });
+      toast({ 
+        title: "Importação concluída!", 
+        description: `${data.created} criados, ${data.updated} atualizados${data.errors?.length > 0 ? `, ${data.errors.length} erros` : ''}`
+      });
+    } catch (err: any) {
+      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 py-2">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Formato</label>
+        <Select value={importFormat} onValueChange={(v) => setImportFormat(v as "csv" | "json")}>
+          <SelectTrigger data-testid="select-protocol-format">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="csv">CSV (separado por ;)</SelectItem>
+            <SelectItem value="json">JSON</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {importFormat === "csv" 
+            ? "Formato: title;content;specialty;category;tags (separadas por vírgula)"
+            : 'Formato: { "protocols": [{ "title": "...", "content": "...", "specialty": "...", "category": "...", "tags": [] }] }'
+          }
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Dados para importar</label>
+        <Textarea
+          value={importData}
+          onChange={(e) => setImportData(e.target.value)}
+          placeholder={importFormat === "csv" 
+            ? "Protocolo IAM;Conteúdo do protocolo...;Cardiologia;Emergência;cardio,urgência"
+            : '{\n  "protocols": [\n    { "title": "Protocolo IAM", "content": "...", "specialty": "Cardiologia" }\n  ]\n}'
+          }
+          rows={6}
+          data-testid="textarea-protocol-import"
+        />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Checkbox 
+          id="upsert-protocol" 
+          checked={upsert} 
+          onCheckedChange={(c) => setUpsert(c === true)} 
+          data-testid="checkbox-protocol-upsert"
+        />
+        <label htmlFor="upsert-protocol" className="text-sm cursor-pointer">
+          Adicionar e atualizar existentes (upsert)
+        </label>
+      </div>
+
+      {preview.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Pré-visualização ({preview.length} itens)</label>
+          <div className="max-h-32 overflow-y-auto border rounded-md p-2 bg-muted/50 text-xs space-y-1">
+            {preview.map((p, i) => (
+              <div key={i} className="flex gap-2">
+                <span className="font-medium">{p.title}</span>
+                {p.specialty && <span className="text-muted-foreground">({p.specialty})</span>}
+              </div>
+            ))}
+            {preview.length === 5 && <div className="text-muted-foreground">... e mais itens</div>}
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Badge variant="default">{result.created} criados</Badge>
+            <Badge variant="secondary">{result.updated} atualizados</Badge>
+            {result.errors?.length > 0 && <Badge variant="destructive">{result.errors.length} erros</Badge>}
+          </div>
+          {result.errors?.length > 0 && (
+            <div className="max-h-24 overflow-y-auto border rounded-md p-2 bg-destructive/10 text-xs">
+              {result.errors.map((e, i) => (
+                <div key={i} className="text-destructive">{e}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variant="outline" onClick={onClose}>Fechar</Button>
+        <Button onClick={handleImport} disabled={importing || !importData.trim()} className="gap-1">
+          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {importing ? "Importando..." : "Importar"}
+        </Button>
+      </div>
+    </div>
   );
 }
 

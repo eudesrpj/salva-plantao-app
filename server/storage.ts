@@ -59,7 +59,16 @@ import {
   type CardProgress, type InsertCardProgress
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, isNull } from "drizzle-orm";
+
+// Helper function to normalize text (remove accents, lowercase, trim)
+export function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
 
 export interface IStorage {
   // Prescriptions
@@ -74,17 +83,24 @@ export interface IStorage {
   getProtocols(userId?: string, ageGroup?: string): Promise<Protocol[]>;
   searchProtocols(query: string, userId?: string): Promise<Protocol[]>;
   getProtocol(id: number): Promise<Protocol | undefined>;
+  getProtocolByTitleNormalized(titleNormalized: string): Promise<Protocol | undefined>;
   createProtocol(item: InsertProtocol): Promise<Protocol>;
   updateProtocol(id: number, item: UpdateProtocolRequest): Promise<Protocol>;
   deleteProtocol(id: number): Promise<void>;
+  bulkImportProtocols(items: InsertProtocol[], upsert: boolean): Promise<{ created: number; updated: number; errors: string[] }>;
 
   // Checklists
   getChecklists(userId?: string, ageGroup?: string): Promise<Checklist[]>;
   searchChecklists(query: string, userId?: string): Promise<Checklist[]>;
   getChecklist(id: number): Promise<Checklist | undefined>;
+  getChecklistByTitleNormalized(titleNormalized: string): Promise<Checklist | undefined>;
   createChecklist(item: InsertChecklist): Promise<Checklist>;
   updateChecklist(id: number, item: UpdateChecklistRequest): Promise<Checklist>;
   deleteChecklist(id: number): Promise<void>;
+  bulkImportChecklists(items: InsertChecklist[], upsert: boolean): Promise<{ created: number; updated: number; errors: string[] }>;
+  getUserChecklistCopy(userId: string, sourceChecklistId: number): Promise<Checklist | undefined>;
+  createUserChecklistCopy(userId: string, sourceChecklistId: number, updates?: Partial<InsertChecklist>): Promise<Checklist>;
+  deleteUserChecklistCopy(userId: string, sourceChecklistId: number): Promise<void>;
 
   // Flashcards
   getFlashcards(userId?: string): Promise<Flashcard[]>;
@@ -163,8 +179,10 @@ export interface IStorage {
   searchPathologies(query: string, userId?: string): Promise<Pathology[]>;
   getPathology(id: number): Promise<Pathology | undefined>;
   getPathologyByNameAndAgeGroup(name: string, ageGroup: string): Promise<Pathology | undefined>;
+  getPathologyByNameNormalized(nameNormalized: string): Promise<Pathology | undefined>;
   createPathology(item: InsertPathology): Promise<Pathology>;
   createPathologiesBulk(items: InsertPathology[]): Promise<Pathology[]>;
+  bulkImportPathologies(items: InsertPathology[], upsert: boolean): Promise<{ created: number; updated: number; errors: string[] }>;
   duplicatePathologyToAgeGroup(id: number, targetAgeGroup: string): Promise<Pathology | null>;
   updatePathology(id: number, item: UpdatePathologyRequest): Promise<Pathology>;
   deletePathology(id: number): Promise<void>;
@@ -481,6 +499,39 @@ export class DatabaseStorage implements IStorage {
     await db.delete(protocols).where(eq(protocols.id, id));
   }
 
+  async getProtocolByTitleNormalized(titleNormalized: string): Promise<Protocol | undefined> {
+    const [item] = await db.select().from(protocols).where(eq(protocols.titleNormalized, titleNormalized));
+    return item;
+  }
+
+  async bulkImportProtocols(items: InsertProtocol[], upsert: boolean): Promise<{ created: number; updated: number; errors: string[] }> {
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      try {
+        const titleNormalized = normalizeText(item.title);
+        const existing = await this.getProtocolByTitleNormalized(titleNormalized);
+
+        if (existing) {
+          if (upsert) {
+            await this.updateProtocol(existing.id, { ...item, titleNormalized });
+            updated++;
+          }
+        } else {
+          await db.insert(protocols).values({ ...item, titleNormalized });
+          created++;
+        }
+      } catch (e) {
+        errors.push(`Linha ${i + 1}: ${e instanceof Error ? e.message : 'Erro desconhecido'}`);
+      }
+    }
+
+    return { created, updated, errors };
+  }
+
   // Checklists
   async getChecklists(userId?: string, ageGroup?: string): Promise<Checklist[]> {
     const conditions = [];
@@ -536,6 +587,82 @@ export class DatabaseStorage implements IStorage {
 
   async deleteChecklist(id: number): Promise<void> {
     await db.delete(checklists).where(eq(checklists.id, id));
+  }
+
+  async getChecklistByTitleNormalized(titleNormalized: string): Promise<Checklist | undefined> {
+    const [item] = await db.select().from(checklists).where(eq(checklists.titleNormalized, titleNormalized));
+    return item;
+  }
+
+  async bulkImportChecklists(items: InsertChecklist[], upsert: boolean): Promise<{ created: number; updated: number; errors: string[] }> {
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      try {
+        const titleNormalized = normalizeText(item.title);
+        const existing = await this.getChecklistByTitleNormalized(titleNormalized);
+
+        if (existing) {
+          if (upsert) {
+            await this.updateChecklist(existing.id, { ...item, titleNormalized } as any);
+            updated++;
+          }
+        } else {
+          await db.insert(checklists).values({ ...item, titleNormalized });
+          created++;
+        }
+      } catch (e) {
+        errors.push(`Linha ${i + 1}: ${e instanceof Error ? e.message : 'Erro desconhecido'}`);
+      }
+    }
+
+    return { created, updated, errors };
+  }
+
+  async getUserChecklistCopy(userId: string, sourceChecklistId: number): Promise<Checklist | undefined> {
+    const [item] = await db.select().from(checklists)
+      .where(and(
+        eq(checklists.userId, userId),
+        eq(checklists.sourceChecklistId, sourceChecklistId)
+      ));
+    return item;
+  }
+
+  async createUserChecklistCopy(userId: string, sourceChecklistId: number, updates?: Partial<InsertChecklist>): Promise<Checklist> {
+    const source = await this.getChecklist(sourceChecklistId);
+    if (!source) throw new Error("Checklist original não encontrado");
+
+    const copyData: InsertChecklist = {
+      title: source.title,
+      titleNormalized: source.titleNormalized,
+      content: source.content as Record<string, unknown>,
+      description: source.description,
+      ageGroup: source.ageGroup,
+      category: source.category,
+      specialty: source.specialty,
+      pathologyName: source.pathologyName,
+      tags: source.tags,
+      sortOrder: source.sortOrder,
+      isPublic: false,
+      isLocked: false,
+      sourceChecklistId: sourceChecklistId,
+      userId: userId,
+      ...updates,
+    };
+
+    const [item] = await db.insert(checklists).values(copyData).returning();
+    return item;
+  }
+
+  async deleteUserChecklistCopy(userId: string, sourceChecklistId: number): Promise<void> {
+    await db.delete(checklists)
+      .where(and(
+        eq(checklists.userId, userId),
+        eq(checklists.sourceChecklistId, sourceChecklistId)
+      ));
   }
 
   // Flashcards
@@ -907,6 +1034,39 @@ export class DatabaseStorage implements IStorage {
     if (items.length === 0) return [];
     const inserted = await db.insert(pathologies).values(items).returning();
     return inserted;
+  }
+
+  async getPathologyByNameNormalized(nameNormalized: string): Promise<Pathology | undefined> {
+    const [item] = await db.select().from(pathologies).where(eq(pathologies.nameNormalized, nameNormalized));
+    return item;
+  }
+
+  async bulkImportPathologies(items: InsertPathology[], upsert: boolean): Promise<{ created: number; updated: number; errors: string[] }> {
+    let created = 0;
+    let updated = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      try {
+        const nameNormalized = normalizeText(item.name);
+        const existing = await this.getPathologyByNameNormalized(nameNormalized);
+
+        if (existing) {
+          if (upsert) {
+            await this.updatePathology(existing.id, { ...item, nameNormalized });
+            updated++;
+          }
+        } else {
+          await db.insert(pathologies).values({ ...item, nameNormalized });
+          created++;
+        }
+      } catch (e) {
+        errors.push(`Linha ${i + 1}: ${e instanceof Error ? e.message : 'Erro desconhecido'}`);
+      }
+    }
+
+    return { created, updated, errors };
   }
 
   async duplicatePathologyToAgeGroup(id: number, targetAgeGroup: string): Promise<Pathology | null> {

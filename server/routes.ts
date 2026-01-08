@@ -173,6 +173,391 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
+  // --- Admin Bulk Import ---
+  // Bulk import pathologies
+  app.post("/api/admin/import/pathologies", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { data, upsert = false, format = "csv" } = req.body;
+      
+      if (!data || typeof data !== 'string') {
+        return res.status(400).json({ message: "Campo 'data' é obrigatório (texto)" });
+      }
+
+      const items: any[] = [];
+      const parseErrors: string[] = [];
+
+      if (format === "json") {
+        try {
+          const parsed = JSON.parse(data);
+          const pathologies = parsed.pathologies || parsed;
+          if (!Array.isArray(pathologies)) {
+            return res.status(400).json({ message: "JSON deve conter array 'pathologies'" });
+          }
+          for (let i = 0; i < pathologies.length; i++) {
+            const p = pathologies[i];
+            if (!p.name && !p.pathology_name) {
+              parseErrors.push(`Item ${i + 1}: nome obrigatório`);
+              continue;
+            }
+            items.push({
+              name: p.name || p.pathology_name,
+              description: p.description || null,
+              ageGroup: p.ageGroup || p.age_group || "adulto",
+              specialty: p.specialty || null,
+              tags: p.tags || [],
+              isPublic: true,
+              isLocked: true,
+            });
+          }
+        } catch (e) {
+          return res.status(400).json({ message: "JSON inválido" });
+        }
+      } else {
+        const lines = data.trim().split('\n').filter((line: string) => line.trim());
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          const parts = line.split(';').map((p: string) => p.trim());
+          const name = parts[0];
+          
+          if (!name) {
+            parseErrors.push(`Linha ${i + 1}: nome obrigatório`);
+            continue;
+          }
+          
+          items.push({
+            name,
+            description: parts[1] || null,
+            ageGroup: parts[2] || "adulto",
+            specialty: parts[3] || null,
+            tags: parts[4] ? parts[4].split(',').map((t: string) => t.trim()) : [],
+            isPublic: true,
+            isLocked: true,
+          });
+        }
+      }
+
+      if (items.length === 0) {
+        return res.status(400).json({ message: "Nenhum item válido para importar", errors: parseErrors });
+      }
+
+      const result = await storage.bulkImportPathologies(items, upsert);
+      res.json({
+        created: result.created,
+        updated: result.updated,
+        errors: [...parseErrors, ...result.errors],
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao importar patologias", error: String(error) });
+    }
+  });
+
+  // Bulk import protocols
+  app.post("/api/admin/import/protocols", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { data, upsert = false, format = "csv" } = req.body;
+      
+      if (!data || typeof data !== 'string') {
+        return res.status(400).json({ message: "Campo 'data' é obrigatório (texto)" });
+      }
+
+      const items: any[] = [];
+      const parseErrors: string[] = [];
+
+      if (format === "json") {
+        try {
+          const parsed = JSON.parse(data);
+          const protocols = parsed.protocols || parsed;
+          if (!Array.isArray(protocols)) {
+            return res.status(400).json({ message: "JSON deve conter array 'protocols'" });
+          }
+          for (let i = 0; i < protocols.length; i++) {
+            const p = protocols[i];
+            if (!p.title && !p.protocol_title) {
+              parseErrors.push(`Item ${i + 1}: título obrigatório`);
+              continue;
+            }
+            items.push({
+              title: p.title || p.protocol_title,
+              content: p.content || p.body || p.protocol_body || { text: "" },
+              description: p.description || null,
+              ageGroup: p.ageGroup || p.age_group || "adulto",
+              specialty: p.specialty || null,
+              category: p.category || null,
+              tags: p.tags || [],
+              isPublic: true,
+              isLocked: true,
+            });
+          }
+        } catch (e) {
+          return res.status(400).json({ message: "JSON inválido" });
+        }
+      } else {
+        const lines = data.trim().split('\n').filter((line: string) => line.trim());
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          const parts = line.split(';').map((p: string) => p.trim());
+          const title = parts[0];
+          
+          if (!title) {
+            parseErrors.push(`Linha ${i + 1}: título obrigatório`);
+            continue;
+          }
+          
+          items.push({
+            title,
+            content: { text: parts[1] || "" },
+            description: parts[2] || null,
+            ageGroup: parts[3] || "adulto",
+            specialty: parts[4] || null,
+            category: parts[5] || null,
+            tags: parts[6] ? parts[6].split(',').map((t: string) => t.trim()) : [],
+            isPublic: true,
+            isLocked: true,
+          });
+        }
+      }
+
+      if (items.length === 0) {
+        return res.status(400).json({ message: "Nenhum item válido para importar", errors: parseErrors });
+      }
+
+      const result = await storage.bulkImportProtocols(items, upsert);
+      res.json({
+        created: result.created,
+        updated: result.updated,
+        errors: [...parseErrors, ...result.errors],
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao importar protocolos", error: String(error) });
+    }
+  });
+
+  // Bulk import checklists (Admin - official)
+  app.post("/api/admin/import/checklists", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { data, upsert = false, format = "csv" } = req.body;
+      
+      if (!data || typeof data !== 'string') {
+        return res.status(400).json({ message: "Campo 'data' é obrigatório (texto)" });
+      }
+
+      const items: any[] = [];
+      const parseErrors: string[] = [];
+
+      if (format === "json") {
+        try {
+          const parsed = JSON.parse(data);
+          const checklists = parsed.checklists || parsed;
+          if (!Array.isArray(checklists)) {
+            return res.status(400).json({ message: "JSON deve conter array 'checklists'" });
+          }
+          for (let i = 0; i < checklists.length; i++) {
+            const c = checklists[i];
+            if (!c.title && !c.checklist_title) {
+              parseErrors.push(`Item ${i + 1}: título obrigatório`);
+              continue;
+            }
+            items.push({
+              title: c.title || c.checklist_title,
+              content: c.content || c.body || { items: (c.checklist_body || "").split('\n').filter((l: string) => l.trim()) },
+              description: c.description || null,
+              ageGroup: c.ageGroup || c.age_group || "adulto",
+              specialty: c.specialty || null,
+              category: c.category || null,
+              pathologyName: c.pathologyName || c.pathology_name || null,
+              tags: c.tags || [],
+              sortOrder: c.sortOrder || c.sort_order || 0,
+              isPublic: true,
+              isLocked: true,
+            });
+          }
+        } catch (e) {
+          return res.status(400).json({ message: "JSON inválido" });
+        }
+      } else {
+        const lines = data.trim().split('\n').filter((line: string) => line.trim());
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          const parts = line.split(';').map((p: string) => p.trim());
+          const title = parts[0];
+          
+          if (!title) {
+            parseErrors.push(`Linha ${i + 1}: título obrigatório`);
+            continue;
+          }
+          
+          const bodyText = (parts[1] || "").replace(/\\n/g, '\n');
+          items.push({
+            title,
+            content: { items: bodyText.split('\n').filter((l: string) => l.trim()) },
+            description: parts[2] || null,
+            ageGroup: parts[3] || "adulto",
+            specialty: parts[4] || null,
+            category: parts[5] || null,
+            pathologyName: parts[6] || null,
+            tags: parts[7] ? parts[7].split(',').map((t: string) => t.trim()) : [],
+            sortOrder: parseInt(parts[8]) || 0,
+            isPublic: true,
+            isLocked: true,
+          });
+        }
+      }
+
+      if (items.length === 0) {
+        return res.status(400).json({ message: "Nenhum item válido para importar", errors: parseErrors });
+      }
+
+      const result = await storage.bulkImportChecklists(items, upsert);
+      res.json({
+        created: result.created,
+        updated: result.updated,
+        errors: [...parseErrors, ...result.errors],
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao importar checklists", error: String(error) });
+    }
+  });
+
+  // User bulk import checklists (personal)
+  app.post("/api/user/import/checklists", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { data, upsert = false, format = "csv" } = req.body;
+      
+      if (!data || typeof data !== 'string') {
+        return res.status(400).json({ message: "Campo 'data' é obrigatório (texto)" });
+      }
+
+      const items: any[] = [];
+      const parseErrors: string[] = [];
+
+      if (format === "json") {
+        try {
+          const parsed = JSON.parse(data);
+          const checklists = parsed.checklists || parsed;
+          if (!Array.isArray(checklists)) {
+            return res.status(400).json({ message: "JSON deve conter array 'checklists'" });
+          }
+          for (let i = 0; i < checklists.length; i++) {
+            const c = checklists[i];
+            if (!c.title) {
+              parseErrors.push(`Item ${i + 1}: título obrigatório`);
+              continue;
+            }
+            items.push({
+              title: c.title,
+              content: c.content || { items: [] },
+              description: c.description || null,
+              ageGroup: c.ageGroup || "adulto",
+              specialty: c.specialty || null,
+              category: c.category || null,
+              pathologyName: c.pathologyName || null,
+              tags: c.tags || [],
+              sortOrder: c.sortOrder || 0,
+              isPublic: false,
+              isLocked: false,
+              userId,
+            });
+          }
+        } catch (e) {
+          return res.status(400).json({ message: "JSON inválido" });
+        }
+      } else {
+        const lines = data.trim().split('\n').filter((line: string) => line.trim());
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          const parts = line.split(';').map((p: string) => p.trim());
+          const title = parts[0];
+          
+          if (!title) {
+            parseErrors.push(`Linha ${i + 1}: título obrigatório`);
+            continue;
+          }
+          
+          const bodyText = (parts[1] || "").replace(/\\n/g, '\n');
+          items.push({
+            title,
+            content: { items: bodyText.split('\n').filter((l: string) => l.trim()) },
+            description: parts[2] || null,
+            ageGroup: parts[3] || "adulto",
+            specialty: parts[4] || null,
+            category: parts[5] || null,
+            pathologyName: parts[6] || null,
+            tags: parts[7] ? parts[7].split(',').map((t: string) => t.trim()) : [],
+            sortOrder: parseInt(parts[8]) || 0,
+            isPublic: false,
+            isLocked: false,
+            userId,
+          });
+        }
+      }
+
+      if (items.length === 0) {
+        return res.status(400).json({ message: "Nenhum item válido para importar", errors: parseErrors });
+      }
+
+      let created = 0;
+      const errors: string[] = [];
+      for (const item of items) {
+        try {
+          await storage.createChecklist(item);
+          created++;
+        } catch (e) {
+          errors.push(e instanceof Error ? e.message : 'Erro desconhecido');
+        }
+      }
+
+      res.json({
+        created,
+        updated: 0,
+        errors: [...parseErrors, ...errors],
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao importar checklists", error: String(error) });
+    }
+  });
+
+  // Checklist user copy endpoints
+  app.post("/api/checklists/:id/copy", isAuthenticated, checkNotBlocked, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sourceId = Number(req.params.id);
+      
+      // Check if user already has a copy
+      const existingCopy = await storage.getUserChecklistCopy(userId, sourceId);
+      if (existingCopy) {
+        return res.json(existingCopy);
+      }
+      
+      const copy = await storage.createUserChecklistCopy(userId, sourceId, req.body);
+      res.status(201).json(copy);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao criar cópia do checklist", error: String(error) });
+    }
+  });
+
+  app.get("/api/checklists/:id/user-copy", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const sourceId = Number(req.params.id);
+    const copy = await storage.getUserChecklistCopy(userId, sourceId);
+    res.json(copy || null);
+  });
+
+  app.delete("/api/checklists/:id/user-copy", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const userId = getUserId(req);
+    const sourceId = Number(req.params.id);
+    await storage.deleteUserChecklistCopy(userId, sourceId);
+    res.status(204).send();
+  });
+
   // --- Prescriptions ---
   app.get(api.prescriptions.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;

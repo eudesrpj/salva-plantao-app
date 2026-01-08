@@ -38,6 +38,7 @@ import AttendanceDeclaration from "@/pages/AttendanceDeclaration";
 import Referral from "@/pages/Referral";
 import AiWebView from "@/pages/AiWebView";
 import Memorize from "@/pages/Memorize";
+import ImportTemplates from "@/pages/ImportTemplates";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -119,6 +120,10 @@ function Router() {
 
       <Route path="/memorize">
         <ProtectedRoute component={Memorize} />
+      </Route>
+
+      <Route path="/import-templates">
+        <AdminRoute component={ImportTemplates} />
       </Route>
 
       <Route path="/checklists">

@@ -31,7 +31,8 @@ import {
   FileBadge,
   FileCheck,
   ArrowRightLeft,
-  MessageCircle
+  MessageCircle,
+  Upload
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
   { icon: CheckSquare, label: "Condutas", href: "/checklists" },
   { icon: Pill, label: "Interações", href: "/drug-interactions" },
   { icon: Brain, label: "Memorização", href: "/memorize" },
+  { icon: Upload, label: "Importação", href: "/import-templates", adminOnly: true },
   { icon: Stethoscope, label: "Passagem (SBAR)", href: "/handovers" },
   { icon: CalendarDays, label: "Plantões", href: "/shifts" },
   { icon: DollarSign, label: "Financeiro", href: "/finance" },
@@ -75,7 +77,7 @@ function NavContent({ onClose }: { onClose?: () => void }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter(item => !item.adminOnly || user?.role === 'admin').map((item) => {
           const isActive = location === item.href;
           return (
             <Link key={item.href} href={item.href}>

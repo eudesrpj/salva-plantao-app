@@ -339,6 +339,7 @@ export type InsertPrescriptionFavorite = z.infer<typeof insertPrescriptionFavori
 export const protocols = pgTable("protocols", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
+  titleNormalized: text("title_normalized"), // Lower + sem acento + trim para busca e deduplicação
   content: jsonb("content").notNull(), // Steps, criteria, flowchart data
   description: text("description"),
   ageGroup: text("age_group").default("adulto"), // adulto, pediatrico
@@ -360,16 +361,21 @@ export type InsertProtocol = z.infer<typeof insertProtocolSchema>;
 export const checklists = pgTable("checklists", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
+  titleNormalized: text("title_normalized"), // Lower + sem acento + trim para busca e deduplicação
   content: jsonb("content").notNull(), // { steps: [], items: [], redFlags: [], exams: [] }
   description: text("description"),
   ageGroup: text("age_group").default("adulto"),
   category: text("category"),
   specialty: text("specialty"),
+  pathologyName: text("pathology_name"), // Nome da patologia associada
   tags: text("tags").array(),
+  sortOrder: integer("sort_order").default(0),
   isPublic: boolean("is_public").default(false),
   isLocked: boolean("is_locked").default(false),
+  sourceChecklistId: integer("source_checklist_id"), // Referência ao checklist oficial (para cópias do usuário)
   userId: text("user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertChecklistSchema = createInsertSchema(checklists).omit({ id: true, createdAt: true });

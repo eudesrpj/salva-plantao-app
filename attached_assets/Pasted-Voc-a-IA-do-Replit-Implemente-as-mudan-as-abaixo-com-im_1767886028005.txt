@@ -1,0 +1,210 @@
+Você é a IA do Replit. Implemente as mudanças abaixo com impacto mínimo no app atual, mantendo o padrão “conteúdo oficial do admin” vs “conteúdo do usuário”, com importação em massa, edição com segurança e opção de voltar ao padrão oficial.
+
+OBJETIVOS (FAZER TODOS):
+1) Adicionar “Importar em massa” no painel Admin:
+   - Aba Patologias
+   - Aba Protocolos
+   - Menu Memorização (incluindo nova aba Checklist)
+2) Memorização: criar aba “Checklist” no menu, com importação em massa para Admin e Usuário.
+3) Regras de edição:
+   - Conteúdo do Admin (oficial) pode ser editado pelo usuário APENAS como cópia/draft, com botão “Voltar ao padrão do administrador”.
+4) Admin > Calculadora:
+   - Adicionar botões/painel para personalizar cálculos pediátricos (doses) e definir medicações padrão usadas no cálculo pediátrico.
+   - Permitir excluir medicação padrão individualmente.
+5) Menu principal: adicionar botão “Prompts de importação”
+   - Tela com modelos (CSV/JSON) que o app reconhece: patologias, medicações, prescrições, memorização (cards), checklists, protocolos.
+   - Com copiar/colar e download (se possível), e exemplos prontos.
+
+=====================================================
+A) IMPORTAÇÃO EM MASSA — ADMIN: PATOLOGIAS
+=====================================================
+
+A1) UI (painel admin > Patologias)
+- Adicionar botão “Importar em massa”
+- Modal com:
+  - Upload CSV/JSON
+  - Colar texto (textarea)
+  - Preview
+  - Validar / Importar
+  - Opção: “Somente adicionar” OU “Adicionar e atualizar (upsert)”
+- Lista de erros por linha (sem salvar nada se houver erro)
+
+A2) Formatos aceitos
+CSV mínimo:
+- pathology_name
+
+JSON:
+{ "pathologies": [ { "pathology_name": "..." } ] }
+
+A3) Backend
+- Endpoint: POST /admin/import/pathologies
+- Normalizar: lower + trim + remover acento => name_normalized
+- Upsert por name_normalized
+- Retornar resumo: criadas / atualizadas / ignoradas
+
+=====================================================
+B) IMPORTAÇÃO EM MASSA — ADMIN: PROTOCOLOS
+=====================================================
+
+B1) Definir “Protocolos”
+- Se já existe tabela/feature de protocolos, reutilizar.
+- Se não existe modelo:
+  - protocols: id, title, title_normalized(unique), body(markdown), tags[], created_by_admin, created_at/updated_at
+  - protocol_versions (opcional): version, protocol_id, body, updated_at
+
+B2) UI (painel admin > Protocolos)
+- Adicionar botão “Importar em massa”
+- Modal igual ao de patologias (upload + colar + preview + validação)
+
+B3) Formatos aceitos
+CSV:
+- protocol_title
+- protocol_body
+- tags (separadas por ;)
+- version (opcional)
+
+JSON:
+{ "protocols": [ { "title":"...", "body":"...", "tags":["..."] } ] }
+
+B4) Backend
+- Endpoint: POST /admin/import/protocols
+- Upsert por title_normalized
+- Se “substituir”: atualizar body e incrementar version (se usar version)
+- Retornar resumo
+
+=====================================================
+C) MEMORIZAÇÃO — NOVA ABA CHECKLIST + IMPORTAÇÃO (ADMIN e USUÁRIO)
+=====================================================
+
+C1) UI (menu Memorização)
+- Adicionar filtro/aba: “Checklist”
+- Manter filtros existentes e adicionar “Checklist”
+- Adicionar botão “Importar em massa” visível para:
+  - Admin: importa como Oficial
+  - Usuário: importa como Meu
+
+C2) Modelo de dados (se já houver cards, expandir)
+- content_decks (baralhos) e content_cards (cards) já definidos anteriormente.
+- Para checklists, implementar como:
+  Opção 1 (recomendado, simples): usar content_cards com type='CHECKLIST' e body contendo checklist em formato:
+    - linhas com “[ ] item”
+  Opção 2 (mais estruturado): criar checklist_items e manter estado do usuário.
+  (Escolher Opção 1 agora para rapidez e baixo risco.)
+
+C3) Importação de Checklists
+CSV:
+- deck_title
+- deck_description (opcional)
+- pathology_name (opcional)
+- checklist_title
+- checklist_body (linhas com itens, pode usar \n)
+- tags (separadas por ;)
+- sort_order (opcional)
+- source_type (opcional, default admin/user conforme origem)
+
+JSON:
+{
+  "deck": { "title":"...", "pathology_name":"..." },
+  "checklists":[ { "title":"...", "body":"...", "tags":[...], "sort_order":1 } ]
+}
+
+C4) Regras “editar e voltar ao padrão do admin”
+- Conteúdo oficial do admin é imutável.
+- Usuário pode clicar “Editar” em um checklist oficial:
+  - Isso cria um “draft/cópia” do usuário (user copy) vinculado ao original.
+  - Salva como um checklist do usuário com:
+    - source_card_id (referência ao oficial)
+    - owner_type='USER'
+- Mostrar botão “Voltar ao padrão do administrador” quando existir uma cópia do usuário:
+  - Ação: descartar a cópia do usuário (ou marcar como inativa) e voltar a exibir o oficial
+- Implementar claramente na UI:
+  - Oficial (Admin) -> “Editar (cria minha versão)” + “Voltar ao padrão do administrador”
+  - Minha versão -> “Editar” normal + “Excluir minha versão”
+
+=====================================================
+D) ADMIN > CALCULADORA — PERSONALIZAR DOSES PEDIÁTRICAS + MEDS PADRÃO
+=====================================================
+
+D1) Criar painel no Admin > Calculadora:
+Seções:
+1) “Regras de cálculo pediátrico”
+   - parâmetros editáveis (presets), ex: arredondamentos, unidade padrão, limites, etc.
+   - salvar em tabela calculator_settings (key/value JSON)
+2) “Medicações padrão na calculadora pediátrica”
+   - lista de medicamentos selecionados (referência a medications.id)
+   - botão “Adicionar medicação padrão”
+   - botão “Excluir” em cada item
+
+D2) Dados
+- calculator_settings:
+  - id, scope ('PEDS'|'ADULT'), settings_json, updated_at
+- calculator_peds_default_meds:
+  - id, medication_id (FK medications), sort_order, is_active
+
+D3) Backend endpoints
+- GET/PUT /admin/calculator/settings?peds=true
+- POST/DELETE /admin/calculator/peds-default-meds
+- Validação: medicamento deve existir em medications
+
+D4) Sincronização
+- A calculadora do app deve ler:
+  - settings pediátrico
+  - lista de meds padrão pediátrico
+- Se admin adicionar medicação nova no catálogo, ela pode ser selecionada aqui.
+
+=====================================================
+E) MENU PRINCIPAL — NOVO ITEM “PROMPTS DE IMPORTAÇÃO”
+=====================================================
+
+E1) UI (menu principal)
+- Adicionar botão “Prompts de importação”
+- Página com:
+  - Lista de tipos: Patologias, Medicações, Prescrições Oficiais, Protocolos, Memorização (Cards), Memorização (Checklists)
+  - Para cada tipo:
+    - abas: CSV / JSON
+    - exemplos prontos + descrição de colunas
+    - botão “Copiar modelo” (clipboard)
+    - botão “Copiar exemplo”
+- Objetivo: usuário poder usar ChatGPT/manual e colar no formato certo.
+
+E2) Conteúdo do modelo
+- Embutir os templates como strings no front (sem depender do servidor).
+- Garantir que o conteúdo reflita exatamente os formatos aceitos pelos importadores.
+
+=====================================================
+F) PADRÕES DE QUALIDADE (OBRIGATÓRIO)
+=====================================================
+
+F1) Importação com transação
+- Se uma linha falhar: não salvar nada
+- Retornar erros por linha, indicando coluna e motivo
+
+F2) Normalização e upsert
+- name_normalized/titles_normalized
+- Evitar duplicação
+
+F3) Permissões
+- Admin: importar oficial; editar oficial
+- Usuário: importar “meu”; editar “meu”; ao editar oficial, criar cópia
+- “Voltar ao padrão do admin”: remove/desativa cópia do usuário e volta a mostrar oficial
+
+F4) Não quebrar UI atual
+- Adicionar botões/modais mantendo layout atual
+- Sem refatoração grande
+
+=====================================================
+ENTREGA
+=====================================================
+- Implementar UI + endpoints + migrations/seed necessários
+- Atualizar README curto com:
+  - onde importar cada coisa
+  - formatos CSV/JSON aceitos
+- Criar checklist de teste manual:
+  1) Admin importa patologias
+  2) Admin importa protocolos
+  3) Admin importa checklist oficial
+  4) Usuário importa checklist próprio
+  5) Usuário edita checklist oficial -> cria versão do usuário
+  6) Usuário “volta ao padrão do admin”
+  7) Admin define meds padrão pediátrico -> calculadora reflete e permite excluir individualmente
+  8) Página “Prompts de importação” mostra modelos e copia corretamente
