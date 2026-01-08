@@ -48,6 +48,7 @@ export default function PaymentRequired() {
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<CouponData | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"PIX" | "CREDIT_CARD">("PIX");
+  const [cpf, setCpf] = useState("");
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [paymentData, setPaymentData] = useState<CreateSubscriptionResponse | null>(null);
 
@@ -80,12 +81,25 @@ export default function PaymentRequired() {
     },
   });
 
+  const formatCpf = (value: string) => {
+    const numbers = value.replace(/\D/g, "").slice(0, 11);
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 6) return `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
+    if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
+    return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9)}`;
+  };
+
   const createSubscriptionMutation = useMutation({
     mutationFn: async () => {
+      const cpfClean = cpf.replace(/\D/g, "");
+      if (cpfClean.length !== 11) {
+        throw new Error("CPF deve ter 11 dígitos");
+      }
       const res = await apiRequest("POST", "/api/subscription/create", {
         paymentMethod,
         couponCode: appliedCoupon?.code,
         name: user?.firstName,
+        cpfCnpj: cpfClean,
       });
       return res.json();
     },
@@ -293,7 +307,18 @@ export default function PaymentRequired() {
               </div>
 
               <div className="space-y-3">
-                <Label>Cupom de desconto</Label>
+                <Label>CPF (obrigatório)</Label>
+                <Input
+                  placeholder="000.000.000-00"
+                  value={cpf}
+                  onChange={(e) => setCpf(formatCpf(e.target.value))}
+                  maxLength={14}
+                  data-testid="input-cpf"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>Cupom de desconto (opcional)</Label>
                 <div className="flex gap-2">
                   <Input
                     placeholder="Digite o código do cupom"
@@ -363,7 +388,7 @@ export default function PaymentRequired() {
             className="w-full shadow-lg"
             size="lg"
             onClick={() => createSubscriptionMutation.mutate()}
-            disabled={createSubscriptionMutation.isPending}
+            disabled={createSubscriptionMutation.isPending || cpf.replace(/\D/g, "").length !== 11}
             data-testid="button-subscribe"
           >
             {createSubscriptionMutation.isPending ? (
