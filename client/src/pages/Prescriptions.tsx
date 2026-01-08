@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer, Share2, Download } from "lucide-react";
+import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, BookOpen, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer, Share2, Download, AlertTriangle, ShieldAlert } from "lucide-react";
 import { QuickPrintButton, SUSPrescriptionPrint } from "@/components/SUSPrescriptionPrint";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -26,15 +26,84 @@ const TIMINGS = ["Jejum", "Com alimentação", "Antes de dormir", "Longe das ref
 const CATEGORIES = ["Analgesia", "Antibióticos", "Anti-inflamatórios", "Antieméticos", "Cardiovascular", "Neurologia", "Gastro", "Outros"];
 const PATHOLOGY_CATEGORIES = ["Infectologia", "Cardiologia", "Pneumologia", "Gastroenterologia", "Neurologia", "Ortopedia", "Dermatologia", "Endocrinologia", "Nefrologia", "Outros"];
 
+const ALLERGY_CLASSES: Record<string, string[]> = {
+  "penicilina": ["amoxicilina", "ampicilina", "amoxicilina+clavulanato", "oxacilina", "penicilina", "piperacilina"],
+  "cefalosporina": ["cefalexina", "cefazolina", "ceftriaxona", "cefuroxima", "cefepime", "ceftazidima"],
+  "sulfa": ["sulfametoxazol", "sulfadiazina", "sulfassalazina", "bactrim", "cotrimoxazol"],
+  "aine": ["ibuprofeno", "diclofenaco", "naproxeno", "cetoprofeno", "piroxicam", "meloxicam", "nimesulida", "tenoxicam", "ácido acetilsalicílico", "aspirina"],
+  "dipirona": ["dipirona", "metamizol", "novalgina"],
+  "aas": ["ácido acetilsalicílico", "aspirina", "aas"],
+  "macrolídeo": ["azitromicina", "claritromicina", "eritromicina"],
+  "fluoroquinolona": ["ciprofloxacino", "levofloxacino", "moxifloxacino", "norfloxacino", "ofloxacino"],
+  "opióide": ["morfina", "tramadol", "codeína", "oxicodona", "fentanil", "metadona"],
+  "benzodiazepínico": ["diazepam", "clonazepam", "lorazepam", "alprazolam", "midazolam"],
+  "contraste iodado": ["contraste iodado", "iodo"],
+  "látex": ["látex"],
+};
+
+const COMMON_ALLERGIES = [
+  "Penicilina", "Cefalosporina", "Sulfa", "AINE", "Dipirona", "AAS", 
+  "Macrolídeo", "Fluoroquinolona", "Opióide", "Benzodiazepínico", 
+  "Contraste Iodado", "Látex"
+];
+
+function checkMedicationAllergy(medicationName: string, patientAllergies: string[]): boolean {
+  if (!medicationName || patientAllergies.length === 0) return false;
+  
+  const medLower = medicationName.toLowerCase();
+  
+  for (const allergy of patientAllergies) {
+    const allergyLower = allergy.toLowerCase().trim();
+    if (!allergyLower) continue;
+    
+    if (medLower.includes(allergyLower) || allergyLower.includes(medLower)) {
+      return true;
+    }
+    
+    const classKey = Object.keys(ALLERGY_CLASSES).find(k => 
+      allergyLower.includes(k) || k.includes(allergyLower)
+    );
+    
+    if (classKey) {
+      const classMeds = ALLERGY_CLASSES[classKey];
+      if (classMeds.some(m => medLower.includes(m) || m.includes(medLower))) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
 export default function Prescriptions() {
   const [mainTab, setMainTab] = useState<"oficiais" | "minhas" | "patologias">("patologias");
   const [ageGroup, setAgeGroup] = useState<"adulto" | "pediatrico">("adulto");
   const [searchQuery, setSearchQuery] = useState("");
   const [draftPrescription, setDraftPrescription] = useState<Prescription | null>(null);
   const [showDraftDialog, setShowDraftDialog] = useState(false);
+  const [patientAllergies, setPatientAllergies] = useState<string[]>([]);
+  const [allergyInput, setAllergyInput] = useState("");
+  const [showAllergyFilter, setShowAllergyFilter] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin";
+
+  const addAllergy = () => {
+    if (allergyInput.trim() && !patientAllergies.includes(allergyInput.trim())) {
+      setPatientAllergies([...patientAllergies, allergyInput.trim()]);
+      setAllergyInput("");
+    }
+  };
+
+  const removeAllergy = (allergy: string) => {
+    setPatientAllergies(patientAllergies.filter(a => a !== allergy));
+  };
+
+  const addCommonAllergy = (allergy: string) => {
+    if (!patientAllergies.includes(allergy)) {
+      setPatientAllergies([...patientAllergies, allergy]);
+    }
+  };
 
   const handleSuggestionSelect = (prescription: Prescription) => {
     setDraftPrescription(prescription);
@@ -117,15 +186,96 @@ export default function Prescriptions() {
         </TabsList>
       </Tabs>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-        <Input
-          placeholder="Buscar prescrição..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-          data-testid="input-search-prescriptions"
-        />
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Buscar prescrição..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-prescriptions"
+            />
+          </div>
+          <Button 
+            variant={showAllergyFilter ? "default" : "outline"} 
+            onClick={() => setShowAllergyFilter(!showAllergyFilter)}
+            className="gap-2"
+            data-testid="button-toggle-allergy-filter"
+          >
+            <ShieldAlert className="h-4 w-4" />
+            {patientAllergies.length > 0 ? `Alergias (${patientAllergies.length})` : "Filtrar Alergias"}
+          </Button>
+        </div>
+
+        {showAllergyFilter && (
+          <Card className="p-4 bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-800">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="font-medium text-sm">Filtro de Alergias do Paciente</span>
+              </div>
+              <p className="text-xs text-red-600 dark:text-red-400">
+                Digite as alergias do paciente para ocultar medicamentos contraindicados.
+              </p>
+              
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ex: Penicilina, AAS..."
+                  value={allergyInput}
+                  onChange={(e) => setAllergyInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addAllergy()}
+                  className="flex-1 bg-white dark:bg-slate-900"
+                  data-testid="input-allergy"
+                />
+                <Button onClick={addAllergy} size="sm" data-testid="button-add-allergy">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-1">
+                {COMMON_ALLERGIES.filter(a => !patientAllergies.includes(a)).map(allergy => (
+                  <Badge 
+                    key={allergy} 
+                    variant="outline" 
+                    className="cursor-pointer text-xs hover:bg-red-100 dark:hover:bg-red-900"
+                    onClick={() => addCommonAllergy(allergy)}
+                    data-testid={`badge-common-allergy-${allergy}`}
+                  >
+                    + {allergy}
+                  </Badge>
+                ))}
+              </div>
+
+              {patientAllergies.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-red-200 dark:border-red-800">
+                  {patientAllergies.map(allergy => (
+                    <Badge 
+                      key={allergy} 
+                      variant="destructive" 
+                      className="gap-1 cursor-pointer"
+                      onClick={() => removeAllergy(allergy)}
+                      data-testid={`badge-patient-allergy-${allergy}`}
+                    >
+                      {allergy}
+                      <X className="h-3 w-3" />
+                    </Badge>
+                  ))}
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 text-xs text-red-600"
+                    onClick={() => setPatientAllergies([])}
+                    data-testid="button-clear-allergies"
+                  >
+                    Limpar todas
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
 
       <PrescriptionSuggestionAssistant 
@@ -146,9 +296,9 @@ export default function Prescriptions() {
       )}
 
       {mainTab === "patologias" ? (
-        <PathologiesView ageGroup={ageGroup} searchQuery={searchQuery} isAdmin={isAdmin} />
+        <PathologiesView ageGroup={ageGroup} searchQuery={searchQuery} isAdmin={isAdmin} patientAllergies={patientAllergies} />
       ) : mainTab === "minhas" ? (
-        <UserPathologiesView ageGroup={ageGroup} searchQuery={searchQuery} />
+        <UserPathologiesView ageGroup={ageGroup} searchQuery={searchQuery} patientAllergies={patientAllergies} />
       ) : isLoading ? (
         <div className="flex justify-center py-12">
           <PageLoader text="Carregando prescrições..." />
@@ -574,7 +724,7 @@ function FavoritesSection() {
   );
 }
 
-function UserPathologiesView({ ageGroup, searchQuery }: { ageGroup: string; searchQuery: string }) {
+function UserPathologiesView({ ageGroup, searchQuery, patientAllergies }: { ageGroup: string; searchQuery: string; patientAllergies: string[] }) {
   const { toast } = useToast();
   const [expandedPathologies, setExpandedPathologies] = useState<Set<number>>(new Set());
 
@@ -643,6 +793,7 @@ function UserPathologiesView({ ageGroup, searchQuery }: { ageGroup: string; sear
                   isExpanded={expandedPathologies.has(pathology.id)}
                   onToggle={() => toggleExpanded(pathology.id)}
                   ageGroup={ageGroup}
+                  patientAllergies={patientAllergies}
                 />
               ))}
             </div>
@@ -653,7 +804,7 @@ function UserPathologiesView({ ageGroup, searchQuery }: { ageGroup: string; sear
   );
 }
 
-function PathologiesView({ ageGroup, searchQuery, isAdmin }: { ageGroup: string; searchQuery: string; isAdmin: boolean }) {
+function PathologiesView({ ageGroup, searchQuery, isAdmin, patientAllergies }: { ageGroup: string; searchQuery: string; isAdmin: boolean; patientAllergies: string[] }) {
   const { toast } = useToast();
   const [expandedPathologies, setExpandedPathologies] = useState<Set<number>>(new Set());
 
@@ -724,6 +875,7 @@ function PathologiesView({ ageGroup, searchQuery, isAdmin }: { ageGroup: string;
                 pathology={pathology} 
                 isExpanded={expandedPathologies.has(pathology.id)}
                 onToggle={() => toggleExpanded(pathology.id)}
+                patientAllergies={patientAllergies}
               />
             ))}
           </div>
@@ -834,7 +986,7 @@ function formatMedicationSUS(med: PathologyMedication, index: number): string {
   return lines.join("\n");
 }
 
-function UserPathologyCard({ pathology, isExpanded, onToggle, ageGroup }: { pathology: Pathology; isExpanded: boolean; onToggle: () => void; ageGroup: string }) {
+function UserPathologyCard({ pathology, isExpanded, onToggle, ageGroup, patientAllergies }: { pathology: Pathology; isExpanded: boolean; onToggle: () => void; ageGroup: string; patientAllergies: string[] }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showMedicationDialog, setShowMedicationDialog] = useState(false);
@@ -933,8 +1085,14 @@ function UserPathologyCard({ pathology, isExpanded, onToggle, ageGroup }: { path
               <div className="py-4 text-center text-muted-foreground">Carregando medicações...</div>
             ) : (
               <div className="space-y-3 py-3">
-                {medications && medications.length > 0 ? (
-                  medications.map((med, idx) => (
+                {patientAllergies.length > 0 && medications && medications.some(med => checkMedicationAllergy(med.medication, patientAllergies)) && (
+                  <div className="p-2 bg-red-50 dark:bg-red-950/30 rounded-md border border-red-200 dark:border-red-800 flex items-center gap-2 text-red-700 dark:text-red-400 text-sm">
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                    <span>Medicações contraindicadas para alergias do paciente foram ocultadas.</span>
+                  </div>
+                )}
+                {medications && medications.filter(med => !checkMedicationAllergy(med.medication, patientAllergies)).length > 0 ? (
+                  medications.filter(med => !checkMedicationAllergy(med.medication, patientAllergies)).map((med, idx) => (
                     <div key={med.id} className="p-3 bg-background rounded-md border flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -1011,7 +1169,7 @@ interface PrescriptionModelMedication {
   order: number;
 }
 
-function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Pathology; isExpanded: boolean; onToggle: () => void }) {
+function PathologyCard({ pathology, isExpanded, onToggle, patientAllergies }: { pathology: Pathology; isExpanded: boolean; onToggle: () => void; patientAllergies: string[] }) {
   const { toast } = useToast();
   const [selectedModel, setSelectedModel] = useState<number | null>(null);
 
@@ -1169,9 +1327,15 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
                           <p className="text-sm text-muted-foreground">{currentModel.description}</p>
                         )}
                         
-                        {modelMedications && modelMedications.length > 0 && (
+                        {patientAllergies.length > 0 && modelMedications && modelMedications.some(med => checkMedicationAllergy(med.medication, patientAllergies)) && (
+                          <div className="p-2 bg-red-50 dark:bg-red-950/30 rounded-md border border-red-200 dark:border-red-800 flex items-center gap-2 text-red-700 dark:text-red-400 text-sm">
+                            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                            <span>Medicações contraindicadas para alergias do paciente foram ocultadas.</span>
+                          </div>
+                        )}
+                        {modelMedications && modelMedications.filter(med => !checkMedicationAllergy(med.medication, patientAllergies)).length > 0 && (
                           <div className="space-y-2">
-                            {modelMedications.map((med, idx) => (
+                            {modelMedications.filter(med => !checkMedicationAllergy(med.medication, patientAllergies)).map((med, idx) => (
                               <div key={med.id} className="p-2 bg-muted/30 rounded-md">
                                 <div className="flex items-center gap-2 mb-1">
                                   <Pill className="h-4 w-4 text-primary" />
@@ -1237,8 +1401,14 @@ function PathologyCard({ pathology, isExpanded, onToggle }: { pathology: Patholo
                         <Pill className="h-4 w-4" /> Medicações Avulsas
                       </h4>
                     )}
+                    {patientAllergies.length > 0 && medications.some(med => checkMedicationAllergy(med.medication, patientAllergies)) && (
+                      <div className="p-2 mt-2 bg-red-50 dark:bg-red-950/30 rounded-md border border-red-200 dark:border-red-800 flex items-center gap-2 text-red-700 dark:text-red-400 text-sm">
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                        <span>Medicações contraindicadas para alergias do paciente foram ocultadas.</span>
+                      </div>
+                    )}
                     <div className="space-y-3 py-3">
-                      {medications.map((med, idx) => (
+                      {medications.filter(med => !checkMedicationAllergy(med.medication, patientAllergies)).map((med, idx) => (
                         <div key={med.id} className="p-3 bg-background rounded-md border flex items-start justify-between gap-3">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">

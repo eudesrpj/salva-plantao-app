@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -8,7 +7,6 @@ import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import { DesktopSidebar, MobileNav } from "@/components/Sidebar";
 import { FloatingCalculator } from "@/components/FloatingCalculator";
-import { PediatricCalculator, PediatricCalculatorButton } from "@/components/PediatricCalculator";
 import { CreatorFooter } from "@/components/CreatorFooter";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { PreviewBanner } from "@/components/PreviewGate";
@@ -41,8 +39,6 @@ import Referral from "@/pages/Referral";
 import AiWebView from "@/pages/AiWebView";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  const [isPedCalcOpen, setIsPedCalcOpen] = useState(false);
-  
   return (
     <div className="flex min-h-screen bg-background">
       <DesktopSidebar />
@@ -54,8 +50,6 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
         <CreatorFooter />
       </div>
       <FloatingCalculator />
-      <PediatricCalculatorButton onClick={() => setIsPedCalcOpen(true)} />
-      <PediatricCalculator isOpen={isPedCalcOpen} onClose={() => setIsPedCalcOpen(false)} />
       <MobileNav />
     </div>
   );
