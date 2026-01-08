@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer, Share2, Download, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Search, Plus, Copy, Trash2, Lock, FileText, Baby, User, Heart, ChevronDown, ChevronRight, Pill, FolderPlus, PlusCircle, Edit, X, Printer, Share2, Download, AlertTriangle, ShieldAlert, CheckSquare, Square, Star, FileDown } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { QuickPrintButton, SUSPrescriptionPrint } from "@/components/SUSPrescriptionPrint";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -75,8 +76,91 @@ function checkMedicationAllergy(medicationName: string, patientAllergies: string
   return false;
 }
 
+// Selection item type for batch operations
+type SelectionItem = {
+  id: number;
+  type: "medication" | "model";
+  pathologyName: string;
+  data: PathologyMedication | any;
+};
+
+// Format prescription to standardized text
+function formatPrescriptionToText(items: SelectionItem[]): string {
+  const separator = "=".repeat(40);
+  const blocks: string[] = [];
+  
+  for (const item of items) {
+    if (item.type === "medication") {
+      const med = item.data as PathologyMedication;
+      const parts = [
+        `PATOLOGIA: ${item.pathologyName}`,
+        separator,
+        `1) ${med.medication}`,
+        med.quantity ? `   Quantidade: ${med.quantity}` : null,
+        med.dose ? `   Posologia: Tomar ${med.dose}${med.dosePerKg ? ` (${med.dosePerKg}/kg)` : ""}, ${med.route || "VO"}${med.interval ? `, de ${med.interval}` : ""}${med.duration ? `, por ${med.duration}` : ""}` : null,
+        med.timing ? `   Horário: ${med.timing}` : null,
+        med.observations ? `   Obs: ${med.observations}` : null,
+        separator,
+      ].filter(Boolean);
+      blocks.push(parts.join("\n"));
+    }
+  }
+  
+  return blocks.join("\n\n");
+}
+
+// Export prescriptions in different formats
+function exportPrescriptions(items: SelectionItem[], format: "txt" | "json" | "csv") {
+  let content = "";
+  let filename = `prescricoes_${new Date().toISOString().split('T')[0]}`;
+  let mimeType = "text/plain";
+  
+  if (format === "txt") {
+    content = formatPrescriptionToText(items);
+    filename += ".txt";
+  } else if (format === "json") {
+    const data = items.map(item => ({
+      pathology: item.pathologyName,
+      type: item.type,
+      ...item.data,
+    }));
+    content = JSON.stringify(data, null, 2);
+    filename += ".json";
+    mimeType = "application/json";
+  } else if (format === "csv") {
+    const headers = ["Patologia", "Medicacao", "Dose", "Quantidade", "Intervalo", "Duracao", "Via", "Horario", "Observacoes"];
+    const rows = items.map(item => {
+      const med = item.data;
+      return [
+        item.pathologyName,
+        med.medication || "",
+        med.dose || "",
+        med.quantity || "",
+        med.interval || "",
+        med.duration || "",
+        med.route || "",
+        med.timing || "",
+        med.observations || "",
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(",");
+    });
+    content = [headers.join(","), ...rows].join("\n");
+    filename += ".csv";
+    mimeType = "text/csv";
+  }
+  
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function Prescriptions() {
-  const [mainTab, setMainTab] = useState<"minhas" | "patologias">("patologias");
+  const [mainTab, setMainTab] = useState<"minhas" | "patologias" | "favoritos">("patologias");
   const [ageGroup, setAgeGroup] = useState<"adulto" | "pediatrico">("adulto");
   const [searchQuery, setSearchQuery] = useState("");
   const [draftPrescription, setDraftPrescription] = useState<Prescription | null>(null);
@@ -84,9 +168,39 @@ export default function Prescriptions() {
   const [patientAllergies, setPatientAllergies] = useState<string[]>([]);
   const [allergyInput, setAllergyInput] = useState("");
   const [showAllergyFilter, setShowAllergyFilter] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<SelectionItem[]>([]);
   const { user } = useAuth();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin";
+  
+  const toggleSelection = (item: SelectionItem) => {
+    setSelectedItems(prev => {
+      const exists = prev.find(i => i.id === item.id && i.type === item.type);
+      if (exists) {
+        return prev.filter(i => !(i.id === item.id && i.type === item.type));
+      }
+      return [...prev, item];
+    });
+  };
+  
+  const clearSelection = () => {
+    setSelectedItems([]);
+    setSelectionMode(false);
+  };
+  
+  const copySelectedItems = () => {
+    if (selectedItems.length === 0) return;
+    const text = formatPrescriptionToText(selectedItems);
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado!", description: `${selectedItems.length} prescrição(ões) copiada(s).` });
+  };
+  
+  const handleExport = (format: "txt" | "json" | "csv") => {
+    if (selectedItems.length === 0) return;
+    exportPrescriptions(selectedItems, format);
+    toast({ title: "Exportado!", description: `Arquivo ${format.toUpperCase()} baixado.` });
+  };
 
   const addAllergy = () => {
     if (allergyInput.trim() && !patientAllergies.includes(allergyInput.trim())) {
@@ -171,16 +285,36 @@ export default function Prescriptions() {
         </div>
       </header>
       
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "minhas" | "patologias")} className="w-auto">
-        <TabsList className="w-auto">
-          <TabsTrigger value="patologias" className="gap-1" data-testid="tab-patologias">
-            <FileText className="h-4 w-4" /> Por Patologia
-          </TabsTrigger>
-          <TabsTrigger value="minhas" className="gap-1" data-testid="tab-minhas">
-            <Heart className="h-4 w-4" /> Minhas Prescrições
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "minhas" | "patologias" | "favoritos")} className="w-auto">
+          <TabsList className="w-auto">
+            <TabsTrigger value="patologias" className="gap-1" data-testid="tab-patologias">
+              <FileText className="h-4 w-4" /> Por Patologia
+            </TabsTrigger>
+            <TabsTrigger value="minhas" className="gap-1" data-testid="tab-minhas">
+              <Heart className="h-4 w-4" /> Minhas Prescrições
+            </TabsTrigger>
+            <TabsTrigger value="favoritos" className="gap-1" data-testid="tab-favoritos">
+              <Star className="h-4 w-4" /> Favoritos
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        
+        {mainTab === "patologias" && (
+          <Button
+            variant={selectionMode ? "default" : "outline"}
+            onClick={() => {
+              if (selectionMode) clearSelection();
+              else setSelectionMode(true);
+            }}
+            className="gap-2"
+            data-testid="button-toggle-selection"
+          >
+            {selectionMode ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            {selectionMode ? `Selecionados (${selectedItems.length})` : "Selecionar"}
+          </Button>
+        )}
+      </div>
 
       <div className="space-y-3">
         <div className="flex gap-2">
@@ -292,35 +426,64 @@ export default function Prescriptions() {
       )}
 
       {mainTab === "patologias" ? (
-        <PathologiesView ageGroup={ageGroup} searchQuery={searchQuery} isAdmin={isAdmin} patientAllergies={patientAllergies} />
+        <PathologiesView 
+          ageGroup={ageGroup} 
+          searchQuery={searchQuery} 
+          isAdmin={isAdmin} 
+          patientAllergies={patientAllergies}
+          selectionMode={selectionMode}
+          selectedItems={selectedItems}
+          onToggleSelection={toggleSelection}
+        />
       ) : mainTab === "minhas" ? (
         <UserPathologiesView ageGroup={ageGroup} searchQuery={searchQuery} patientAllergies={patientAllergies} />
-      ) : isLoading ? (
+      ) : mainTab === "favoritos" ? (
+        <FavoritesView searchQuery={searchQuery} />
+      ) : (
         <div className="flex justify-center py-12">
           <PageLoader text="Carregando prescrições..." />
         </div>
-      ) : (
-        <div className="space-y-8">
-          {grouped && Object.entries(grouped).map(([category, items]) => (
-            <div key={category}>
-              <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                {category}
-              </h2>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {items.map((prescription) => (
-                  <PrescriptionCard key={prescription.id} prescription={prescription} isAdmin={isAdmin} userId={user?.id} />
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {(!grouped || Object.keys(grouped).length === 0) && (
-            <div className="text-center py-12 text-slate-400">
-              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Nenhuma prescrição oficial encontrada.</p>
-            </div>
-          )}
+      )}
+      
+      {selectionMode && selectedItems.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border shadow-lg rounded-lg p-3 flex items-center gap-3 z-50">
+          <span className="text-sm font-medium">{selectedItems.length} selecionado(s)</span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={copySelectedItems} className="gap-1" data-testid="button-batch-copy">
+              <Copy className="h-3 w-3" /> Copiar
+            </Button>
+            <SUSPrescriptionPrint
+              prescriptions={selectedItems.map(item => ({
+                medication: item.data.medication,
+                dose: item.data.dose || "",
+                quantity: item.data.quantity || "",
+                interval: item.data.interval || "",
+                duration: item.data.duration || "",
+                route: item.data.route || "",
+                timing: item.data.timing || "",
+                orientations: item.data.observations || "",
+              }))}
+              trigger={
+                <Button size="sm" variant="outline" className="gap-1" data-testid="button-batch-print">
+                  <Printer className="h-3 w-3" /> Imprimir
+                </Button>
+              }
+            />
+            <Select onValueChange={(v) => handleExport(v as "txt" | "json" | "csv")}>
+              <SelectTrigger className="h-8 w-auto gap-1" data-testid="select-batch-export">
+                <FileDown className="h-3 w-3" />
+                <span className="text-sm">Exportar</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="txt">TXT (Texto)</SelectItem>
+                <SelectItem value="json">JSON</SelectItem>
+                <SelectItem value="csv">CSV</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="ghost" onClick={clearSelection} data-testid="button-clear-selection">
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -789,7 +952,23 @@ function UserPathologiesView({ ageGroup, searchQuery, patientAllergies }: { ageG
   );
 }
 
-function PathologiesView({ ageGroup, searchQuery, isAdmin, patientAllergies }: { ageGroup: string; searchQuery: string; isAdmin: boolean; patientAllergies: string[] }) {
+function PathologiesView({ 
+  ageGroup, 
+  searchQuery, 
+  isAdmin, 
+  patientAllergies,
+  selectionMode,
+  selectedItems,
+  onToggleSelection
+}: { 
+  ageGroup: string; 
+  searchQuery: string; 
+  isAdmin: boolean; 
+  patientAllergies: string[];
+  selectionMode: boolean;
+  selectedItems: SelectionItem[];
+  onToggleSelection: (item: SelectionItem) => void;
+}) {
   const { toast } = useToast();
   const [expandedPathologies, setExpandedPathologies] = useState<Set<number>>(new Set());
 
@@ -851,7 +1030,98 @@ function PathologiesView({ ageGroup, searchQuery, isAdmin, patientAllergies }: {
           isExpanded={expandedPathologies.has(pathology.id)}
           onToggle={() => toggleExpanded(pathology.id)}
           patientAllergies={patientAllergies}
+          selectionMode={selectionMode}
+          selectedItems={selectedItems}
+          onToggleSelection={onToggleSelection}
         />
+      ))}
+    </div>
+  );
+}
+
+function FavoritesView({ searchQuery }: { searchQuery: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  const { data: favorites, isLoading } = useQuery<PrescriptionFavorite[]>({
+    queryKey: ["/api/prescription-favorites"],
+  });
+  
+  const filtered = favorites?.filter(f => 
+    (!searchQuery || 
+      f.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.medication?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  );
+  
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/prescription-favorites/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescription-favorites"] });
+      toast({ title: "Removido dos favoritos!" });
+    },
+  });
+  
+  const copyToClipboard = (fav: PrescriptionFavorite) => {
+    const parts = [
+      fav.medication,
+      fav.quantity ? `Quantidade: ${fav.quantity}` : null,
+      fav.dose ? `Posologia: Tomar ${fav.dose}, ${fav.route || "VO"}${fav.interval ? `, de ${fav.interval}` : ""}${fav.duration ? `, por ${fav.duration}` : ""}` : null,
+      fav.patientNotes ? `Observações: ${fav.patientNotes}` : null,
+    ].filter(Boolean);
+    navigator.clipboard.writeText(parts.join("\n"));
+    toast({ title: "Copiado!" });
+  };
+  
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <PageLoader text="Carregando favoritos..." />
+      </div>
+    );
+  }
+  
+  if (!filtered || filtered.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-400">
+        <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
+        <p>Nenhum favorito encontrado.</p>
+        <p className="text-sm mt-2">Salve prescrições como favoritas para acesso rápido.</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {filtered.map((fav) => (
+        <Card key={fav.id} className="p-4 group" data-testid={`card-favorite-${fav.id}`}>
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex items-center gap-2">
+              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+              <h3 className="font-bold text-slate-900">{fav.title || fav.medication}</h3>
+            </div>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button size="icon" variant="ghost" onClick={() => copyToClipboard(fav)} className="h-7 w-7">
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+              <QuickPrintButton prescription={{ medication: fav.medication, dose: fav.dose, quantity: fav.quantity, interval: fav.interval, duration: fav.duration, route: fav.route } as any} />
+              <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(fav.id)} className="h-7 w-7 text-red-400">
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+          
+          <div className="space-y-1 text-sm text-slate-600">
+            {fav.medication && <p><strong>Medicação:</strong> {fav.medication}</p>}
+            {fav.dose && <p><strong>Dose:</strong> {fav.dose}</p>}
+            {fav.interval && <p><strong>Intervalo:</strong> {fav.interval}</p>}
+            {fav.duration && <p><strong>Duração:</strong> {fav.duration}</p>}
+            {fav.patientNotes && <p className="text-slate-500 italic">Obs: {fav.patientNotes}</p>}
+          </div>
+        </Card>
       ))}
     </div>
   );
@@ -1141,9 +1411,28 @@ interface PrescriptionModelMedication {
   order: number;
 }
 
-function PathologyCard({ pathology, isExpanded, onToggle, patientAllergies }: { pathology: Pathology; isExpanded: boolean; onToggle: () => void; patientAllergies: string[] }) {
+function PathologyCard({ 
+  pathology, 
+  isExpanded, 
+  onToggle, 
+  patientAllergies,
+  selectionMode = false,
+  selectedItems = [],
+  onToggleSelection
+}: { 
+  pathology: Pathology; 
+  isExpanded: boolean; 
+  onToggle: () => void; 
+  patientAllergies: string[];
+  selectionMode?: boolean;
+  selectedItems?: SelectionItem[];
+  onToggleSelection?: (item: SelectionItem) => void;
+}) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedModel, setSelectedModel] = useState<number | null>(null);
+  const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
+  const [modifyMedication, setModifyMedication] = useState<PathologyMedication | null>(null);
 
   const { data: medications, isLoading } = useQuery<PathologyMedication[]>({
     queryKey: ["/api/pathologies", pathology.id, "medications"],
@@ -1380,29 +1669,57 @@ function PathologyCard({ pathology, isExpanded, onToggle, patientAllergies }: { 
                       </div>
                     )}
                     <div className="space-y-3 py-3">
-                      {medications.filter(med => !checkMedicationAllergy(med.medication, patientAllergies)).map((med, idx) => (
-                        <div key={med.id} className="p-3 bg-background rounded-md border flex items-start justify-between gap-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Pill className="h-4 w-4 text-primary" />
-                              <span className="font-medium">{idx + 1}) {med.medication}</span>
-                              {med.maxDose && <Badge variant="outline" className="text-xs">Max: {med.maxDose}</Badge>}
+                      {medications.filter(med => !checkMedicationAllergy(med.medication, patientAllergies)).map((med, idx) => {
+                        const isSelected = selectedItems.some(i => i.id === med.id && i.type === "medication");
+                        return (
+                          <div key={med.id} className={`p-3 bg-background rounded-md border flex items-start gap-3 ${isSelected ? 'ring-2 ring-primary' : ''}`}>
+                            {selectionMode && onToggleSelection && (
+                              <Checkbox 
+                                checked={isSelected}
+                                onCheckedChange={() => onToggleSelection({
+                                  id: med.id,
+                                  type: "medication",
+                                  pathologyName: pathology.name,
+                                  data: med,
+                                })}
+                                className="mt-1"
+                                data-testid={`checkbox-med-${med.id}`}
+                              />
+                            )}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Pill className="h-4 w-4 text-primary" />
+                                <span className="font-medium">{idx + 1}) {med.medication}</span>
+                                {med.maxDose && <Badge variant="outline" className="text-xs">Max: {med.maxDose}</Badge>}
+                              </div>
+                              <div className="text-sm text-slate-600 space-y-0.5 ml-6">
+                                {med.quantity && <p><strong>Quantidade:</strong> {med.quantity}</p>}
+                                {med.dose && <p><strong>Posologia:</strong> Tomar {med.dose}{med.dosePerKg && ` (${med.dosePerKg}/kg)`}, {ROUTE_NAMES[med.route || "VO"] || med.route}{med.interval && `, de ${med.interval}`}{med.duration && `, por ${med.duration}`}</p>}
+                                {med.timing && <p><strong>Horário:</strong> {med.timing}</p>}
+                                {med.observations && <p className="text-slate-500 italic">Obs: {med.observations}</p>}
+                              </div>
                             </div>
-                            <div className="text-sm text-slate-600 space-y-0.5 ml-6">
-                              {med.quantity && <p><strong>Quantidade:</strong> {med.quantity}</p>}
-                              {med.dose && <p><strong>Posologia:</strong> Tomar {med.dose}{med.dosePerKg && ` (${med.dosePerKg}/kg)`}, {ROUTE_NAMES[med.route || "VO"] || med.route}{med.interval && `, de ${med.interval}`}{med.duration && `, por ${med.duration}`}</p>}
-                              {med.timing && <p><strong>Horário:</strong> {med.timing}</p>}
-                              {med.observations && <p className="text-slate-500 italic">Obs: {med.observations}</p>}
+                            <div className="flex gap-1 shrink-0">
+                              <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} title="Copiar">
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                onClick={() => {
+                                  setModifyMedication(med);
+                                  setModifyDialogOpen(true);
+                                }} 
+                                title="Modificar e salvar"
+                                data-testid={`button-modify-med-${med.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <SaveToFavoritesButton medication={med} pathologyName={pathology.name} />
                             </div>
                           </div>
-                          <div className="flex gap-1 shrink-0">
-                            <Button size="icon" variant="ghost" onClick={() => copySingleMedication(med)} title="Copiar este medicamento">
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            <SaveToFavoritesButton medication={med} pathologyName={pathology.name} />
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <div className="pt-2 border-t flex gap-2">
                       <Button onClick={copyAllMedications} className="flex-1 gap-2" data-testid="button-copy-prescription-sus">
@@ -1439,7 +1756,188 @@ function PathologyCard({ pathology, isExpanded, onToggle, patientAllergies }: { 
           </div>
         </CollapsibleContent>
       </Collapsible>
+      
+      {modifyMedication && (
+        <ModifyMedicationDialog 
+          medication={modifyMedication}
+          pathologyName={pathology.name}
+          open={modifyDialogOpen}
+          onOpenChange={setModifyDialogOpen}
+          onClose={() => {
+            setModifyMedication(null);
+            setModifyDialogOpen(false);
+          }}
+        />
+      )}
     </Card>
+  );
+}
+
+function ModifyMedicationDialog({ 
+  medication, 
+  pathologyName,
+  open, 
+  onOpenChange,
+  onClose 
+}: { 
+  medication: PathologyMedication;
+  pathologyName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [formData, setFormData] = useState({
+    title: `${medication.medication} - ${pathologyName}`,
+    medication: medication.medication || "",
+    dose: medication.dose || "",
+    interval: medication.interval || "",
+    quantity: medication.quantity || "",
+    duration: medication.duration || "",
+    route: medication.route || "",
+    timing: medication.timing || "",
+    patientNotes: medication.observations || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/prescription-favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prescription-favorites"] });
+      toast({ 
+        title: "Prescrição salva!",
+        description: "A prescrição foi salva em seus favoritos."
+      });
+      onClose();
+    },
+    onError: () => {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Modificar Prescrição</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          <div>
+            <label className="text-sm font-medium">Título</label>
+            <Input 
+              value={formData.title} 
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              data-testid="input-modify-title"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Medicação</label>
+            <Input 
+              value={formData.medication} 
+              onChange={(e) => setFormData({ ...formData, medication: e.target.value })}
+              data-testid="input-modify-medication"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Dose</label>
+              <Input 
+                value={formData.dose} 
+                onChange={(e) => setFormData({ ...formData, dose: e.target.value })}
+                data-testid="input-modify-dose"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Quantidade</label>
+              <Input 
+                value={formData.quantity} 
+                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                data-testid="input-modify-quantity"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Via</label>
+              <Select value={formData.route} onValueChange={(v) => setFormData({ ...formData, route: v })}>
+                <SelectTrigger data-testid="select-modify-route">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROUTES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Intervalo</label>
+              <Select value={formData.interval} onValueChange={(v) => setFormData({ ...formData, interval: v })}>
+                <SelectTrigger data-testid="select-modify-interval">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVALS.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Duração</label>
+              <Select value={formData.duration} onValueChange={(v) => setFormData({ ...formData, duration: v })}>
+                <SelectTrigger data-testid="select-modify-duration">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Horário</label>
+              <Select value={formData.timing} onValueChange={(v) => setFormData({ ...formData, timing: v })}>
+                <SelectTrigger data-testid="select-modify-timing">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMINGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Observações</label>
+            <Textarea 
+              value={formData.patientNotes} 
+              onChange={(e) => setFormData({ ...formData, patientNotes: e.target.value })}
+              rows={3}
+              data-testid="textarea-modify-notes"
+            />
+          </div>
+        </div>
+        
+        <DialogFooter className="flex gap-2">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button 
+            onClick={() => saveMutation.mutate()} 
+            disabled={saveMutation.isPending}
+            className="gap-1"
+            data-testid="button-save-favorite"
+          >
+            <Star className="h-4 w-4" /> Salvar nos Favoritos
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

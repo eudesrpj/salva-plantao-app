@@ -1,0 +1,261 @@
+Você é um assistente de código no Replit.
+
+OBJETIVO: Melhorar a aba "Prescrições" do menu principal do app web, adicionando ações de:
+- Copiar
+- Imprimir
+- Modificar (para usuário)
+- Favoritar / salvar em "Minhas Prescrições"
+- Exportar (PDF/Texto/JSON ou CSV — usar o que for mais simples e compatível com a stack)
+- Modo Selecionar (seleção múltipla) para copiar/imprimir/exportar várias prescrições de uma vez
+
+Requisitos:
+1) Funcionar para ADMIN e USUÁRIO:
+   - ambos podem COPIAR e IMPRIMIR prescrições oficiais
+2) Somente USUÁRIO pode MODIFICAR uma prescrição oficial (sem alterar a oficial) e salvar em:
+   - Favoritos
+   - "Minhas Prescrições"
+3) Usuário também pode:
+   - editar as próprias prescrições (minhas prescrições)
+   - copiar, imprimir e exportar as próprias prescrições
+4) As prescrições OFICIAIS nunca devem ser alteradas pelo usuário.
+5) Não quebrar o projeto atual. Reusar padrões e componentes existentes (UI/rotas/arquitetura).
+6) Manter separação Adulto/Pediatria onde existir no app.
+
+--------------------------------------------------------------------
+1) MODELO DE DADOS / ESTRUTURA (BACKEND)
+--------------------------------------------------------------------
+
+Se já existir estrutura, adapte. Caso não exista, criar:
+
+A) `prescriptions_official`
+- id
+- pathology_id (ou pathology_name)
+- title (opcional)
+- content (texto estruturado: medicações + orientações + sinais de alarme + observações)
+- age_group (adulto/pediatrico)
+- category (opcional)
+- created_by_admin_id
+- created_at, updated_at
+
+B) `prescriptions_user`
+- id
+- user_id
+- source_official_id (nullable) -> se veio de uma oficial
+- pathology_id (ou pathology_name)
+- title
+- content (texto estruturado)
+- age_group
+- is_favorite (boolean)
+- created_at, updated_at
+
+C) `favorites` (se o projeto preferir tabela separada; caso contrário usar is_favorite no prescriptions_user)
+- id
+- user_id
+- prescription_user_id
+- created_at
+
+D) `prescription_exports` (opcional, se quiser log)
+- id
+- user_id
+- export_type (print/copy/pdf/json/csv)
+- count
+- created_at
+
+IMPORTANTE:
+- "Modificar" de uma oficial cria um rascunho/clone em `prescriptions_user`.
+- Edições do usuário nunca alteram `prescriptions_official`.
+
+--------------------------------------------------------------------
+2) ROTAS / ENDPOINTS (BACKEND)
+--------------------------------------------------------------------
+
+Criar ou ajustar endpoints:
+
+(1) Listar oficiais (admin e user)
+GET /api/prescriptions/official?age_group=adulto|pediatrico&pathology_id=...
+
+(2) Copiar (não precisa endpoint; pode ser client-side). Mas se conteúdo exigir formatação server-side:
+POST /api/prescriptions/format
+body: { ids: [...], scope: "official"|"user", format: "text"|"markdown"|"html" }
+retorna texto pronto para clipboard/impressão
+
+(3) Criar "Minhas Prescrições" a partir de oficial (MODIFICAR)
+POST /api/prescriptions/user/from-official
+body: { official_id }
+retorna prescription_user_id
+
+(4) CRUD de "Minhas Prescrições"
+GET /api/prescriptions/user
+POST /api/prescriptions/user
+PUT /api/prescriptions/user/:id
+DELETE /api/prescriptions/user/:id
+
+(5) Favoritar/desfavoritar
+POST /api/prescriptions/user/:id/favorite
+body: { is_favorite: true|false }
+
+(6) Exportar
+POST /api/prescriptions/export
+body: { ids:[...], scope:"official"|"user", format:"pdf"|"txt"|"json"|"csv" }
+retorna arquivo ou url para download (preferir stream/download simples)
+
+(7) Permissões:
+- user pode ler oficiais
+- user pode criar/editar/deletar apenas prescriptions_user próprias
+- admin pode gerenciar oficiais conforme já existe
+
+--------------------------------------------------------------------
+3) UI/UX (FRONTEND) - ABA "PRESCRIÇÕES"
+--------------------------------------------------------------------
+
+Na aba "Prescrições" do MENU PRINCIPAL:
+
+A) LISTA DE PATOLOGIAS → ao abrir uma patologia mostra as prescrições (oficiais)
+- Cada item de prescrição deve ter botões:
+  - [Copiar]
+  - [Imprimir]
+  - [Exportar]
+  - [Selecionar] (checkbox)
+  - Para USUÁRIO: [Modificar]
+  - Para ADMIN: (manter as ações já existentes de editar oficial, se houver)
+
+B) MODO SELECIONAR (ação em lote)
+- Adicionar toggle: "Selecionar"
+- Ao ativar:
+  - mostrar checkboxes em cada prescrição
+  - mostrar barra de ações em lote fixa:
+    - "Copiar selecionadas"
+    - "Imprimir selecionadas"
+    - "Exportar selecionadas"
+    - "Limpar seleção"
+- Copiar selecionadas:
+  - juntar em um texto único padronizado:
+    - Título da patologia + título da prescrição
+    - Medicações
+    - Orientações
+    - Observações
+    - Sinais de alarme
+    - Separador "----"
+- Imprimir selecionadas:
+  - abrir print view com layout limpo (sem botões)
+  - chamar window.print() (se web)
+- Exportar selecionadas:
+  - permitir escolher formato (PDF/TXT/JSON/CSV)
+  - respeitar permissões e age_group
+
+C) "MODIFICAR" (somente usuário)
+- Ao clicar "Modificar" em uma prescrição oficial:
+  1) criar clone em prescriptions_user (via endpoint from-official)
+  2) abrir modal/tela de edição com preview
+  3) usuário pode:
+     - remover medicação
+     - alterar dose/intervalo/duração
+     - alterar orientações/observações/sinais de alarme
+  4) botões:
+     - "Salvar em Minhas Prescrições"
+     - "Salvar e Favoritar"
+     - "Cancelar"
+
+D) "MINHAS PRESCRIÇÕES"
+- Criar (ou atualizar) sub-aba:
+  - "Oficiais"
+  - "Minhas Prescrições"
+  - "Favoritos"
+- Em "Minhas Prescrições":
+  - listar prescriptions_user do usuário
+  - cada uma com:
+    - [Editar]
+    - [Copiar]
+    - [Imprimir]
+    - [Exportar]
+    - [Selecionar]
+    - [Favoritar/Desfavoritar]
+    - [Excluir]
+- Em "Favoritos":
+  - filtrar is_favorite=true
+
+E) PADRONIZAÇÃO DO TEXTO (muito importante)
+- Criar uma função utilitária "formatPrescriptionToText(prescription)" para:
+  - gerar saída padronizada sempre igual no copiar/imprimir/exportar
+- Manter cabeçalhos:
+  - "PATOLOGIA:"
+  - "PRESCRIÇÃO:"
+  - "MEDICAÇÕES:"
+  - "ORIENTAÇÕES:"
+  - "OBSERVAÇÕES:"
+  - "SINAIS DE ALARME:"
+
+--------------------------------------------------------------------
+4) IMPRESSÃO (PRINT VIEW) - Detalhes técnicos
+--------------------------------------------------------------------
+
+- Criar componente/rota de impressão:
+  /print/prescriptions?ids=...&scope=official|user
+- Renderizar layout limpo:
+  - nome do app
+  - data/hora
+  - patologia + prescrição
+  - conteúdo formatado
+- Botão "Imprimir" apenas nessa view (ou auto-print)
+- Compatível com mobile e desktop
+
+--------------------------------------------------------------------
+5) EXPORTAÇÃO
+--------------------------------------------------------------------
+
+Implementar exportação com o melhor custo/benefício:
+
+- TXT: sempre disponível (client-side ou server-side)
+- JSON: exportar estrutura (bom pra backup/import)
+- CSV: exportar colunas (bom pra planilha)
+- PDF: se for fácil com lib já usada; caso não, gerar HTML e print-to-pdf via browser (fallback)
+Preferir o método que já for comum na stack.
+
+--------------------------------------------------------------------
+6) OUTRAS FUNCIONALIDADES ÚTEIS (ADICIONAR)
+--------------------------------------------------------------------
+
+1) Busca e filtros:
+- buscar por nome de patologia
+- buscar por texto dentro das prescrições
+- filtros por tags/categoria (se existir)
+- filtro "Somente Favoritos"
+
+2) Histórico rápido:
+- "Recentes": últimas 10 prescrições abertas pelo usuário (client-side localStorage ou backend simples)
+
+3) "Copiar com um clique" com feedback:
+- toast: "Copiado!"
+
+4) Confirmações seguras:
+- ao excluir "Minhas Prescrições", pedir confirmação
+
+5) Offline leve (opcional):
+- cache local das "Minhas Prescrições" para acesso rápido (se já houver infra)
+
+--------------------------------------------------------------------
+7) PERMISSÕES E SEGURANÇA
+--------------------------------------------------------------------
+
+- Garantir no backend:
+  - user não consegue editar/deletar prescrições oficiais
+  - user só acessa prescriptions_user com user_id = dele
+  - validação de ids na exportação e impressão
+
+--------------------------------------------------------------------
+8) ENTREGA
+--------------------------------------------------------------------
+
+Implemente as mudanças ponta a ponta:
+- backend: rotas, validação, permissões
+- frontend: botões, modais, seleção múltipla, print view, export
+- manter estilo do projeto
+- garantir que o app continue rodando sem erros
+- adicionar comentários curtos no código novo (o que faz e onde está)
+
+Faça commit lógico por etapas (se o Replit suportar): 
+1) dados/rotas
+2) UI oficial (copiar/imprimir/exportar/selecionar)
+3) minhas prescrições (modificar/salvar/favoritar)
+4) print/export
+5) filtros/busca/recentes
