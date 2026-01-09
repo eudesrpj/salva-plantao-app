@@ -1,3 +1,4 @@
+
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -7,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import { DesktopSidebar, MobileNav } from "@/components/Sidebar";
 import { FloatingCalculator } from "@/components/FloatingCalculator";
+import { EmergencyButton } from "@/components/EmergencyButton"; // Importa o botão de emergência
 import { CreatorFooter } from "@/components/CreatorFooter";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { PreviewBanner } from "@/components/PreviewGate";
@@ -53,6 +55,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
         <CreatorFooter />
       </div>
       <FloatingCalculator />
+      <EmergencyButton /> {/* Adiciona o botão de emergência aqui */}
       <MobileNav />
     </div>
   );

@@ -1,12 +1,66 @@
+
 import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Activity, Calendar, FileText, CheckSquare, TrendingUp, ArrowRight, User } from "lucide-react";
-import { useShifts, useShiftStats } from "@/hooks/use-resources";
+import { Activity, Calendar, FileText, CheckSquare, TrendingUp, ArrowRight, LucideIcon } from "lucide-react";
+import { useShifts, useShiftStats } from "@/hooks/use-shifts";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { ElectrolyteCalculator } from "@/components/ElectrolyteCalculator"; // Importando a calculadora
+import type { FC } from 'react';
+
+interface StatCardProps {
+  title: string;
+  value: string;
+  sub: string;
+  icon: LucideIcon;
+  color: string;
+  bg: string;
+}
+
+const StatCard: FC<StatCardProps> = ({ title, value, sub, icon: Icon, color, bg }) => (
+  <Card className="p-5 rounded-2xl border-slate-100 shadow-md hover:shadow-lg transition-all">
+    <div className="flex justify-between items-start mb-3">
+      <div className={`h-10 w-10 rounded-xl ${bg} ${color} flex items-center justify-center`}>
+        <Icon className="h-5 w-5" />
+      </div>
+    </div>
+    <div>
+      <h3 className="text-slate-500 text-sm font-medium">{title}</h3>
+      <p className="text-2xl font-bold text-slate-900 mt-1">{value}</p>
+      <span className="text-xs text-slate-400 font-medium">{sub}</span>
+    </div>
+  </Card>
+);
+
+interface ShortcutCardProps {
+  title: string;
+  icon: LucideIcon;
+  href: string;
+  color: string;
+  onClick?: () => void;
+}
+
+const ShortcutCard: FC<ShortcutCardProps> = ({ title, icon: Icon, href, color, onClick }) => {
+  const content = (
+    <div className={`group cursor-pointer rounded-2xl p-4 ${color} text-white shadow-lg ${color.replace('bg-','shadow-')}-500/20 hover:scale-105 transition-all duration-300 relative overflow-hidden h-32 flex flex-col justify-between`}>
+      <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+        <Icon className="w-16 h-16 transform rotate-12" />
+      </div>
+      <Icon className="w-8 h-8" />
+      <span className="font-bold relative z-10">{title}</span>
+    </div>
+  );
+
+  if (onClick) {
+    return <div onClick={onClick}>{content}</div>;
+  }
+
+  return <Link href={href}>{content}</Link>;
+};
+
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -82,21 +136,24 @@ export default function Dashboard() {
            />
         </motion.div>
 
-        {/* Shortcuts */}
+        {/* Main Content Area */}
         <motion.div variants={item} className="md:col-span-2 grid gap-6">
-           <section>
+          <section>
              <div className="flex items-center justify-between mb-4">
                <h2 className="text-xl font-bold text-slate-800">Acesso Rápido</h2>
              </div>
              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <ShortcutCard title="Prescrições" icon={FileText} href="/prescriptions" color="bg-blue-500" />
                 <ShortcutCard title="Condutas" icon={CheckSquare} href="/checklists" color="bg-indigo-500" />
-                <ShortcutCard title="Calculadora" icon={Activity} href="#" onClick={() => document.querySelector<HTMLElement>('button[aria-haspopup="dialog"]')?.click()} color="bg-pink-500" />
+                <ShortcutCard title="Calculadora" icon={Activity} href="#" onClick={() => document.querySelector<HTMLElement>('button[data-testid="emergency-button"]')?.click()} color="bg-pink-500" />
                 <ShortcutCard title="IA Médica" icon={Activity} href="/ai-chat" color="bg-emerald-500" />
              </div>
            </section>
 
-           <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl">
+          {/* Electrolyte Calculator */}
+          <ElectrolyteCalculator />
+
+          <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl">
              <div className="relative z-10 flex justify-between items-end">
                <div>
                  <h3 className="text-2xl font-bold font-display mb-2">Interconsulta com IA</h3>
@@ -114,6 +171,7 @@ export default function Dashboard() {
            </section>
         </motion.div>
 
+        {/* Sidebar Area */}
         <motion.div variants={item} className="md:col-span-1 space-y-6">
            <Card className="p-6 rounded-3xl border-slate-100 shadow-lg h-full bg-white">
              <h3 className="font-bold text-lg mb-4 text-slate-800">Próximos Plantões</h3>
@@ -139,42 +197,5 @@ export default function Dashboard() {
         </motion.div>
       </motion.div>
     </div>
-  );
-}
-
-function StatCard({ title, value, sub, icon: Icon, color, bg }: any) {
-  return (
-    <Card className="p-5 rounded-2xl border-slate-100 shadow-md hover:shadow-lg transition-all">
-      <div className="flex justify-between items-start mb-3">
-        <div className={`h-10 w-10 rounded-xl ${bg} ${color} flex items-center justify-center`}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-      <div>
-        <h3 className="text-slate-500 text-sm font-medium">{title}</h3>
-        <p className="text-2xl font-bold text-slate-900 mt-1">{value}</p>
-        <span className="text-xs text-slate-400 font-medium">{sub}</span>
-      </div>
-    </Card>
-  );
-}
-
-function ShortcutCard({ title, icon: Icon, href, color, onClick }: any) {
-  const Content = (
-    <div className={`group cursor-pointer rounded-2xl p-4 ${color} text-white shadow-lg shadow-${color.split('-')[1]}-500/20 hover:scale-105 transition-all duration-300 relative overflow-hidden h-32 flex flex-col justify-between`}>
-      <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-        <Icon className="w-16 h-16 transform rotate-12" />
-      </div>
-      <Icon className="w-8 h-8" />
-      <span className="font-bold relative z-10">{title}</span>
-    </div>
-  );
-
-  if (onClick) return <div onClick={onClick}>{Content}</div>;
-
-  return (
-    <Link href={href}>
-      {Content}
-    </Link>
   );
 }

@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useShiftStats } from "@/hooks/use-shifts";
@@ -11,7 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Trash2, Target, TrendingUp, TrendingDown, DollarSign, Edit2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { MonthlyExpense, FinancialGoal } from "@shared/schema";
+import type { MonthlyExpense, FinancialGoal as FinancialGoalType } from "@shared/schema";
+import { FinancialGoal } from "@/components/FinancialGoal"; // Importando o novo componente
+import { ElectrolyteCalculator } from "@/components/ElectrolyteCalculator"; // Importando a calculadora
 
 const EXPENSE_CATEGORIES = [
   "Moradia", "Alimentação", "Transporte", "Saúde", "Educação", 
@@ -24,13 +27,16 @@ export default function Finance() {
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<MonthlyExpense | null>(null);
-  const [editingGoal, setEditingGoal] = useState<FinancialGoal | null>(null);
+  const [editingGoal, setEditingGoal] = useState<FinancialGoalType | null>(null);
+
+  // Assume a meta mensal fixa por enquanto, idealmente viria do backend
+  const monthlyGoal = 15000;
 
   const { data: expenses = [] } = useQuery<MonthlyExpense[]>({
     queryKey: ['/api/monthly-expenses'],
   });
 
-  const { data: goals = [] } = useQuery<FinancialGoal[]>({
+  const { data: goals = [] } = useQuery<FinancialGoalType[]>({
     queryKey: ['/api/financial-goals'],
   });
 
@@ -162,6 +168,9 @@ export default function Finance() {
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8">
       <h1 className="text-3xl font-bold font-display text-foreground" data-testid="text-finance-title">Financeiro</h1>
       
+      {/* Seção da Meta Financeira Mensal */}
+      <FinancialGoal monthlyGoal={monthlyGoal} totalAccumulated={totalEarnings} />
+
       <div className="grid md:grid-cols-3 gap-6">
         <Card className="bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 border-none">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
@@ -198,6 +207,9 @@ export default function Finance() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Seção da Calculadora de Eletrólitos */}
+      <ElectrolyteCalculator />
 
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
