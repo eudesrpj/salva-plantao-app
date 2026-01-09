@@ -1,0 +1,116 @@
+Você é um engenheiro full-stack senior. Meu app “Salva Plantão” já tem uma “Calculadora Rápida” com layout em abas (Pedi | Adulto | Emerg | Hidra | Calc) e eu quero MANTER ESSE FORMATO exatamente como está (não unificar em uma única tela). Quero apenas melhorar muito a experiência e a capacidade de cálculo.
+
+OBJETIVO
+Melhorar a Calculadora Rápida mantendo as mesmas abas visuais, mas:
+1) tornar o cálculo mais completo (formas farmacêuticas, vias, diluição)
+2) puxar dados da biblioteca de medicações autorizadas pelo admin
+3) permitir que o admin cadastre novos parâmetros de cálculo e posologias
+4) mostrar resultado claro (mg, mL, gotas, comprimidos) e instruções de preparo quando EV/diluído
+5) travas/alertas por contraindicação e interação (motor de segurança)
+
+UX / UI (MANTER a mesma estrutura)
+- Manter topo com Peso (kg) e Idade (meses)
+- Manter botões/abas: Pedi, Adulto, Emerg, Hidra, Calc
+- Manter dropdown “Selecione a medicação”
+Melhorias:
+A) Validação instantânea:
+  - Peso obrigatório para Pedi e Emerg (quando cálculo por peso)
+  - Idade opcional, mas se preenchida pode sugerir faixa etária e dosagem
+  - Mostrar erros abaixo do campo (“Informe peso válido”, etc.)
+B) Quando selecionar uma medicação, abrir um painel de opções (sem mudar o layout base):
+  - Forma: gotas | xarope | comprimido | EV | IM | SC | nebulização | diluído em soro
+  - Objetivo: dose por tomada | dose diária | ataque | manutenção (se aplicável)
+  - Parâmetros extras quando necessário: concentração (mg/mL), gotejamento (20 gotas/mL ou 60 microgotas/mL), volume do soro (50/100/250/500 mL), tempo de infusão, dose máxima.
+C) Resultado em cards:
+  - “Dose em mg”
+  - “Volume em mL”
+  - “Gotas (se aplicável)”
+  - “Comprimidos (se aplicável)”
+  - “Preparo/Infusão” (se EV/diluído)
+  - Botões: Copiar resultado | Adicionar à prescrição | Imprimir (opcional)
+D) Persistência leve:
+  - Lembrar última aba usada e último gotejador selecionado (20 ou 60) por usuário.
+
+REGRAS DE ABA (sem unificar)
+- Aba Pedi: filtrar dropdown para meds com age_group = pediátrico ou ambos
+- Aba Adulto: filtrar para adulto ou ambos
+- Aba Emerg: mostrar somente meds marcados com tag “emergencia” (ou uma flag)
+- Aba Hidra: calculadora de hidratação (manter), mas permitir usar peso/idade e gerar prescrição de volume (ex.: mL/kg, manutenção, reposição)
+- Aba Calc: calculadoras gerais (IMC, ClCr, etc), manter separada
+
+BIBLIOTECA DE MEDICAÇÕES / POSOLOGIAS (Admin-control)
+Criar estrutura para “parâmetros de cálculo” por medicação e por aba/faixa etária:
+Tabelas/coleções sugeridas:
+1) dose_rules
+- id
+- medication_id
+- age_group (pediatrico|adulto|ambos)
+- context (pedi|adulto|emerg|hidra)  // para filtrar por aba
+- dose_type (mgkgdose | mgkgday | fixed_mg | mcgkgmin | mgm2 | etc)
+- dose_value (número)
+- interval_hours (ex.: 6, 8, 12, 24) ou texto livre quando variável
+- max_dose_mg (opcional)
+- max_dose_mgkg (opcional)
+- route_options (array: VO, EV, IM, SC, INAL)
+- concentration_options (array: “500mg/mL”, “50mg/mL”, etc)
+- notes (texto: “não exceder X”, “ajustar se renal”, etc)
+2) formulations
+- medication_id
+- form_type (gota|xarope|comprimido|ampola|frasco)
+- strength_label (ex.: 500mg/mL, 200mg/5mL, 500mg/cp)
+- strength_mg_per_ml (nullable)
+- strength_mg_per_unit (nullable) // comprimido/ampola
+- drops_per_ml (20 default; 60 para microgota quando aplicável)
+
+ADMIN UI (para cadastrar regras)
+No painel do Admin, criar:
+- “Calculadora > Regras de dose”
+  - selecionar medicação
+  - escolher aba (Pedi/Adulto/Emerg/Hidra)
+  - definir regra de dose (mg/kg/dose, mg/kg/dia, dose fixa etc)
+  - definir via e forma (gotas/xarope/comprimido/EV/diluído)
+  - definir concentração disponível e gotejador padrão
+  - definir máximos e alertas
+- Permitir ativar/desativar regra sem apagar
+- Garantir que o usuário só veja medicações/regras “autorizadas” pelo admin
+
+CÁLCULOS (detalhes)
+1) Se dose_type = mgkgdose:
+  dose_mg = peso_kg * dose_value
+  aplicar max_dose_mg se existir
+2) Se mgkgday:
+  dose_day_mg = peso_kg * dose_value
+  se tiver intervalo, dividir por número de tomadas/dia
+3) Para gotas:
+  mL = dose_mg / (mg_por_mL)
+  gotas = mL * gotas_por_mL
+4) Para xarope (mg/5mL):
+  mg_por_mL = (mg / 5)
+  mL = dose_mg / mg_por_mL
+5) Para comprimido:
+  unidades = dose_mg / mg_por_comprimido (arredondamento configurável: 0,5 ou 1)
+6) Para EV diluído:
+  - calcular dose_mg
+  - calcular volume_mL de medicação (se concentração conhecida)
+  - instrução: “diluir em X mL de SF e correr em Y min”
+  - se usar mcg/kg/min, calcular mg/h e mL/h
+7) Mostrar sempre: dose final + limites + arredondamentos aplicados + observações.
+
+SEGURANÇA (contraindicação/interação)
+Integrar com o motor de segurança:
+- ao selecionar medicação, rodar checagem com patient_context (idade/peso/gestação etc se disponível)
+- se gravidade = “contraindicada”: bloquear “Adicionar à prescrição” e mostrar alerta
+- se grave: pedir confirmação antes de adicionar
+- interações: se usuário já adicionou outras meds na prescrição em construção, alertar.
+
+INTEGRAÇÃO COM PRESCRIÇÃO
+- Botão “Adicionar à prescrição”:
+  - adiciona o item com dose/intervalo/via/formato e observações
+  - se usuário estiver em “Modificar prescrição”, incluir na lista editável
+- Botão “Copiar” copia em texto padronizado (bonito e curto)
+
+ENTREGA
+- Manter layout atual das abas (não unificar)
+- Implementar backend + UI + seeds iniciais de regras de dose para 20 meds comuns (pedi e adulto)
+- Adicionar testes de cálculo (gotas, xarope, comprimido, EV diluído)
+- Documentar: como admin cadastra regras e como usuário usa.

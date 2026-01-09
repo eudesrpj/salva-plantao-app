@@ -49,6 +49,8 @@ const EMERGENCY_MEDS = [
 interface CalculationResult {
   doseInMg: number;
   doseInMl: number | null;
+  doseInDrops: number | null;
+  doseInTablets: number | null;
   dosePerKg: number;
   maxDoseExceeded: boolean;
   maxDose: number;
@@ -58,6 +60,8 @@ interface CalculationResult {
   concentration: string | null;
   ageWarning: string | null;
   weightWarning: string | null;
+  dilutionInfo?: string | null;
+  dropsPerMl: number;
 }
 
 export function FloatingCalculator() {
@@ -76,6 +80,21 @@ export function FloatingCalculator() {
   const [calcPrevValue, setCalcPrevValue] = useState<number | null>(null);
   const [calcOperator, setCalcOperator] = useState<string | null>(null);
   const [calcWaitingForOperand, setCalcWaitingForOperand] = useState(false);
+  
+  const [dropsPerMl, setDropsPerMl] = useState<number>(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('calcDropsPerMl');
+      return saved ? parseInt(saved) : 20;
+    }
+    return 20;
+  });
+  const [lastTab, setLastTab] = useState<string>(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('calcLastTab') || 'pediatria';
+    }
+    return 'pediatria';
+  });
+  const [weightError, setWeightError] = useState<string | null>(null);
 
   const { data: customMeds } = useQuery<CalculatorSetting[]>({
     queryKey: ["/api/calculator-settings"],
@@ -130,17 +149,21 @@ export function FloatingCalculator() {
     if (!weight || !selectedAdultMedData) return null;
 
     const weightNum = parseFloat(weight);
-    const dosePerKg = parseFloat(selectedAdultMedData.dosePerKg?.split("-")[0] || "0");
-    const maxDose = parseFloat(selectedAdultMedData.maxDose || "9999");
+    const dosePerKgVal = parseFloat(selectedAdultMedData.dosePerKg?.split("-")[0] || "0");
+    const maxDoseVal = parseFloat(selectedAdultMedData.maxDose || "9999");
     
-    let dose = weightNum * dosePerKg;
-    const maxDoseExceeded = dose > maxDose;
+    let dose = weightNum * dosePerKgVal;
+    const maxDoseExceeded = dose > maxDoseVal;
     if (maxDoseExceeded) {
-      dose = maxDose;
+      dose = maxDoseVal;
     }
 
     let doseInMl: number | null = null;
+    let doseInDrops: number | null = null;
+    let doseInTablets: number | null = null;
     const concentration = selectedAdultMedData.concentration;
+    const form = selectedAdultMedData.pharmaceuticalForm?.toLowerCase() || "";
+    
     if (concentration) {
       const match = concentration.match(/(\d+(?:\.\d+)?)\s*(?:mg)\s*[/\\]\s*(\d+(?:\.\d+)?)\s*(?:ml)?/i);
       if (match) {
@@ -148,6 +171,18 @@ export function FloatingCalculator() {
         const mlPer = parseFloat(match[2]);
         if (mgPer && mlPer) {
           doseInMl = (dose * mlPer) / mgPer;
+          if (form.includes("gota")) {
+            doseInDrops = doseInMl * dropsPerMl;
+          }
+        }
+      }
+      if (form.includes("comprimido") || form.includes("cp")) {
+        const cpMatch = concentration.match(/(\d+(?:\.\d+)?)\s*mg/i);
+        if (cpMatch) {
+          const mgPerCp = parseFloat(cpMatch[1]);
+          if (mgPerCp) {
+            doseInTablets = dose / mgPerCp;
+          }
         }
       }
     }
@@ -155,17 +190,20 @@ export function FloatingCalculator() {
     return {
       doseInMg: dose,
       doseInMl,
-      dosePerKg,
+      doseInDrops,
+      doseInTablets,
+      dosePerKg: dosePerKgVal,
       maxDoseExceeded,
-      maxDose,
+      maxDose: maxDoseVal,
       unit: selectedAdultMedData.unit || "mg",
       interval: selectedAdultMedData.interval || "",
       pharmaceuticalForm: selectedAdultMedData.pharmaceuticalForm || "",
       concentration: selectedAdultMedData.concentration || null,
       ageWarning: null,
-      weightWarning: null
+      weightWarning: null,
+      dropsPerMl
     };
-  }, [weight, selectedAdultMedData]);
+  }, [weight, selectedAdultMedData, dropsPerMl]);
 
   const handleCalcDigit = (digit: string) => {
     if (calcWaitingForOperand) {
@@ -246,17 +284,21 @@ export function FloatingCalculator() {
 
     const weightNum = parseFloat(weight);
     const ageNum = ageMonths ? parseInt(ageMonths) : null;
-    const dosePerKg = parseFloat(selectedMedData.dosePerKg?.split("-")[0] || "0");
-    const maxDose = parseFloat(selectedMedData.maxDose || "9999");
+    const dosePerKgVal = parseFloat(selectedMedData.dosePerKg?.split("-")[0] || "0");
+    const maxDoseVal = parseFloat(selectedMedData.maxDose || "9999");
     
-    let dose = weightNum * dosePerKg;
-    const maxDoseExceeded = dose > maxDose;
+    let dose = weightNum * dosePerKgVal;
+    const maxDoseExceeded = dose > maxDoseVal;
     if (maxDoseExceeded) {
-      dose = maxDose;
+      dose = maxDoseVal;
     }
 
     let doseInMl: number | null = null;
+    let doseInDrops: number | null = null;
+    let doseInTablets: number | null = null;
     const concentration = selectedMedData.concentration;
+    const form = selectedMedData.pharmaceuticalForm?.toLowerCase() || "";
+    
     if (concentration) {
       const match = concentration.match(/(\d+(?:\.\d+)?)\s*(?:mg)\s*[/\\]\s*(\d+(?:\.\d+)?)\s*(?:ml)?/i);
       if (match) {
@@ -264,6 +306,9 @@ export function FloatingCalculator() {
         const mlPer = parseFloat(match[2]);
         if (mgPer && mlPer) {
           doseInMl = (dose * mlPer) / mgPer;
+          if (form.includes("gota") || form.includes("gotas")) {
+            doseInDrops = doseInMl * dropsPerMl;
+          }
         }
       } else {
         const simpleMatch = concentration.match(/(\d+(?:\.\d+)?)\s*(?:mg)\s*[/\\]\s*ml/i);
@@ -271,6 +316,18 @@ export function FloatingCalculator() {
           const mgPerMl = parseFloat(simpleMatch[1]);
           if (mgPerMl) {
             doseInMl = dose / mgPerMl;
+            if (form.includes("gota") || form.includes("gotas")) {
+              doseInDrops = doseInMl * dropsPerMl;
+            }
+          }
+        }
+      }
+      if (form.includes("comprimido") || form.includes("cp")) {
+        const cpMatch = concentration.match(/(\d+(?:\.\d+)?)\s*mg/i);
+        if (cpMatch) {
+          const mgPerCp = parseFloat(cpMatch[1]);
+          if (mgPerCp) {
+            doseInTablets = dose / mgPerCp;
           }
         }
       }
@@ -291,17 +348,20 @@ export function FloatingCalculator() {
     return {
       doseInMg: dose,
       doseInMl,
-      dosePerKg,
+      doseInDrops,
+      doseInTablets,
+      dosePerKg: dosePerKgVal,
       maxDoseExceeded,
-      maxDose,
+      maxDose: maxDoseVal,
       unit: selectedMedData.unit || "mg",
       interval: selectedMedData.interval || "",
       pharmaceuticalForm: selectedMedData.pharmaceuticalForm || "",
       concentration: selectedMedData.concentration || null,
       ageWarning,
-      weightWarning
+      weightWarning,
+      dropsPerMl
     };
-  }, [weight, ageMonths, selectedMedData]);
+  }, [weight, ageMonths, selectedMedData, dropsPerMl]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -383,13 +443,43 @@ export function FloatingCalculator() {
     if (calculation && selectedMed) {
       let text = `${selectedMed}: ${calculation.doseInMg.toFixed(1)} ${calculation.unit}`;
       if (calculation.doseInMl) {
-        text += ` (${calculation.doseInMl.toFixed(1)} ml)`;
+        text += ` (${calculation.doseInMl.toFixed(1)} ml`;
+        if (calculation.doseInDrops) {
+          text += ` = ${Math.round(calculation.doseInDrops)} gotas`;
+        }
+        text += `)`;
+      }
+      if (calculation.doseInTablets) {
+        text += ` (${calculation.doseInTablets.toFixed(1)} cp)`;
       }
       text += ` ${calculation.interval} (peso: ${weight}kg)`;
       navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleTabChange = (value: string) => {
+    setLastTab(value);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('calcLastTab', value);
+    }
+  };
+
+  const handleDropsPerMlChange = (value: number) => {
+    setDropsPerMl(value);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('calcDropsPerMl', value.toString());
+    }
+  };
+
+  const validateWeight = () => {
+    if (!weight || parseFloat(weight) <= 0) {
+      setWeightError("Informe um peso válido");
+      return false;
+    }
+    setWeightError(null);
+    return true;
   };
 
   const formatAge = (months: number): string => {
@@ -448,18 +538,30 @@ export function FloatingCalculator() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="calc-weight" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Peso (kg)
+                    Peso (kg) *
                   </Label>
                   <Input
                     id="calc-weight"
                     type="number"
                     step="0.1"
                     value={weight}
-                    onChange={(e) => setWeight(e.target.value)}
-                    className="h-10 text-center font-bold border-primary/20 focus-visible:ring-primary/30"
+                    onChange={(e) => {
+                      setWeight(e.target.value);
+                      if (e.target.value && parseFloat(e.target.value) > 0) {
+                        setWeightError(null);
+                      }
+                    }}
+                    onBlur={validateWeight}
+                    className={cn(
+                      "h-10 text-center font-bold border-primary/20 focus-visible:ring-primary/30",
+                      weightError && "border-red-500 focus-visible:ring-red-300"
+                    )}
                     placeholder="Ex: 12.5"
                     data-testid="input-calculator-weight"
                   />
+                  {weightError && (
+                    <p className="text-xs text-red-500 mt-1">{weightError}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="calc-age" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
@@ -483,7 +585,7 @@ export function FloatingCalculator() {
               )}
             </div>
 
-            <Tabs defaultValue="pediatria" className="w-full">
+            <Tabs defaultValue={lastTab} onValueChange={handleTabChange} className="w-full">
               <TabsList className="grid w-full grid-cols-5 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-none border-b border-slate-200 dark:border-slate-700">
                 <TabsTrigger value="pediatria" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
                   <Baby className="h-3 w-3" />
@@ -554,22 +656,62 @@ export function FloatingCalculator() {
                           </Badge>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-white dark:bg-slate-800 rounded-lg p-3 text-center">
-                            <div className="text-2xl font-bold text-primary">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-white dark:bg-slate-800 rounded-lg p-2 text-center">
+                            <div className="text-xl font-bold text-primary">
                               {calculation.doseInMg.toFixed(1)}
                             </div>
                             <div className="text-xs text-slate-500">{calculation.unit}</div>
                           </div>
                           {calculation.doseInMl && (
-                            <div className="bg-white dark:bg-slate-800 rounded-lg p-3 text-center">
-                              <div className="text-2xl font-bold text-emerald-600">
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2 text-center">
+                              <div className="text-xl font-bold text-emerald-600">
                                 {calculation.doseInMl.toFixed(1)}
                               </div>
                               <div className="text-xs text-slate-500">ml</div>
                             </div>
                           )}
+                          {calculation.doseInDrops && (
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2 text-center">
+                              <div className="text-xl font-bold text-amber-600">
+                                {Math.round(calculation.doseInDrops)}
+                              </div>
+                              <div className="text-xs text-slate-500">gotas</div>
+                            </div>
+                          )}
+                          {calculation.doseInTablets && (
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2 text-center">
+                              <div className="text-xl font-bold text-violet-600">
+                                {calculation.doseInTablets.toFixed(1)}
+                              </div>
+                              <div className="text-xs text-slate-500">comp</div>
+                            </div>
+                          )}
                         </div>
+                        
+                        {calculation.doseInDrops && (
+                          <div className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/50 rounded p-2">
+                            <span className="text-slate-500">Gotejador:</span>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant={dropsPerMl === 20 ? "default" : "outline"}
+                                className="h-6 px-2 text-xs"
+                                onClick={() => handleDropsPerMlChange(20)}
+                              >
+                                20 gts/ml
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={dropsPerMl === 60 ? "default" : "outline"}
+                                className="h-6 px-2 text-xs"
+                                onClick={() => handleDropsPerMlChange(60)}
+                              >
+                                60 mcgts/ml
+                              </Button>
+                            </div>
+                          </div>
+                        )}
 
                         <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-400">
                           <div className="flex items-center gap-1">
@@ -649,19 +791,35 @@ export function FloatingCalculator() {
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-white dark:bg-slate-800 rounded-lg p-3 text-center">
-                            <div className="text-2xl font-bold text-blue-600">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-white dark:bg-slate-800 rounded-lg p-2 text-center">
+                            <div className="text-xl font-bold text-blue-600">
                               {adultCalculation.doseInMg.toFixed(1)}
                             </div>
                             <div className="text-xs text-slate-500">{adultCalculation.unit}</div>
                           </div>
                           {adultCalculation.doseInMl && (
-                            <div className="bg-white dark:bg-slate-800 rounded-lg p-3 text-center">
-                              <div className="text-2xl font-bold text-emerald-600">
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2 text-center">
+                              <div className="text-xl font-bold text-emerald-600">
                                 {adultCalculation.doseInMl.toFixed(1)}
                               </div>
                               <div className="text-xs text-slate-500">ml</div>
+                            </div>
+                          )}
+                          {adultCalculation.doseInDrops && (
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2 text-center">
+                              <div className="text-xl font-bold text-amber-600">
+                                {Math.round(adultCalculation.doseInDrops)}
+                              </div>
+                              <div className="text-xs text-slate-500">gotas</div>
+                            </div>
+                          )}
+                          {adultCalculation.doseInTablets && (
+                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2 text-center">
+                              <div className="text-xl font-bold text-violet-600">
+                                {adultCalculation.doseInTablets.toFixed(1)}
+                              </div>
+                              <div className="text-xs text-slate-500">comp</div>
                             </div>
                           )}
                         </div>

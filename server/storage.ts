@@ -11,6 +11,7 @@ import {
   calculatorAllowedMeds, insertCalculatorAllowedMedSchema, dashboardConfig, insertDashboardConfigSchema,
   quickAccessConfig, insertQuickAccessConfigSchema, donationCauses, insertDonationCauseSchema,
   donations, insertDonationSchema, donationReceipts, insertDonationReceiptSchema,
+  doseRules, formulations,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -65,7 +66,9 @@ import {
   type QuickAccessConfig, type InsertQuickAccessConfig,
   type DonationCause, type InsertDonationCause,
   type Donation, type InsertDonation,
-  type DonationReceipt, type InsertDonationReceipt
+  type DonationReceipt, type InsertDonationReceipt,
+  type DoseRule, type InsertDoseRule,
+  type Formulation, type InsertFormulation
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, isNull } from "drizzle-orm";
@@ -214,6 +217,19 @@ export interface IStorage {
   createCalculatorSetting(item: InsertCalculatorSetting): Promise<CalculatorSetting>;
   updateCalculatorSetting(id: number, item: UpdateCalculatorSettingRequest): Promise<CalculatorSetting>;
   deleteCalculatorSetting(id: number): Promise<void>;
+
+  // Dose Rules
+  getDoseRules(context?: string): Promise<DoseRule[]>;
+  getDoseRulesByMedication(medicationName: string): Promise<DoseRule[]>;
+  createDoseRule(item: InsertDoseRule): Promise<DoseRule>;
+  updateDoseRule(id: number, item: Partial<InsertDoseRule>): Promise<DoseRule>;
+  deleteDoseRule(id: number): Promise<void>;
+
+  // Formulations
+  getFormulations(medicationName?: string): Promise<Formulation[]>;
+  createFormulation(item: InsertFormulation): Promise<Formulation>;
+  updateFormulation(id: number, item: Partial<InsertFormulation>): Promise<Formulation>;
+  deleteFormulation(id: number): Promise<void>;
 
   // Medications Library
   getMedications(ageGroup?: string): Promise<Medication[]>;
@@ -1204,6 +1220,61 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCalculatorSetting(id: number): Promise<void> {
     await db.delete(calculatorSettings).where(eq(calculatorSettings.id, id));
+  }
+
+  // Dose Rules
+  async getDoseRules(context?: string): Promise<DoseRule[]> {
+    const conditions = [eq(doseRules.isActive, true)];
+    if (context) {
+      conditions.push(eq(doseRules.context, context));
+    }
+    return await db.select().from(doseRules).where(and(...conditions)).orderBy(doseRules.medicationName);
+  }
+
+  async getDoseRulesByMedication(medicationName: string): Promise<DoseRule[]> {
+    return await db.select().from(doseRules)
+      .where(and(
+        eq(doseRules.isActive, true),
+        ilike(doseRules.medicationName, medicationName)
+      ))
+      .orderBy(doseRules.context);
+  }
+
+  async createDoseRule(insertItem: InsertDoseRule): Promise<DoseRule> {
+    const [item] = await db.insert(doseRules).values(insertItem).returning();
+    return item;
+  }
+
+  async updateDoseRule(id: number, updateItem: Partial<InsertDoseRule>): Promise<DoseRule> {
+    const [item] = await db.update(doseRules).set(updateItem).where(eq(doseRules.id, id)).returning();
+    return item;
+  }
+
+  async deleteDoseRule(id: number): Promise<void> {
+    await db.delete(doseRules).where(eq(doseRules.id, id));
+  }
+
+  // Formulations
+  async getFormulations(medicationName?: string): Promise<Formulation[]> {
+    const conditions = [eq(formulations.isActive, true)];
+    if (medicationName) {
+      conditions.push(ilike(formulations.medicationName, medicationName));
+    }
+    return await db.select().from(formulations).where(and(...conditions)).orderBy(formulations.medicationName);
+  }
+
+  async createFormulation(insertItem: InsertFormulation): Promise<Formulation> {
+    const [item] = await db.insert(formulations).values(insertItem).returning();
+    return item;
+  }
+
+  async updateFormulation(id: number, updateItem: Partial<InsertFormulation>): Promise<Formulation> {
+    const [item] = await db.update(formulations).set(updateItem).where(eq(formulations.id, id)).returning();
+    return item;
+  }
+
+  async deleteFormulation(id: number): Promise<void> {
+    await db.delete(formulations).where(eq(formulations.id, id));
   }
 
   // Medications Library

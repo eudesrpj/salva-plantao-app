@@ -179,6 +179,51 @@ export const insertCalculatorSettingSchema = createInsertSchema(calculatorSettin
 export type CalculatorSetting = typeof calculatorSettings.$inferSelect;
 export type InsertCalculatorSetting = z.infer<typeof insertCalculatorSettingSchema>;
 
+// Dose Rules (Regras de dose por medicação - Admin configurable)
+export const doseRules = pgTable("dose_rules", {
+  id: serial("id").primaryKey(),
+  medicationId: integer("medication_id").references(() => calculatorSettings.id),
+  medicationName: text("medication_name").notNull(),
+  ageGroup: text("age_group").notNull().default("ambos"), // pediatrico, adulto, ambos
+  context: text("context").notNull().default("pedi"), // pedi, adulto, emerg, hidra
+  doseType: text("dose_type").notNull().default("mgkgdose"), // mgkgdose, mgkgday, fixed_mg, mcgkgmin, mgm2
+  doseValue: decimal("dose_value").notNull(), // numeric dose value
+  intervalHours: integer("interval_hours"), // 6, 8, 12, 24
+  intervalText: text("interval_text"), // "6/6h", "8/8h", or custom text
+  maxDoseMg: decimal("max_dose_mg"), // Maximum dose in mg
+  maxDoseMgKg: decimal("max_dose_mg_kg"), // Maximum mg/kg
+  routeOptions: text("route_options").array(), // [VO, EV, IM, SC, INAL]
+  concentrationOptions: jsonb("concentration_options"), // Array: ["500mg/mL", "50mg/mL"]
+  notes: text("notes"),
+  isEmergency: boolean("is_emergency").default(false),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDoseRuleSchema = createInsertSchema(doseRules).omit({ id: true, createdAt: true });
+export type DoseRule = typeof doseRules.$inferSelect;
+export type InsertDoseRule = z.infer<typeof insertDoseRuleSchema>;
+
+// Formulations (Formas farmacêuticas - Admin configurable)
+export const formulations = pgTable("formulations", {
+  id: serial("id").primaryKey(),
+  medicationId: integer("medication_id").references(() => calculatorSettings.id),
+  medicationName: text("medication_name").notNull(),
+  formType: text("form_type").notNull(), // gota, xarope, comprimido, ampola, frasco
+  strengthLabel: text("strength_label").notNull(), // "500mg/mL", "200mg/5mL", "500mg/cp"
+  strengthMgPerMl: decimal("strength_mg_per_ml"), // mg per mL for liquids
+  strengthMgPerUnit: decimal("strength_mg_per_unit"), // mg per unit (tablet/ampule)
+  dropsPerMl: integer("drops_per_ml").default(20), // 20 for macro, 60 for micro
+  volumeOptions: text("volume_options").array(), // [50, 100, 250, 500] mL for dilution
+  isDefault: boolean("is_default").default(false),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFormulationSchema = createInsertSchema(formulations).omit({ id: true, createdAt: true });
+export type Formulation = typeof formulations.$inferSelect;
+export type InsertFormulation = z.infer<typeof insertFormulationSchema>;
+
 // Drug Interactions (Admin configurable)
 export const drugInteractions = pgTable("drug_interactions", {
   id: serial("id").primaryKey(),

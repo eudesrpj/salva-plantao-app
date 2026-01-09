@@ -1947,6 +1947,55 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(204).send();
   });
 
+  // --- Dose Rules (Admin configurable) ---
+  app.get("/api/dose-rules", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const context = req.query.context as string | undefined;
+    const items = await storage.getDoseRules(context);
+    res.json(items);
+  });
+
+  app.get("/api/dose-rules/medication/:name", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const items = await storage.getDoseRulesByMedication(req.params.name);
+    res.json(items);
+  });
+
+  app.post("/api/dose-rules", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.createDoseRule(req.body);
+    res.status(201).json(item);
+  });
+
+  app.put("/api/dose-rules/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.updateDoseRule(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/dose-rules/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteDoseRule(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // --- Formulations (Admin configurable) ---
+  app.get("/api/formulations", isAuthenticated, checkNotBlocked, async (req, res) => {
+    const medicationName = req.query.medication as string | undefined;
+    const items = await storage.getFormulations(medicationName);
+    res.json(items);
+  });
+
+  app.post("/api/formulations", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.createFormulation(req.body);
+    res.status(201).json(item);
+  });
+
+  app.put("/api/formulations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    const item = await storage.updateFormulation(Number(req.params.id), req.body);
+    res.json(item);
+  });
+
+  app.delete("/api/formulations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteFormulation(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // --- User Preferences ---
   app.get("/api/user-preferences", isAuthenticated, async (req, res) => {
     const prefs = await storage.getUserPreferences(getUserId(req));
