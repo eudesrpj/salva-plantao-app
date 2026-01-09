@@ -9,6 +9,7 @@ export interface IAuthStorage {
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserStatus(id: string, status: string): Promise<User>;
   updateUserRole(id: string, role: string): Promise<User>;
+  activateUserWithSubscription(id: string, expiresAt: Date): Promise<User>;
   getAllUsers(): Promise<User[]>;
 }
 
@@ -50,6 +51,19 @@ class AuthStorage implements IAuthStorage {
     const [user] = await db
       .update(users)
       .set({ role, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async activateUserWithSubscription(id: string, expiresAt: Date): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ 
+        status: "active", 
+        subscriptionExpiresAt: expiresAt,
+        updatedAt: new Date() 
+      })
       .where(eq(users.id, id))
       .returning();
     return user;

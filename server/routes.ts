@@ -38,9 +38,35 @@ export async function registerRoutes(
      const userId = getUserId(req);
      if (!userId) return res.status(401).json({ message: "Unauthorized" });
      const user = await authStorage.getUser(userId);
-     if (user?.status !== "active" && user?.role !== "admin") {
-        return res.status(403).json({ message: "Account pending payment or blocked" });
+     
+     // Admin always has access
+     if (user?.role === "admin") {
+        return next();
      }
+     
+     // Check if user is active
+     if (user?.status !== "active") {
+        return res.status(403).json({ 
+          message: "Conta pendente de pagamento ou bloqueada",
+          status: user?.status,
+          subscriptionExpired: false
+        });
+     }
+     
+     // Check subscription expiration
+     if (user?.subscriptionExpiresAt) {
+        const now = new Date();
+        const expiresAt = new Date(user.subscriptionExpiresAt);
+        if (expiresAt < now) {
+           return res.status(403).json({ 
+             message: "Assinatura expirada",
+             status: user.status,
+             subscriptionExpired: true,
+             expiresAt: user.subscriptionExpiresAt
+           });
+        }
+     }
+     
      next();
   };
 
@@ -69,6 +95,15 @@ export async function registerRoutes(
   app.patch("/api/admin/users/:id/role", isAuthenticated, checkAdmin, async (req, res) => {
     const { role } = req.body;
     const user = await authStorage.updateUserRole(req.params.id, role);
+    res.json(user);
+  });
+
+  // Activate user with subscription (sets status to active and subscription expiration)
+  app.patch("/api/admin/users/:id/activate", isAuthenticated, checkAdmin, async (req, res) => {
+    const { days = 30 } = req.body; // Default 30 days
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + days);
+    const user = await authStorage.activateUserWithSubscription(req.params.id, expiresAt);
     res.json(user);
   });
 

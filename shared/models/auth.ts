@@ -26,6 +26,7 @@ export const users = pgTable("users", {
   authProvider: text("auth_provider").default("replit"), // replit, local
   passwordHash: text("password_hash"), // For local auth only
   whatsapp: varchar("whatsapp", { length: 20 }), // WhatsApp phone number
+  subscriptionExpiresAt: timestamp("subscription_expires_at"), // Subscription expiration date
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
