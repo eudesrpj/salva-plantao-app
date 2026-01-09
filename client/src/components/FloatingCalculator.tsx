@@ -492,14 +492,14 @@ export function FloatingCalculator() {
 
   return (
     <>
-      <div className="fixed bottom-4 right-4 z-50 md:bottom-8 md:right-8 print:hidden">
+      <div className="fixed bottom-6 right-4 z-50 md:bottom-8 md:right-8 print:hidden">
         <Button 
           size="icon" 
           onClick={() => setOpen(!open)}
-          className="h-16 w-16 rounded-2xl shadow-2xl bg-gradient-to-br from-primary to-blue-600 hover:scale-105 transition-all duration-300 border-4 border-white/20"
+          className="h-14 w-14 rounded-full shadow-2xl bg-gradient-to-br from-primary to-blue-600 hover:scale-105 transition-all duration-300 border-4 border-white/20"
           data-testid="button-floating-calculator"
         >
-          <Calculator className="h-8 w-8 text-white" />
+          <Calculator className="h-7 w-7 text-white" />
         </Button>
       </div>
 

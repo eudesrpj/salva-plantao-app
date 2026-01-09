@@ -141,11 +141,11 @@ export function EmergencyButton() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
-          className="fixed bottom-6 right-6 h-16 w-16 rounded-full bg-red-600 hover:bg-red-700 shadow-2xl animate-pulse z-50"
+          className="fixed bottom-6 right-24 h-14 w-14 rounded-full bg-red-600 hover:bg-red-700 shadow-2xl animate-pulse z-50 md:bottom-8 md:right-28"
           size="icon"
           data-testid="emergency-button"
         >
-          <Zap className="h-8 w-8 text-white" />
+          <Zap className="h-7 w-7 text-white" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-4xl bg-slate-100 dark:bg-slate-950">

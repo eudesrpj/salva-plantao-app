@@ -1,7 +1,7 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Activity, ShieldCheck, Zap } from "lucide-react";
+import { Activity, ShieldCheck, Zap, RefreshCw } from "lucide-react";
 
 export default function Landing() {
   const { user, isLoading } = useAuth();
@@ -22,6 +22,10 @@ export default function Landing() {
     window.location.href = "/api/login";
   };
 
+  const handleSwitchAccount = () => {
+    window.location.href = "/api/logout?redirect=/api/login";
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 font-sans">
       <header className="container mx-auto px-6 py-6 flex justify-between items-center">
@@ -29,9 +33,20 @@ export default function Landing() {
           <Activity className="h-8 w-8 text-primary" />
           <span className="text-2xl font-bold font-display text-slate-900">Salva Plantão</span>
         </div>
-        <Button onClick={handleLogin} className="rounded-full px-8 shadow-lg hover:shadow-xl transition-all">
-          Entrar
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost" 
+            onClick={handleSwitchAccount} 
+            className="rounded-full px-4 gap-2"
+            data-testid="button-switch-account"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Mudar de Conta
+          </Button>
+          <Button onClick={handleLogin} className="rounded-full px-8 shadow-lg hover:shadow-xl transition-all">
+            Entrar
+          </Button>
+        </div>
       </header>
 
       <main className="container mx-auto px-6 pt-16 pb-24 text-center">
