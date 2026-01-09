@@ -58,6 +58,16 @@ Key database entities include: prescriptions, protocols, checklists, shifts, not
 - **Batch Operations**: Select multiple medications to activate, deactivate, delete, or export as CSV/JSON
 - **Pathology Medication Filter**: Filter medications by age group when assigning to pathologies
 
+### Version 2.2 Features (January 2026)
+- **Enhanced Floating Calculator**:
+  - Drops calculation (gotas) based on pharmaceutical form with macro (20 gts/ml) and micro (60 mcgts/ml) dropper toggle
+  - Tablet/comprimido calculation for pill forms showing number of tablets needed
+  - Tab persistence - remembers last used tab (Pedi, Adulto, Emerg, Hidra, Calc) in localStorage
+  - Dropper preference persistence in localStorage
+  - Weight validation with error message display
+  - Enhanced result cards showing mg, ml, drops, and tablets where applicable
+  - Improved copy function includes drops and tablet information
+
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)
 - **User Roles**: `user` (default) and `admin`
