@@ -63,6 +63,7 @@ const NAV_ITEMS = [
   { icon: Library, label: "Biblioteca", href: "/library" },
   { icon: StickyNote, label: "Anotações", href: "/notes" },
   { icon: Heart, label: "Doar", href: "/donate" },
+  { icon: MessageSquareText, label: "Notificações", href: "/notificacoes" },
   { icon: User, label: "Meu Perfil", href: "/profile" },
   { icon: Palette, label: "Personalizar", href: "/settings" },
 ];

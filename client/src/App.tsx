@@ -44,6 +44,7 @@ import ImportTemplates from "@/pages/ImportTemplates";
 import Donate from "@/pages/Donate";
 import Exams from "@/pages/Exams";
 import Chat from "@/pages/Chat";
+import Notifications from "@/pages/Notifications";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -208,6 +209,10 @@ function Router() {
 
       <Route path="/chat">
         <ProtectedRoute component={Chat} />
+      </Route>
+
+      <Route path="/notificacoes">
+        <ProtectedRoute component={Notifications} />
       </Route>
 
       <Route component={NotFound} />
