@@ -68,6 +68,17 @@ Key database entities include: prescriptions, protocols, checklists, shifts, not
   - Enhanced result cards showing mg, ml, drops, and tablets where applicable
   - Improved copy function includes drops and tablet information
 
+### Version 2.3 Features (January 2026)
+- **Internal Doctor Chat**:
+  - State-based groups (UF) - doctors automatically join their state's group upon first use
+  - Private DMs between doctors with contact management
+  - 24-hour message expiration for privacy/compliance
+  - Terms acceptance modal with UF selection on first access
+  - PII Content Guard with hard blocks (CPF, CNS, phone, email, address) and soft warnings for suspicious patterns
+  - Real-time WebSocket messaging with room subscriptions
+  - Database tables: chat_rooms, chat_room_members, chat_messages, chat_contacts, chat_blocked_messages
+  - User fields: uf (state), chatTermsAcceptedAt (terms acceptance timestamp)
+
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)
 - **User Roles**: `user` (default) and `admin`
