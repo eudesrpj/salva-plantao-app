@@ -113,6 +113,12 @@ Key database entities include: prescriptions, protocols, checklists, shifts, not
   - Endpoints: GET /api/one-time-messages, POST /api/one-time-messages/ack
   - Component: OneTimeMessageOverlay with fade-in animation, close button
   - Reads existing payments/donations tables without modifying Asaas integration
+- **Institutional Identity & Legal Protection**:
+  - About page (/sobre) with sections: About App, Terms of Commitment, Privacy Policy, Copyright, Brand/Property, Contact
+  - CreatorFooter updated with "© Salva Plantão", support email, and discrete "ERPJ" signature with tooltip
+  - Personal name references removed, replaced with institutional identity ("Apoio ao Plantonista" tagline)
+  - Copyright comments added to key frontend and backend files
+  - Support email: suporte@appsalvaplantao.com
 
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)
