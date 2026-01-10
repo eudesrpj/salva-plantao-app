@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { MessageCircle, Send, Users, Search, ArrowLeft, AlertTriangle, X, Plus, User } from "lucide-react";
+import { MessageCircle, Send, Users, Search, ArrowLeft, AlertTriangle, X, Plus, User, MapPin, Settings } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -71,6 +71,8 @@ export default function Chat() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingMessageConfirmed, setPendingMessageConfirmed] = useState(false);
+  const [showChangeUf, setShowChangeUf] = useState(false);
+  const [newUf, setNewUf] = useState<string>("");
 
   const { data: user } = useQuery<UserProfile>({
     queryKey: ["/api/auth/user"],
@@ -94,6 +96,11 @@ export default function Chat() {
   const { data: searchResults = [] } = useQuery<any[]>({
     queryKey: ["/api/chat/search-users", { q: searchQuery }],
     enabled: showSearch && searchQuery.length >= 2,
+  });
+
+  const { data: canChangeUfData } = useQuery<{ canChange: boolean; daysRemaining?: number }>({
+    queryKey: ["/api/chat/can-change-uf"],
+    enabled: !!user?.chatTermsAcceptedAt,
   });
 
   useEffect(() => {
@@ -179,6 +186,29 @@ export default function Chat() {
       toast({ title: "Erro", description: "Não foi possível iniciar conversa.", variant: "destructive" });
     },
   });
+
+  const changeUfMutation = useMutation({
+    mutationFn: async (uf: string) => {
+      return await apiRequest("POST", "/api/chat/change-uf", { uf });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/can-change-uf"] });
+      setShowChangeUf(false);
+      setNewUf("");
+      setSelectedRoom(null);
+      toast({ title: "Estado alterado", description: "Você foi movido para o novo grupo de estado." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro", description: error.message || "Não foi possível alterar o estado.", variant: "destructive" });
+    },
+  });
+
+  const handleChangeUf = () => {
+    if (!newUf) return;
+    changeUfMutation.mutate(newUf);
+  };
 
   const handleSendMessage = useCallback(() => {
     const trimmed = messageInput.trim();
@@ -297,16 +327,92 @@ export default function Chat() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showChangeUf} onOpenChange={setShowChangeUf}>
+        <DialogContent className="max-w-md" data-testid="dialog-change-uf">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              Alterar Estado (UF)
+            </DialogTitle>
+            <DialogDescription>
+              {canChangeUfData?.canChange ? (
+                "Você pode mudar de estado uma vez por mês. Ao mudar, você será removido do grupo atual e adicionado ao novo grupo."
+              ) : (
+                `Você poderá mudar de estado novamente em ${canChangeUfData?.daysRemaining || 0} dias.`
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {canChangeUfData?.canChange ? (
+            <>
+              <div className="py-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">Estado atual: {user?.uf || "Não definido"}</Badge>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Novo estado:</label>
+                  <Select value={newUf} onValueChange={setNewUf}>
+                    <SelectTrigger data-testid="select-new-uf-user">
+                      <SelectValue placeholder="Selecione o novo estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BRAZILIAN_STATES.filter(uf => uf !== user?.uf).map(uf => (
+                        <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setShowChangeUf(false)} data-testid="button-cancel-change-uf">
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleChangeUf} 
+                  disabled={!newUf || changeUfMutation.isPending}
+                  data-testid="button-confirm-change-uf"
+                >
+                  {changeUfMutation.isPending ? "Alterando..." : "Confirmar alteração"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowChangeUf(false)} data-testid="button-close-change-uf">
+                Fechar
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-1 min-h-0">
         <div className={`w-full md:w-80 border-r flex flex-col ${selectedRoom ? "hidden md:flex" : "flex"}`}>
           <div className="p-4 border-b flex items-center justify-between gap-2">
-            <h2 className="font-semibold flex items-center gap-2">
-              <MessageCircle className="h-5 w-5" />
-              Chat Médico
-            </h2>
-            <Button variant="ghost" size="icon" onClick={() => setShowSearch(true)} data-testid="button-new-chat">
-              <Plus className="h-4 w-4" />
-            </Button>
+            <div>
+              <h2 className="font-semibold flex items-center gap-2">
+                <MessageCircle className="h-5 w-5" />
+                Chat Médico
+              </h2>
+              {user?.uf && (
+                <button 
+                  onClick={() => setShowChangeUf(true)}
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1"
+                  data-testid="button-show-uf"
+                >
+                  <MapPin className="h-3 w-3" />
+                  {user.uf}
+                  {canChangeUfData?.canChange && <span className="text-primary">(alterar)</span>}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" onClick={() => setShowChangeUf(true)} data-testid="button-settings-uf">
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setShowSearch(true)} data-testid="button-new-chat">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <ScrollArea className="flex-1">
