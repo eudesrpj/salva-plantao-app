@@ -104,8 +104,10 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/login", (req, res, next) => {
     ensureStrategy(req.hostname);
+    const promptParam = req.query.prompt as string;
+    const prompt = promptParam === "select_account" ? "select_account" : "login consent";
     passport.authenticate(`replitauth:${req.hostname}`, {
-      prompt: "login consent",
+      prompt,
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
@@ -121,16 +123,24 @@ export async function setupAuth(app: Express) {
   app.get("/api/logout", (req, res) => {
     const redirectTo = req.query.redirect as string;
     req.logout(() => {
-      if (redirectTo === "/api/login") {
-        res.redirect("/api/login");
-      } else {
-        res.redirect(
-          client.buildEndSessionUrl(config, {
-            client_id: process.env.REPL_ID!,
-            post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-          }).href
-        );
-      }
+      res.redirect(
+        client.buildEndSessionUrl(config, {
+          client_id: process.env.REPL_ID!,
+          post_logout_redirect_uri: `${req.protocol}://${req.hostname}${redirectTo ? redirectTo : ''}`,
+        }).href
+      );
+    });
+  });
+
+  app.get("/api/switch-account", (req, res) => {
+    req.logout(() => {
+      const loginUrl = `/api/login?prompt=select_account`;
+      res.redirect(
+        client.buildEndSessionUrl(config, {
+          client_id: process.env.REPL_ID!,
+          post_logout_redirect_uri: `${req.protocol}://${req.hostname}${loginUrl}`,
+        }).href
+      );
     });
   });
 }

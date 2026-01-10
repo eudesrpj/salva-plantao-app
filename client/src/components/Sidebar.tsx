@@ -69,20 +69,9 @@ function NavContent({ onClose }: { onClose?: () => void }) {
   const { user, logout } = useAuth();
 
   const handleSwitchAccount = () => {
-    // Limpa toda a sessão local para garantir que nenhum token antigo permaneça
     localStorage.clear();
     sessionStorage.clear();
-    
-    // Constrói a URL de logout que redireciona para o login com os parâmetros corretos
-    const loginUrl = new URL('/api/login', window.location.origin);
-    loginUrl.searchParams.set('prompt', 'select_account');
-    loginUrl.searchParams.set('ui_locales', 'pt-BR');
-
-    const logoutUrl = new URL('/api/logout', window.location.origin);
-    logoutUrl.searchParams.set('redirect', loginUrl.pathname + loginUrl.search);
-    
-    // Redireciona para o fluxo de logout -> login
-    window.location.href = logoutUrl.toString();
+    window.location.href = '/api/switch-account';
   };
 
   return (
