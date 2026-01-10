@@ -27,6 +27,26 @@ export async function registerRoutes(
 
   const getUserId = (req: any) => req.user?.claims?.sub;
   
+  // Track user activity (lastSeen, sessions) - called on authenticated routes
+  const trackUserActivity = async (req: any, res: any, next: any) => {
+    const userId = getUserId(req);
+    if (userId) {
+      // Check if this is a new session (check session flag)
+      const sessionKey = `tracked_session_${userId}`;
+      if (!req.session?.[sessionKey]) {
+        // New session - increment session count
+        await storage.incrementSessionCount(userId).catch(() => {});
+        if (req.session) {
+          req.session[sessionKey] = true;
+        }
+      } else {
+        // Just update lastSeen
+        await storage.updateLastSeen(userId).catch(() => {});
+      }
+    }
+    next();
+  };
+  
   const checkAdmin = async (req: any, res: any, next: any) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -106,6 +126,149 @@ export async function registerRoutes(
     expiresAt.setDate(expiresAt.getDate() + days);
     const user = await authStorage.activateUserWithSubscription(req.params.id, expiresAt);
     res.json(user);
+  });
+
+  // --- Enhanced User Management ---
+  // Get detailed user info (profile, usage stats, coupons, billing)
+  app.get("/api/admin/users/:id/details", isAuthenticated, checkAdmin, async (req, res) => {
+    const userId = req.params.id;
+    const user = await authStorage.getUser(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    
+    const [adminProfile, usageStats, couponUsage, billingStatus] = await Promise.all([
+      storage.getUserAdminProfile(userId),
+      storage.getUserUsageStats(userId),
+      storage.getUserCouponUsage(userId),
+      storage.getUserBillingStatus(userId)
+    ]);
+    
+    res.json({
+      user,
+      adminProfile,
+      usageStats,
+      couponUsage,
+      billingStatus
+    });
+  });
+
+  // Update user admin profile (tags, flags, notes)
+  app.patch("/api/admin/users/:id/profile", isAuthenticated, checkAdmin, async (req, res) => {
+    const { tags, isGoodUser, isRiskUser, adminNotes, isBlocked } = req.body;
+    const profile = await storage.upsertUserAdminProfile({
+      userId: req.params.id,
+      tags: tags || [],
+      isGoodUser: isGoodUser ?? false,
+      isRiskUser: isRiskUser ?? false,
+      adminNotes: adminNotes || "",
+      isBlocked: isBlocked ?? false
+    });
+    res.json(profile);
+  });
+
+  // Add coupon usage for a user
+  app.post("/api/admin/users/:id/coupon", isAuthenticated, checkAdmin, async (req, res) => {
+    const { couponCode, campaign } = req.body;
+    if (!couponCode) return res.status(400).json({ message: "couponCode required" });
+    const usage = await storage.createUserCouponUsage({
+      userId: req.params.id,
+      couponCode,
+      campaign
+    });
+    res.json(usage);
+  });
+
+  // Get all unique coupon codes for dropdown
+  app.get("/api/admin/coupons", isAuthenticated, checkAdmin, async (req, res) => {
+    const codes = await storage.getAllCouponCodes();
+    res.json(codes);
+  });
+
+  // Update user billing status (read-only cache from ASAAS)
+  app.patch("/api/admin/users/:id/billing", isAuthenticated, checkAdmin, async (req, res) => {
+    const { asaasCustomerId, asaasSubscriptionId, planName, nextDueDate, lastPaymentDate, status, overdueDays } = req.body;
+    const billing = await storage.upsertUserBillingStatus({
+      userId: req.params.id,
+      asaasCustomerId,
+      asaasSubscriptionId,
+      planName,
+      nextDueDate: nextDueDate ? new Date(nextDueDate) : null,
+      lastPaymentDate: lastPaymentDate ? new Date(lastPaymentDate) : null,
+      status,
+      overdueDays
+    });
+    res.json(billing);
+  });
+
+  // Get all users with enhanced details for list view
+  app.get("/api/admin/users-enhanced", isAuthenticated, checkAdmin, async (req, res) => {
+    const { search, status, role, tag, hasQualityFlag, sortBy, sortOrder } = req.query;
+    const allUsers = await authStorage.getAllUsers();
+    
+    // Fetch all usage stats in parallel
+    const usageStatsMap = new Map<string, any>();
+    const adminProfilesMap = new Map<string, any>();
+    
+    await Promise.all(allUsers.map(async (u) => {
+      const [stats, profile] = await Promise.all([
+        storage.getUserUsageStats(u.id),
+        storage.getUserAdminProfile(u.id)
+      ]);
+      if (stats) usageStatsMap.set(u.id, stats);
+      if (profile) adminProfilesMap.set(u.id, profile);
+    }));
+    
+    let filtered = allUsers.map(u => ({
+      ...u,
+      usageStats: usageStatsMap.get(u.id) || null,
+      adminProfile: adminProfilesMap.get(u.id) || null
+    }));
+    
+    // Apply filters
+    if (search && typeof search === "string") {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter(u => 
+        u.email?.toLowerCase().includes(searchLower) ||
+        u.firstName?.toLowerCase().includes(searchLower) ||
+        u.lastName?.toLowerCase().includes(searchLower)
+      );
+    }
+    if (status && typeof status === "string") {
+      filtered = filtered.filter(u => u.status === status);
+    }
+    if (role && typeof role === "string") {
+      filtered = filtered.filter(u => u.role === role);
+    }
+    if (tag && typeof tag === "string") {
+      filtered = filtered.filter(u => u.adminProfile?.tags?.includes(tag));
+    }
+    if (hasQualityFlag && typeof hasQualityFlag === "string") {
+      const flag = hasQualityFlag === "isGoodUser" ? "isGoodUser" : hasQualityFlag === "isRiskUser" ? "isRiskUser" : null;
+      if (flag) {
+        filtered = filtered.filter(u => u.adminProfile?.[flag] === true);
+      }
+    }
+    
+    // Sorting
+    if (sortBy && typeof sortBy === "string") {
+      filtered.sort((a, b) => {
+        let aVal: number, bVal: number;
+        if (sortBy === "lastSeen") {
+          aVal = a.usageStats?.lastSeenAt ? new Date(a.usageStats.lastSeenAt).getTime() : 0;
+          bVal = b.usageStats?.lastSeenAt ? new Date(b.usageStats.lastSeenAt).getTime() : 0;
+        } else if (sortBy === "sessions") {
+          aVal = a.usageStats?.sessionsCount || 0;
+          bVal = b.usageStats?.sessionsCount || 0;
+        } else if (sortBy === "createdAt") {
+          aVal = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          bVal = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        } else {
+          return 0;
+        }
+        return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+      });
+    }
+    
+    res.json(filtered);
   });
 
   // --- Admin Settings ---
@@ -1051,7 +1214,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Prescriptions ---
-  app.get(api.prescriptions.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.prescriptions.list.path, isAuthenticated, checkNotBlocked, trackUserActivity, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getPrescriptions(getUserId(req), ageGroup);
     res.json(items);
