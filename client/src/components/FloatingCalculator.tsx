@@ -1063,6 +1063,18 @@ export function FloatingCalculator() {
                             data-testid="input-elec-urea"
                           />
                         </div>
+                        <div>
+                          <Label className="text-xs">Creatinina (mg/dL)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={elecCreatinine}
+                            onChange={(e) => setElecCreatinine(e.target.value)}
+                            className="h-8 text-sm"
+                            placeholder="0.6-1.2"
+                            data-testid="input-elec-creatinine"
+                          />
+                        </div>
                       </div>
                     </div>
 
