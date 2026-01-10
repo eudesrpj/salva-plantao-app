@@ -1,0 +1,182 @@
+Quero atualizar o botão “Emergência” do app para abrir um painel flutuante arrastável (draggable) que funcione bem no celular, sem ocupar a tela toda, com botão X para fechar sempre visível, e com configuração completa no painel do administrador para controlar o conteúdo desse painel.
+
+0) Regras obrigatórias (anti-bug)
+
+Não reescreva o projeto inteiro. Faça mudanças mínimas e isoladas.
+
+Não mude dependências sem necessidade. Evite libs novas. Se precisar, justifique e mantenha opcional.
+
+Não quebre rotas, autenticação, layout atual, nem tema.
+
+Preserve padrões existentes (componentes, hooks, services, pasta structure).
+
+Tudo deve funcionar em mobile: toque, arraste, scroll, e fechar.
+
+O painel de emergência não pode travar a tela e não pode virar fullscreen em telas pequenas.
+
+O painel deve respeitar safe-area e ficar sempre dentro da viewport (sem escapar pra fora).
+
+Se der erro, use fallback (ex: abrir modal simples) mas sempre com botão fechar.
+
+1) UI: Painel flutuante (draggable + fechável)
+Comportamento
+
+Ao clicar no botão “Emergência”, abrir um painel flutuante com:
+
+Header (área de arrastar), título “Emergência”, e botão X.
+
+Conteúdo com lista de itens (medicações e atalhos).
+
+Conteúdo com scroll interno se passar do tamanho.
+
+O painel deve ser:
+
+Arrastável por mouse e por toque (Pointer Events).
+
+Clamp de posição: nunca sair da tela (clamp x/y).
+
+Tamanho recomendado: largura ~320px; altura ~420px; com maxWidth/ maxHeight responsivos.
+
+Ao rotacionar tela ou redimensionar, reposicionar/clamp automaticamente.
+
+Fechar painel:
+
+Clicar no X
+
+Clicar fora (backdrop)
+
+Tecla ESC no desktop (se existir)
+
+Não permitir que o clique dentro do painel feche por acidente.
+
+Implementação pedida
+
+Criar um componente isolado tipo EmergencyFloatingPanel e integrá-lo ao botão atual.
+
+Evitar mexer no restante. Apenas substituir o “abre modal/tela cheia” por esse painel.
+
+Garantir que no mobile o arraste não conflite com o scroll (arraste só no header).
+
+2) Admin: Configuração total do conteúdo do botão Emergência
+
+Adicionar ao painel do administrador uma seção “Emergência” com ferramentas para:
+
+Adicionar/remover itens no painel de emergência
+
+Selecionar o tipo do item: med | protocol | calc | shortcut
+
+Campos do item:
+
+label (obrigatório)
+
+subtitle (opcional)
+
+enabled (toggle)
+
+adultOnly / pedOnly (opcional)
+
+order (ordenação drag-and-drop se já existir infra, senão botões subir/descer)
+
+payload (JSON opcional: dose, texto, link, template)
+
+Filtrar quais itens aparecem por categoria (adulto/pediatria), respeitando a lógica já existente no app.
+
+Salvar tudo em uma coleção/tabela emergency_panel_items.
+
+Carregar esses itens no app do usuário em tempo de execução (ou cache) e renderizar no painel.
+
+Dados (modelo sugerido)
+
+emergency_panel_items:
+
+id
+
+label (string)
+
+subtitle (string?)
+
+kind (enum)
+
+enabled (bool)
+
+adultOnly (bool)
+
+pedOnly (bool)
+
+order (int)
+
+payload (json)
+
+updatedAt
+
+3) Integração com medicações do app (sem duplicar)
+
+Se o app já tem “biblioteca de medicações”, permita que um item de emergência do tipo med referencie um medicationId.
+
+Se não existir referência pronta, crie compatibilidade simples:
+
+payload: { medicationId: "..." }
+
+Ao clicar numa medicação no painel:
+
+abrir o detalhe (se já existir)
+
+ou copiar/colar dose/template na prescrição (se já existir)
+
+se não existir ação, mostrar um toast com o conteúdo do payload (fallback seguro).
+
+4) Tarefas objetivas (faça nessa ordem)
+
+Localize o botão/rota atual de “Emergência” e identifique onde abre a tela cheia.
+
+Crie EmergencyFloatingPanel e substitua o comportamento.
+
+Crie CRUD do admin para emergency_panel_items:
+
+listagem
+
+criar/editar
+
+habilitar/desabilitar
+
+ordenar
+
+Conecte no front do usuário:
+
+carregar itens habilitados ordenados
+
+filtrar por adulto/ped conforme regra do app
+
+Testes manuais e correções.
+
+5) Checklist de QA (obrigatório antes de concluir)
+
+ Abrir e fechar no desktop: OK
+
+ Abrir e fechar no mobile: OK (sem fullscreen)
+
+ Botão X sempre acessível: OK
+
+ Arrastar com dedo e com mouse: OK
+
+ Scroll interno funciona: OK
+
+ Painel não sai da tela: OK
+
+ Admin salva, edita, desabilita e ordena itens: OK
+
+ Usuário vê itens atualizados sem quebrar login/rotas: OK
+
+ Sem erros no console e sem regressões em páginas existentes: OK
+
+6) Entrega final
+
+Quando terminar:
+
+Liste exatamente quais arquivos foram criados/alterados.
+
+Explique como testar rapidamente (3 passos).
+
+Se precisou criar tabela/collection, mostre o script/migration ou o caminho no backend.
+
+Importante: não inventar features extras agora. Faça só isso com estabilidade máxima.

@@ -1181,3 +1181,21 @@ export const insertDonationReceiptSchema = createInsertSchema(donationReceipts, 
 }).omit({ id: true, createdAt: true });
 export type DonationReceipt = typeof donationReceipts.$inferSelect;
 export type InsertDonationReceipt = z.infer<typeof insertDonationReceiptSchema>;
+
+// Emergency Panel Items (Admin configurable emergency shortcuts)
+export const emergencyPanelItems = pgTable("emergency_panel_items", {
+  id: serial("id").primaryKey(),
+  label: text("label").notNull(),
+  subtitle: text("subtitle"),
+  kind: text("kind").notNull().default("med"), // med, protocol, calc, shortcut
+  enabled: boolean("enabled").default(true),
+  adultOnly: boolean("adult_only").default(false),
+  pedOnly: boolean("ped_only").default(false),
+  sortOrder: integer("sort_order").default(0),
+  payload: jsonb("payload"), // { medicationId, dose, template, link, etc. }
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertEmergencyPanelItemSchema = createInsertSchema(emergencyPanelItems).omit({ id: true, updatedAt: true });
+export type EmergencyPanelItem = typeof emergencyPanelItems.$inferSelect;
+export type InsertEmergencyPanelItem = z.infer<typeof insertEmergencyPanelItemSchema>;

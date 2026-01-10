@@ -11,7 +11,7 @@ import {
   calculatorAllowedMeds, insertCalculatorAllowedMedSchema, dashboardConfig, insertDashboardConfigSchema,
   quickAccessConfig, insertQuickAccessConfigSchema, donationCauses, insertDonationCauseSchema,
   donations, insertDonationSchema, donationReceipts, insertDonationReceiptSchema,
-  doseRules, formulations,
+  doseRules, formulations, emergencyPanelItems, insertEmergencyPanelItemSchema,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -68,7 +68,8 @@ import {
   type Donation, type InsertDonation,
   type DonationReceipt, type InsertDonationReceipt,
   type DoseRule, type InsertDoseRule,
-  type Formulation, type InsertFormulation
+  type Formulation, type InsertFormulation,
+  type EmergencyPanelItem, type InsertEmergencyPanelItem
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, isNull } from "drizzle-orm";
@@ -439,6 +440,14 @@ export interface IStorage {
   // Donation Receipts
   getDonationReceipts(donationId: number): Promise<DonationReceipt[]>;
   createDonationReceipt(item: InsertDonationReceipt): Promise<DonationReceipt>;
+
+  // Emergency Panel Items
+  getEmergencyPanelItems(): Promise<EmergencyPanelItem[]>;
+  getEmergencyPanelItem(id: number): Promise<EmergencyPanelItem | undefined>;
+  createEmergencyPanelItem(item: InsertEmergencyPanelItem): Promise<EmergencyPanelItem>;
+  updateEmergencyPanelItem(id: number, item: Partial<InsertEmergencyPanelItem>): Promise<EmergencyPanelItem>;
+  deleteEmergencyPanelItem(id: number): Promise<void>;
+  reorderEmergencyPanelItems(items: { id: number; sortOrder: number }[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2398,6 +2407,41 @@ export class DatabaseStorage implements IStorage {
   async createDonationReceipt(item: InsertDonationReceipt): Promise<DonationReceipt> {
     const [created] = await db.insert(donationReceipts).values(item).returning();
     return created;
+  }
+
+  // Emergency Panel Items
+  async getEmergencyPanelItems(): Promise<EmergencyPanelItem[]> {
+    return await db.select().from(emergencyPanelItems).orderBy(emergencyPanelItems.sortOrder);
+  }
+
+  async getEmergencyPanelItem(id: number): Promise<EmergencyPanelItem | undefined> {
+    const [item] = await db.select().from(emergencyPanelItems).where(eq(emergencyPanelItems.id, id));
+    return item;
+  }
+
+  async createEmergencyPanelItem(item: InsertEmergencyPanelItem): Promise<EmergencyPanelItem> {
+    const [created] = await db.insert(emergencyPanelItems).values(item).returning();
+    return created;
+  }
+
+  async updateEmergencyPanelItem(id: number, item: Partial<InsertEmergencyPanelItem>): Promise<EmergencyPanelItem> {
+    const [updated] = await db.update(emergencyPanelItems)
+      .set({ ...item, updatedAt: new Date() })
+      .where(eq(emergencyPanelItems.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEmergencyPanelItem(id: number): Promise<void> {
+    await db.delete(emergencyPanelItems).where(eq(emergencyPanelItems.id, id));
+  }
+
+  async reorderEmergencyPanelItems(items: { id: number; sortOrder: number }[]): Promise<void> {
+    for (const item of items) {
+      await db.update(emergencyPanelItems)
+        .set({ sortOrder: item.sortOrder, updatedAt: new Date() })
+        .where(eq(emergencyPanelItems.id, item.id));
+    }
   }
 }
 

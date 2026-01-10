@@ -576,6 +576,64 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
+  // Emergency Panel Items
+  app.get("/api/emergency-panel-items", isAuthenticated, async (req, res) => {
+    try {
+      const items = await storage.getEmergencyPanelItems();
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar itens de emergência" });
+    }
+  });
+
+  app.get("/api/emergency-panel-items/:id", isAuthenticated, async (req, res) => {
+    try {
+      const item = await storage.getEmergencyPanelItem(parseInt(req.params.id));
+      if (!item) return res.status(404).json({ message: "Item não encontrado" });
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar item" });
+    }
+  });
+
+  app.post("/api/admin/emergency-panel-items", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const item = await storage.createEmergencyPanelItem(req.body);
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao criar item de emergência" });
+    }
+  });
+
+  app.patch("/api/admin/emergency-panel-items/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const item = await storage.updateEmergencyPanelItem(parseInt(req.params.id), req.body);
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao atualizar item" });
+    }
+  });
+
+  app.delete("/api/admin/emergency-panel-items/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      await storage.deleteEmergencyPanelItem(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao excluir item" });
+    }
+  });
+
+  app.post("/api/admin/emergency-panel-items/reorder", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const { items } = req.body;
+      if (!Array.isArray(items)) return res.status(400).json({ message: "items deve ser um array" });
+      await storage.reorderEmergencyPanelItems(items);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao reordenar itens" });
+    }
+  });
+
   // Donations
   app.get("/api/donations", isAuthenticated, async (req, res) => {
     try {
