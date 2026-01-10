@@ -47,13 +47,17 @@ self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {};
   
   const title = data.title || 'Salva Plantão';
+  const isEmergency = data.category === 'emergency';
+  
   const options = {
     body: data.body || 'Nova notificação',
     icon: data.icon || '/icon-512.png',
     badge: data.badge || '/icon-512.png',
-    data: { url: data.url || '/' },
-    vibrate: [100, 50, 100],
-    requireInteraction: true
+    data: { url: data.url || '/notificacoes', category: data.category },
+    vibrate: isEmergency ? [200, 100, 200, 100, 200] : [100, 50, 100],
+    requireInteraction: true,
+    tag: isEmergency ? 'emergency' : 'general',
+    renotify: isEmergency,
   };
   
   event.waitUntil(
