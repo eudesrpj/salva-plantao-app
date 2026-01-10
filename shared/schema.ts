@@ -1366,3 +1366,16 @@ export const userBillingStatus = pgTable("user_billing_status", {
 export const insertUserBillingStatusSchema = createInsertSchema(userBillingStatus).omit({ updatedAt: true });
 export type UserBillingStatus = typeof userBillingStatus.$inferSelect;
 export type InsertUserBillingStatus = z.infer<typeof insertUserBillingStatusSchema>;
+
+// User One-Time Messages (controls which messages have been shown)
+export const userOneTimeMessages = pgTable("user_one_time_messages", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  paymentWelcomeShown: boolean("payment_welcome_shown").default(false),
+  donationThanksShown: boolean("donation_thanks_shown").default(false),
+  lastDonationAckedId: integer("last_donation_acked_id"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserOneTimeMessagesSchema = createInsertSchema(userOneTimeMessages).omit({ updatedAt: true });
+export type UserOneTimeMessages = typeof userOneTimeMessages.$inferSelect;
+export type InsertUserOneTimeMessages = z.infer<typeof insertUserOneTimeMessagesSchema>;

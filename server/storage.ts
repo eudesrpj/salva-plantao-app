@@ -82,7 +82,8 @@ import {
   userAdminProfiles, type UserAdminProfile, type InsertUserAdminProfile,
   userUsageStats, type UserUsageStats, type InsertUserUsageStats,
   userCouponUsage, type UserCouponUsage, type InsertUserCouponUsage,
-  userBillingStatus, type UserBillingStatus, type InsertUserBillingStatus
+  userBillingStatus, type UserBillingStatus, type InsertUserBillingStatus,
+  userOneTimeMessages, type UserOneTimeMessages, type InsertUserOneTimeMessages
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, isNull, lt, gte, gt, inArray, ne } from "drizzle-orm";
@@ -485,6 +486,12 @@ export interface IStorage {
   // User Billing Status
   getUserBillingStatus(userId: string): Promise<UserBillingStatus | undefined>;
   upsertUserBillingStatus(data: InsertUserBillingStatus): Promise<UserBillingStatus>;
+
+  // User One-Time Messages
+  getUserOneTimeMessages(userId: string): Promise<UserOneTimeMessages | undefined>;
+  upsertUserOneTimeMessages(userId: string, data: Partial<InsertUserOneTimeMessages>): Promise<UserOneTimeMessages>;
+  getLastUnackedDonation(userId: string, lastAckedId?: number | null): Promise<{ donation: Donation; causeName: string } | null>;
+  hasConfirmedPayment(userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3160,6 +3167,52 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(userBillingStatus).values(data).returning();
     return created;
+  }
+
+  // --- User One-Time Messages ---
+  async getUserOneTimeMessages(userId: string): Promise<UserOneTimeMessages | undefined> {
+    const [record] = await db.select().from(userOneTimeMessages).where(eq(userOneTimeMessages.userId, userId));
+    return record;
+  }
+
+  async upsertUserOneTimeMessages(userId: string, data: Partial<InsertUserOneTimeMessages>): Promise<UserOneTimeMessages> {
+    const existing = await this.getUserOneTimeMessages(userId);
+    if (existing) {
+      const [updated] = await db.update(userOneTimeMessages)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(userOneTimeMessages.userId, userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(userOneTimeMessages).values({ userId, ...data }).returning();
+    return created;
+  }
+
+  async getLastUnackedDonation(userId: string, lastAckedId?: number | null): Promise<{ donation: Donation; causeName: string } | null> {
+    const conditions = [
+      eq(donations.userId, userId),
+      eq(donations.status, "PAID")
+    ];
+    if (lastAckedId) {
+      conditions.push(gt(donations.id, lastAckedId));
+    }
+    
+    const [donation] = await db.select().from(donations)
+      .where(and(...conditions))
+      .orderBy(desc(donations.paidAt))
+      .limit(1);
+    
+    if (!donation) return null;
+    
+    const cause = await this.getDonationCause(donation.causeId);
+    return { donation, causeName: cause?.title || "Causa social" };
+  }
+
+  async hasConfirmedPayment(userId: string): Promise<boolean> {
+    const [payment] = await db.select().from(payments)
+      .where(and(eq(payments.userId, userId), eq(payments.status, "paid")))
+      .limit(1);
+    return !!payment;
   }
 }
 

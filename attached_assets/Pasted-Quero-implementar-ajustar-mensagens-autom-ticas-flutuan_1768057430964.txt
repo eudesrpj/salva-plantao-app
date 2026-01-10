@@ -1,0 +1,116 @@
+Quero implementar/ajustar mensagens automáticas flutuantes (uma única vez) para (1) pagamento confirmado e (2) doação confirmada, mantendo o app web exatamente como está, sem quebrar nada, sem pesar e sem mexer na integração existente de pagamentos/doações (Asaas ou qualquer outra). Faça tudo de forma organizada, aditiva e com mudanças mínimas.
+
+CONTEXTO
+- App web: React + Vite (frontend) + Express + TypeScript (backend)
+- Pagamentos e doações já funcionam hoje
+- Quero apenas reagir aos eventos “pagamento confirmado” e “doação confirmada”
+- Mensagens aparecem UMA vez por usuário por evento, flutuantes, com botão “Fechar”
+- Personagem: usar a mesma imagem fornecida (não criar novos assets agora)
+
+REGRAS OBRIGATÓRIAS
+1) NÃO refatorar nem alterar lógica do Asaas/pagamentos/doações. Apenas ler dados já existentes e/ou ouvir os eventos já existentes.
+2) NÃO mudar rotas/fluxo do app. Apenas adicionar componentes e endpoints isolados.
+3) Implementação leve: sem libs pesadas, sem animações exageradas, sem loops de polling. Use chamadas simples quando o usuário entrar no app/painel.
+4) Garantir que npm run dev e npm run build continuam funcionando.
+5) Segurança: nunca exibir dados sensíveis; mensagens são genéricas.
+
+OBJETIVO 1 — MENSAGEM PÓS-PAGAMENTO (ASSINATURA)
+- Exibir automaticamente UMA ÚNICA VEZ após confirmação de pagamento/assinatura para o usuário.
+Título:
+"Bem-vindo ao plantão! 👋"
+Texto:
+"Obrigado por confiar no Salva Plantão.
+Agora você tem mais agilidade, mais segurança
+e menos dor de cabeça no plantão.
+Bora trabalhar juntos. 💪🩺"
+
+OBJETIVO 2 — MENSAGEM PÓS-DOAÇÃO (CAUSA SOCIAL)
+IMPORTANTE: Doação é para CAUSAS SOCIAIS. 100% do valor arrecadado, descontados apenas custos operacionais e impostos, será doado.
+- Exibir automaticamente UMA ÚNICA VEZ após confirmação da doação para o usuário.
+- A mensagem deve incluir o NOME DA CAUSA SOCIAL selecionada pelo administrador no momento da doação (ex: "Apoio a Crianças com Câncer").
+Título:
+"Obrigado por apoiar uma causa 💚"
+Texto:
+"Sua doação será destinada integralmente a uma causa social,
+descontados apenas os custos operacionais e impostos.
+
+Hoje, você ajudou a apoiar:
+{{NOME_DA_CAUSA}}
+
+Gestos assim mudam vidas. Obrigado por fazer parte disso."
+
+BACKEND — DADOS E CONTROLE (LEVE E SEM BUG)
+1) Criar uma tabela simples para controlar exibição (ou campos equivalentes se já existir algo parecido):
+Tabela: user_one_time_messages
+Campos:
+- userId (pk/fk)
+- paymentWelcomeShown (boolean default false)
+- donationThanksShown (boolean default false)
+- updatedAt
+
+2) Garantir que a DOAÇÃO tenha causa social associada:
+- Identificar onde a doação é registrada hoje.
+- Sem mexer no fluxo do Asaas: apenas GARANTIR que ao registrar a doação localmente, exista um campo:
+  - socialCauseName (string) ou socialCauseId -> resolvido para nome
+- Se já existir “causa social” em algum lugar, reutilizar (não duplicar).
+- Se não existir, criar a coluna/tabela mínima para armazenar o nome da causa escolhida pelo admin no momento da doação.
+
+3) Endpoints (Express):
+- GET /api/one-time-messages
+  Retorna ao usuário logado quais mensagens devem aparecer.
+  Exemplo:
+  {
+    payment: { shouldShow: true/false },
+    donation: { shouldShow: true/false, socialCauseName?: "..." }
+  }
+  Regras:
+  - payment.shouldShow = true se houver pagamento confirmado e paymentWelcomeShown = false
+  - donation.shouldShow = true se houver doação confirmada e donationThanksShown = false
+  - donation.socialCauseName deve vir da última doação confirmada do usuário (ou da doação mais recente sem “ack”)
+
+- POST /api/one-time-messages/ack
+  Payload: { type: "payment" | "donation" }
+  Marca como exibida/fechada (true) a mensagem correspondente.
+
+4) Não usar polling:
+- O frontend chama GET /api/one-time-messages apenas:
+  - ao entrar no app (ex: dashboard) e
+  - opcionalmente após retornar de uma página de “sucesso” (se existir).
+
+FRONTEND — UI FLOUTANTE (LEVE, BONITA, SEM PESO)
+5) Criar um componente único e reutilizável:
+- OneTimeMessageOverlay (ou nome similar)
+Características:
+- flutuante (modal leve ou toast expandido)
+- botão “Fechar”
+- animação mínima (fade/slide curto, opcional)
+- não travar a navegação (não bloquear)
+- aparece só quando backend indicar
+
+6) Personagem:
+- Exibir a imagem do personagem ao lado do texto
+- Para pagamento: estilo mais “confiante/energético” (leve)
+- Para doação social: estilo mais “sereno e respeitoso”
+  (apenas via CSS: reduzir brilho/animação, rotação/escala muito leve)
+
+7) Integração:
+- No boot do app (ou dashboard), chamar GET /api/one-time-messages
+- Se payment.shouldShow: renderizar overlay de pagamento
+- Se donation.shouldShow: renderizar overlay de doação com socialCauseName em destaque
+- Ao clicar “Fechar”: chamar POST /api/one-time-messages/ack e esconder
+
+QUALIDADE / ANTI-BUG
+8) Evitar re-render infinito:
+- use react-query se já existe no projeto, ou use um fetch simples com state e guard.
+- garantir que a chamada acontece 1 vez por carregamento de página.
+9) Tratar casos:
+- Se não houver socialCauseName, mostrar "Causa social" (fallback) sem quebrar.
+- Se permissão de notificação não existir (irrelevante), isso não afeta — aqui é apenas overlay interno.
+
+ENTREGA OBRIGATÓRIA
+- Listar exatamente arquivos criados/alterados
+- Listar migrations/tabelas adicionadas
+- Explicar em poucas linhas onde você leu “pagamento confirmado” e “doação confirmada” sem mexer no Asaas
+- Confirmar que a versão web continua funcionando igual e que a feature é leve
+
+Faça as mudanças com cuidado e valide localmente o fluxo completo.
