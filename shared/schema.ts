@@ -5,6 +5,7 @@ import { z } from "zod";
 // Re-export auth and chat models
 export * from "./models/auth";
 export * from "./models/chat";
+export * from "./models/doctorChat";
 
 import { users } from "./models/auth";
 

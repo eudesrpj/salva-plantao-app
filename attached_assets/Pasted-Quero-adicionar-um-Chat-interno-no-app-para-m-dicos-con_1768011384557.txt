@@ -1,0 +1,274 @@
+Quero adicionar um Chat interno no app para médicos conversarem em tempo real, com grupos por estado (UF) e conversas privadas (contatos/DM), com mensagens que expiram em 24 horas, e um sistema inteligente para permitir discussão clínica sem quebrar sigilo, usando Termo de Compromisso mensal + alertas + bloqueio apenas de identificadores fortes.
+Implementar de forma isolada, sem quebrar o restante do aplicativo e com UX simples e muito usável.
+
+0) REGRAS OBRIGATÓRIAS (ANTI-BUG)
+
+Não reescrever o app inteiro. Criar módulo isolado /chat (páginas, componentes, services).
+
+Não mexer em autenticação/rotas existentes além de adicionar o item “Chat” no menu.
+
+Não adicionar dependências novas se o projeto já tiver uma solução viável (reaproveitar o que já existe).
+
+MVP sem anexos/imagens/arquivos (evita vazamento e reduz complexidade).
+
+Garantir mobile-first (layout não quebra no celular).
+
+Manter performance: paginar mensagens e não carregar tudo de uma vez.
+
+1) NAV / MENU
+
+Adicionar botão “Chat” no menu principal → rota /chat.
+
+2) TERMO DE COMPROMISSO (OBRIGATÓRIO, 1x POR MÊS)
+
+Objetivo: permitir liberdade para discutir casos, mas exigindo compromisso com sigilo.
+
+Regras
+
+No primeiro acesso ao chat, e depois a cada 30 dias, exigir aceite do termo.
+
+Campo no perfil do usuário: chat_terms_accepted_at.
+
+Se chat_terms_accepted_at estiver vazio ou for >30 dias:
+
+Bloquear acesso e mostrar modal obrigatório com:
+
+Texto curto e claro (sigilo médico, sem identificadores, caso deve ser anonimizado)
+
+Checkbox “Li e concordo”
+
+Botão “Concordo e entrar”
+
+Ao aceitar: salvar chat_terms_accepted_at = now() e liberar chat imediatamente.
+
+UX
+
+Esse modal aparece apenas quando precisa (mensal).
+
+Se não aceitar, não entra no chat.
+
+3) ESTRUTURA DO CHAT (SIMPLES E USÁVEL)
+Layout desktop
+
+Coluna esquerda:
+
+“Conversas” (DM)
+
+“Grupos do meu estado”
+
+Busca (para achar contato)
+
+Coluna direita:
+
+Mensagens (scroll)
+
+Caixa de envio fixa embaixo
+
+Layout mobile
+
+Tela 1: lista de conversas e grupos
+
+Tela 2: conversa (com botão voltar)
+
+4) GRUPOS POR ESTADO (UF)
+
+Usuário deve ter uf no perfil.
+
+Se não existir uf, ao entrar no chat pedir em um modal simples (uma vez) e salvar no perfil.
+
+Grupos:
+
+Criar/usar grupo da UF do usuário (ex: “SP”, “MG”, “TO”).
+
+Usuário automaticamente pode entrar no grupo da própria UF.
+
+(Opcional) permitir entrar em outros estados apenas se você quiser — default: só UF do usuário, simples.
+
+5) CONTATOS E DMs
+
+Usuário pode iniciar conversa 1:1:
+
+Buscar usuário por nome (ou e-mail/ID interno se existir)
+
+“Adicionar contato” e “Iniciar conversa”
+
+Criar room do tipo dm com os dois participantes.
+
+6) MENSAGENS EXPIRANDO EM 24 HORAS (OBRIGATÓRIO)
+
+Cada mensagem deve ter expires_at = created_at + 24h.
+
+Comportamento
+
+O frontend só renderiza mensagens com expires_at > now().
+
+Implementar limpeza real no backend:
+
+Job/cron (ou endpoint agendável) que apaga mensagens vencidas periodicamente (ex: a cada hora).
+
+Requisitos de performance
+
+Paginar mensagens (ex: 30 por vez).
+
+Carregar mais ao rolar para cima.
+
+7) LIMITADORES INTELIGENTES (SEM TRAVAR A DISCUSSÃO)
+
+Implementar um “Content Guard” em 3 níveis no momento de enviar a mensagem:
+
+Nível A — Dica fixa (sempre visível)
+
+Texto acima do campo:
+“✅ Discuta o caso por idade/sexo/sintomas/exames. ❌ Não use nome, CPF/CNS, telefone, endereço, e-mail, prontuário.”
+
+Nível B — ALERTA (soft warning, permite enviar)
+
+Se detectar risco moderado, mostrar modal/alerta:
+“Atenção: isso pode identificar paciente. Revise antes de enviar.”
+Botões:
+
+“Editar mensagem”
+
+“Enviar mesmo assim”
+
+Disparar soft warning para padrões como:
+
+datas completas (dd/mm/aaaa) combinadas com “paciente”
+
+sequências numéricas longas (>= 8) sem padrão forte
+
+palavras-chave: “prontuário”, “leito”, “endereço”, “telefone”, “CPF”, “CNS”
+
+heurística simples: “nome + idade + cidade” na mesma frase
+
+Nível C — BLOQUEIO (hard block, NÃO permite enviar)
+
+Bloquear apenas identificadores fortes (sem exagero):
+
+CPF (11 dígitos com/sem máscara)
+
+CNS (15 dígitos)
+
+telefone com DDD/+55 (padrão forte)
+
+e-mail
+
+CEP + número / padrões fortes de endereço
+
+“Nº prontuário:” + número grande (padrão evidente)
+Ao bloquear:
+
+Não enviar
+
+Mensagem clara: “Remova identificadores (CPF/CNS/telefone/endereço/e-mail/prontuário).”
+
+Não registrar o texto bloqueado (somente evento blocked_message sem conteúdo)
+
+Observação: o objetivo é permitir discussão clínica livre, bloqueando apenas o que identifica paciente.
+
+8) TECNOLOGIA / INTEGRAÇÃO (NÃO BAGUNÇAR O APP)
+
+Preferir um serviço realtime que o projeto já use. Se não houver:
+
+usar Supabase Realtime (ou alternativa simples) e isolar em /chat/services.
+
+Não criar WebSocket manual do zero.
+
+Manter tudo encapsulado:
+
+/chat/components
+
+/chat/services
+
+/chat/utils (regex/guard)
+
+/chat/pages ou rota equivalente
+
+9) MODELO DE DADOS (SUGESTÃO)
+rooms
+
+id
+
+type: group | dm
+
+state_uf (nullable) // para grupos
+
+created_at
+
+room_members
+
+room_id
+
+user_id
+
+created_at
+
+messages
+
+id
+
+room_id
+
+sender_id
+
+body
+
+created_at
+
+expires_at
+
+user_profile (ou equivalente)
+
+uf
+
+chat_terms_accepted_at
+
+10) AÇÕES ÚTEIS (SEM EXAGERAR)
+
+Botão “Copiar mensagem” (opcional) no menu da mensagem
+
+Botão “Reportar” (opcional simples): salva message_id para revisão (sem moderação complexa)
+
+11) CHECKLIST QA (OBRIGATÓRIO)
+
+ Item “Chat” aparece no menu e abre /chat
+
+ Termo mensal aparece quando precisa e trava acesso sem aceite
+
+ Termo não reaparece dentro de 30 dias
+
+ Grupo da UF funciona
+
+ DM com contato funciona
+
+ Mensagens em tempo real funcionam
+
+ Mensagens somem após 24h (filtro) e são apagadas pelo job
+
+ Soft warning aparece e permite “enviar mesmo assim”
+
+ Hard block impede CPF/CNS/email/telefone/endereço/prontuário
+
+ Mobile não quebra layout e tem botão voltar
+
+ Sem erros no console e sem regressão no resto do app
+
+12) ENTREGA FINAL
+
+Ao concluir:
+
+Listar arquivos criados/alterados
+
+Explicar como testar com 2 usuários em abas diferentes
+
+Mostrar onde ajustar:
+
+regex do guard (/chat/utils/contentGuard.ts)
+
+texto do termo
+
+tempo de expiração (24h)
+
+Explicar como está agendado o job de limpeza (ou como agendar no ambiente atual)
+
+IMPORTANTE: Não adicionar features extras além do descrito. Fazer simples, estável e muito usável.
