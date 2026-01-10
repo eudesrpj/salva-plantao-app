@@ -42,7 +42,6 @@ import AiWebView from "@/pages/AiWebView";
 import Memorize from "@/pages/Memorize";
 import ImportTemplates from "@/pages/ImportTemplates";
 import Donate from "@/pages/Donate";
-import Exams from "@/pages/Exams";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -151,10 +150,6 @@ function Router() {
 
       <Route path="/finance">
         <ProtectedRoute component={Finance} />
-      </Route>
-
-       <Route path="/exams">
-        <ProtectedRoute component={Exams} />
       </Route>
 
       <Route path="/ai-chat">
