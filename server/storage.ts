@@ -12,6 +12,8 @@ import {
   quickAccessConfig, insertQuickAccessConfigSchema, donationCauses, insertDonationCauseSchema,
   donations, insertDonationSchema, donationReceipts, insertDonationReceiptSchema,
   doseRules, formulations, emergencyPanelItems, insertEmergencyPanelItemSchema,
+  chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages,
+  type ChatRoom, type ChatMessage, type ChatContact,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -72,7 +74,8 @@ import {
   type EmergencyPanelItem, type InsertEmergencyPanelItem
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql, isNull } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, isNull, lt, gte, inArray, ne } from "drizzle-orm";
+import { users } from "@shared/models/auth";
 
 // Helper function to normalize text (remove accents, lowercase, trim)
 export function normalizeText(text: string): string {
@@ -2449,6 +2452,197 @@ export class DatabaseStorage implements IStorage {
         .set({ sortOrder: item.sortOrder, updatedAt: new Date() })
         .where(eq(emergencyPanelItems.id, item.id));
     }
+  }
+
+  // Doctor Chat
+  async getChatRoomsForUser(userId: string): Promise<any[]> {
+    const memberOf = await db.select({ roomId: chatRoomMembers.roomId })
+      .from(chatRoomMembers)
+      .where(eq(chatRoomMembers.userId, userId));
+    
+    if (memberOf.length === 0) return [];
+    
+    const roomIds = memberOf.map(m => m.roomId);
+    const rooms = await db.select().from(chatRooms).where(inArray(chatRooms.id, roomIds));
+    
+    const result = [];
+    for (const room of rooms) {
+      if (room.type === 'dm') {
+        const members = await db.select({ userId: chatRoomMembers.userId })
+          .from(chatRoomMembers)
+          .where(and(eq(chatRoomMembers.roomId, room.id), ne(chatRoomMembers.userId, userId)));
+        
+        if (members.length > 0 && members[0].userId) {
+          const [otherUser] = await db.select({
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+          }).from(users).where(eq(users.id, members[0].userId as string));
+          
+          result.push({
+            ...room,
+            otherUser,
+            name: otherUser ? `${otherUser.firstName || ""} ${otherUser.lastName || ""}`.trim() || "Usuário" : "Usuário",
+          });
+        }
+      } else {
+        result.push(room);
+      }
+    }
+    return result;
+  }
+
+  async getOrCreateStateGroup(uf: string, userId: string): Promise<ChatRoom> {
+    const [existing] = await db.select().from(chatRooms)
+      .where(and(eq(chatRooms.type, 'group'), eq(chatRooms.stateUf, uf)));
+    
+    if (existing) {
+      const [member] = await db.select().from(chatRoomMembers)
+        .where(and(eq(chatRoomMembers.roomId, existing.id), eq(chatRoomMembers.userId, userId)));
+      
+      if (!member) {
+        await db.insert(chatRoomMembers).values({ roomId: existing.id, userId });
+      }
+      return existing;
+    }
+    
+    const [room] = await db.insert(chatRooms).values({
+      type: 'group',
+      stateUf: uf,
+      name: `Médicos ${uf}`,
+    }).returning();
+    
+    await db.insert(chatRoomMembers).values({ roomId: room.id, userId });
+    return room;
+  }
+
+  async isRoomMember(roomId: number, userId: string): Promise<boolean> {
+    const [member] = await db.select().from(chatRoomMembers)
+      .where(and(eq(chatRoomMembers.roomId, roomId), eq(chatRoomMembers.userId, userId)));
+    return !!member;
+  }
+
+  async getChatMessages(roomId: number, limit: number, before?: number): Promise<any[]> {
+    const now = new Date();
+    let query = db.select({
+      id: chatMessages.id,
+      roomId: chatMessages.roomId,
+      senderId: chatMessages.senderId,
+      body: chatMessages.body,
+      createdAt: chatMessages.createdAt,
+      expiresAt: chatMessages.expiresAt,
+      senderFirstName: users.firstName,
+      senderLastName: users.lastName,
+      senderImage: users.profileImageUrl,
+    })
+    .from(chatMessages)
+    .leftJoin(users, eq(chatMessages.senderId, users.id))
+    .where(
+      before
+        ? and(eq(chatMessages.roomId, roomId), gte(chatMessages.expiresAt, now), lt(chatMessages.id, before))
+        : and(eq(chatMessages.roomId, roomId), gte(chatMessages.expiresAt, now))
+    )
+    .orderBy(desc(chatMessages.id))
+    .limit(limit);
+    
+    const messages = await query;
+    return messages.map(m => ({
+      id: m.id,
+      roomId: m.roomId,
+      senderId: m.senderId,
+      body: m.body,
+      createdAt: m.createdAt,
+      expiresAt: m.expiresAt,
+      senderName: `${m.senderFirstName || ""} ${m.senderLastName || ""}`.trim() || "Usuário",
+      senderImage: m.senderImage,
+    })).reverse();
+  }
+
+  async createChatMessage(data: { roomId: number; senderId: string; body: string; expiresAt: Date }): Promise<ChatMessage> {
+    const [message] = await db.insert(chatMessages).values(data).returning();
+    return message;
+  }
+
+  async logBlockedMessage(userId: string, reason: string): Promise<void> {
+    await db.insert(chatBlockedMessages).values({ userId, reason });
+  }
+
+  async searchUsersForChat(q: string, excludeUserId: string): Promise<any[]> {
+    const searchTerm = `%${q}%`;
+    return await db.select({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      profileImageUrl: users.profileImageUrl,
+    })
+    .from(users)
+    .where(and(
+      ne(users.id, excludeUserId),
+      or(
+        ilike(users.firstName, searchTerm),
+        ilike(users.lastName, searchTerm),
+        ilike(users.email, searchTerm)
+      )
+    ))
+    .limit(20);
+  }
+
+  async getChatContacts(userId: string): Promise<any[]> {
+    const contactRows = await db.select({ contactId: chatContacts.contactId })
+      .from(chatContacts)
+      .where(eq(chatContacts.userId, userId));
+    
+    if (contactRows.length === 0) return [];
+    
+    const contactIds = contactRows.map(c => c.contactId).filter(Boolean) as string[];
+    return await db.select({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      profileImageUrl: users.profileImageUrl,
+    })
+    .from(users)
+    .where(inArray(users.id, contactIds));
+  }
+
+  async getOrCreateDmRoom(userId: string, contactId: string): Promise<ChatRoom> {
+    const userRooms = await db.select({ roomId: chatRoomMembers.roomId })
+      .from(chatRoomMembers)
+      .where(eq(chatRoomMembers.userId, userId));
+    
+    for (const { roomId } of userRooms) {
+      const [room] = await db.select().from(chatRooms)
+        .where(and(eq(chatRooms.id, roomId), eq(chatRooms.type, 'dm')));
+      
+      if (room) {
+        const [hasContact] = await db.select().from(chatRoomMembers)
+          .where(and(eq(chatRoomMembers.roomId, roomId), eq(chatRoomMembers.userId, contactId)));
+        
+        if (hasContact) return room;
+      }
+    }
+    
+    const [room] = await db.insert(chatRooms).values({ type: 'dm' }).returning();
+    await db.insert(chatRoomMembers).values([
+      { roomId: room.id, userId },
+      { roomId: room.id, userId: contactId },
+    ]);
+    
+    const [existingContact] = await db.select().from(chatContacts)
+      .where(and(eq(chatContacts.userId, userId), eq(chatContacts.contactId, contactId)));
+    
+    if (!existingContact) {
+      await db.insert(chatContacts).values({ userId, contactId });
+    }
+    
+    return room;
+  }
+
+  async deleteExpiredMessages(): Promise<number> {
+    const now = new Date();
+    const result = await db.delete(chatMessages).where(lt(chatMessages.expiresAt, now)).returning();
+    return result.length;
   }
 }
 

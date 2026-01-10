@@ -9,7 +9,8 @@ import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAiRoutes } from "./ai/routes";
 import { authStorage } from "./replit_integrations/auth/storage";
-import { notifyUser, notifyAllAdmins } from "./websocket";
+import { notifyUser, notifyAllAdmins, broadcastToRoom } from "./websocket";
+import { chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -3376,6 +3377,142 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   app.delete("/api/admin/prescription-model-medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
     await storage.deletePrescriptionModelMedication(Number(req.params.id));
     res.status(204).send();
+  });
+
+  // --- Doctor Chat Routes ---
+  
+  // Accept chat terms
+  app.post("/api/chat/accept-terms", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    await authStorage.updateUserChatTerms(userId);
+    res.json({ success: true });
+  });
+
+  // Set user UF
+  app.post("/api/chat/set-uf", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { uf } = req.body;
+    if (!uf || uf.length !== 2) return res.status(400).json({ message: "UF inválida" });
+    await authStorage.updateUserUf(userId, uf.toUpperCase());
+    res.json({ success: true });
+  });
+
+  // Get user's rooms (groups + DMs)
+  app.get("/api/chat/rooms", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const rooms = await storage.getChatRoomsForUser(userId);
+    res.json(rooms);
+  });
+
+  // Get or create state group
+  app.post("/api/chat/join-state-group", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const user = await authStorage.getUser(userId);
+    if (!user?.uf) return res.status(400).json({ message: "UF não configurada" });
+    const room = await storage.getOrCreateStateGroup(user.uf, userId);
+    res.json(room);
+  });
+
+  // Get messages for a room (paginated)
+  app.get("/api/chat/rooms/:roomId/messages", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const roomId = Number(req.params.roomId);
+    const limit = Math.min(Number(req.query.limit) || 30, 100);
+    const before = req.query.before ? Number(req.query.before) : undefined;
+    
+    const isMember = await storage.isRoomMember(roomId, userId);
+    if (!isMember) return res.status(403).json({ message: "Não é membro desta sala" });
+    
+    const messages = await storage.getChatMessages(roomId, limit, before);
+    res.json(messages);
+  });
+
+  // Send message
+  app.post("/api/chat/rooms/:roomId/messages", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const roomId = Number(req.params.roomId);
+    const { body } = req.body;
+    
+    if (!body || body.trim().length === 0) {
+      return res.status(400).json({ message: "Mensagem vazia" });
+    }
+    
+    const isMember = await storage.isRoomMember(roomId, userId);
+    if (!isMember) return res.status(403).json({ message: "Não é membro desta sala" });
+    
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+    
+    const message = await storage.createChatMessage({
+      roomId,
+      senderId: userId,
+      body: body.trim(),
+      expiresAt,
+    });
+    
+    const sender = await authStorage.getUser(userId);
+    broadcastToRoom(roomId, {
+      type: "chat_message",
+      roomId,
+      message: {
+        ...message,
+        senderName: `${sender?.firstName || ""} ${sender?.lastName || ""}`.trim() || "Usuário",
+        senderImage: sender?.profileImageUrl,
+      },
+    });
+    
+    res.status(201).json(message);
+  });
+
+  // Log blocked message (no content saved)
+  app.post("/api/chat/log-blocked", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { reason } = req.body;
+    await storage.logBlockedMessage(userId, reason || "Unknown");
+    res.json({ logged: true });
+  });
+
+  // Search users for DM
+  app.get("/api/chat/search-users", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const q = String(req.query.q || "").trim();
+    if (q.length < 2) return res.json([]);
+    const users = await storage.searchUsersForChat(q, userId);
+    res.json(users);
+  });
+
+  // Get contacts
+  app.get("/api/chat/contacts", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const contacts = await storage.getChatContacts(userId);
+    res.json(contacts);
+  });
+
+  // Add contact and create/get DM room
+  app.post("/api/chat/start-dm", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { contactId } = req.body;
+    if (!contactId || contactId === userId) {
+      return res.status(400).json({ message: "Contato inválido" });
+    }
+    const room = await storage.getOrCreateDmRoom(userId, contactId);
+    res.json(room);
+  });
+
+  // Cleanup expired messages (called by cron or manually)
+  app.post("/api/chat/cleanup-expired", isAuthenticated, checkAdmin, async (req, res) => {
+    const deleted = await storage.deleteExpiredMessages();
+    res.json({ deleted });
   });
 
   // --- Seed Data ---

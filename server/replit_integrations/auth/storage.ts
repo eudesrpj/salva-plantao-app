@@ -68,6 +68,24 @@ class AuthStorage implements IAuthStorage {
       .returning();
     return user;
   }
+
+  async updateUserChatTerms(id: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ chatTermsAcceptedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async updateUserUf(id: string, uf: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ uf, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
 }
 
 export const authStorage = new AuthStorage();
