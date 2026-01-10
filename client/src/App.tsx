@@ -54,6 +54,8 @@ import Notifications from "@/pages/Notifications";
 import About from "@/pages/About";
 import BillingSuccess from "@/pages/BillingSuccess";
 import BillingCancel from "@/pages/BillingCancel";
+import Login from "@/pages/Login";
+import MagicLink from "@/pages/MagicLink";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -113,6 +115,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/welcome" component={Landing} />
+      <Route path="/login" component={Login} />
+      <Route path="/auth/magic" component={MagicLink} />
       
       <Route path="/admin">
         <AdminRoute component={Admin} />

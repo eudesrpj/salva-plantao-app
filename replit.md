@@ -171,6 +171,47 @@ Admin users bypass payment checks and have access to user management, content mo
   - PreviewExpiredOverlay paywall redirects to /welcome when expired
   - Subscribers and admins bypass all preview checks via hasFullAccess
 
+### Version 2.7 Features (January 2026)
+- **Custom Authentication System**:
+  - Complete migration from Replit Auth to custom email-based authentication
+  - Email verification with 6-digit code + magic link dual method
+  - Google OAuth prepared (temporarily redirects to existing Replit Auth)
+  - Database tables: auth_identities, email_auth_tokens
+  - bcrypt password hashing for secure code verification
+  - HttpOnly secure cookies for session management
+  - Soft delete for users (deletedAt field) for account management
+  - Email sending placeholder (console log) - requires SMTP configuration
+- **Subscription Billing Plans**:
+  - Three pricing tiers: Monthly (R$29.90/30d), Semiannual (R$149.90/180d), Annual (R$279.90/365d)
+  - Database tables: billing_plans, billing_orders, user_entitlements
+  - Auto-seeded plans on server startup
+  - Asaas webhook-based automatic activation (no polling)
+  - Coupon validation with discount calculation
+  - Single coupon per checkout limit
+- **Frontend Auth**:
+  - Login page (/login) with email and Google OAuth buttons
+  - Magic link verification page (/auth/magic)
+  - PaywallModal with plan selection and coupon support
+  - Responsive design with medical-themed styling
+- **API Endpoints**:
+  - POST /api/auth/email/login - Initiate email login (sends code + magic link)
+  - POST /api/auth/email/verify-code - Verify 6-digit code
+  - GET /api/auth/email/verify-magic - Verify magic link token
+  - POST /api/auth/logout - End session
+  - GET /api/billing/plans - List available subscription plans
+  - POST /api/billing/checkout - Create Asaas checkout session
+  - POST /api/billing/webhook - Asaas payment webhook handler
+  - GET /api/billing/coupons/validate - Validate coupon code
+- **Important Files**:
+  - shared/models/auth.ts - Database schema for auth/billing tables
+  - server/auth/authService.ts - Email verification logic
+  - server/auth/authRoutes.ts - Authentication endpoints
+  - server/auth/billingRoutes.ts - Billing/subscription endpoints
+  - server/auth/emailService.ts - Email sending placeholder
+  - client/src/pages/Login.tsx - Login UI
+  - client/src/pages/MagicLink.tsx - Magic link handler
+  - client/src/components/PaywallModal.tsx - Plan selection modal
+
 ### Payment Integration
 - **Asaas Payment Gateway**: Automated checkout via external hosted payment page
 - Payment links with PIX and credit card options

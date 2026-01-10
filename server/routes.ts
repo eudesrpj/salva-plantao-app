@@ -17,6 +17,8 @@ import { registerAiRoutes } from "./ai/routes";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { notifyUser, notifyAllAdmins, broadcastToRoom } from "./websocket";
 import { chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages, chatUserBans, chatBannedWords } from "@shared/schema";
+import { registerAuthRoutes as registerNewAuthRoutes } from "./auth/authRoutes";
+import { registerBillingRoutes } from "./auth/billingRoutes";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -24,12 +26,15 @@ export async function registerRoutes(
 ): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerNewAuthRoutes(app);
+  registerBillingRoutes(app);
   registerChatRoutes(app);
   registerImageRoutes(app);
   registerAiRoutes(app);
   
   // Seed default plans on startup
   await storage.upsertPlans().catch(err => console.error('Failed to seed plans:', err));
+  await storage.seedBillingPlans().catch(err => console.error('Failed to seed billing plans:', err));
 
   const getUserId = (req: any) => req.user?.claims?.sub;
   
