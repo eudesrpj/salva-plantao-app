@@ -1,0 +1,244 @@
+Quero adicionar no app um novo módulo chamado “Exames”, acessível pelo Menu Principal, para concentrar o Pedido de Exames do paciente, com seleção de exames, geração de pedido e impressão no padrão SUS, incluindo separação automática em folhas quando necessário.
+
+0) REGRAS OBRIGATÓRIAS (ANTI-BUG)
+
+Não reescrever o app inteiro. Fazer mudanças mínimas e isoladas.
+
+Não mexer em autenticação, rotas existentes, tema ou layout global sem necessidade.
+
+Não adicionar novas dependências.
+
+Seguir padrões de componentes e estrutura já existentes no projeto.
+
+Tudo deve funcionar corretamente em desktop e mobile.
+
+O usuário deve sempre conseguir voltar/fechar a tela sem travar.
+
+Implementar UX simples, intuitiva e estável (estilo prontuário SUS).
+
+1) NAVEGAÇÃO
+
+Adicionar botão “Exames” no Menu Principal.
+
+Criar rota/página correspondente (seguir padrão do projeto).
+
+Abrir a tela de pedido de exames ao clicar.
+
+2) FORMULÁRIO DO PACIENTE (TOPO DA TELA)
+
+Campos:
+
+Nome completo (obrigatório)
+
+Idade (opcional)
+
+CPF (opcional)
+
+Nº do SUS / CNS (opcional)
+
+Regras:
+
+Somente o nome é obrigatório.
+
+Validação leve de CPF (11 dígitos) e CNS (15 dígitos), sem bloqueio excessivo.
+
+Botão “Limpar” reseta tudo.
+
+3) ABAS DE EXAMES
+
+Criar duas abas logo abaixo do formulário:
+
+Laboratório
+
+Imagem
+
+Cada aba deve conter:
+
+Lista de exames com checkbox
+
+Exames pré-selecionados por padrão
+
+Campo “Outros exames” (textarea – um exame por linha)
+
+Contador de exames selecionados
+
+O usuário pode marcar/desmarcar livremente.
+
+4) LISTAS PADRÃO (PRÉ-SELECIONADAS)
+Laboratório
+
+Hemograma completo
+
+Glicemia de jejum
+
+Hemoglobina glicada (HbA1c)
+
+Ureia e Creatinina
+
+Sódio e Potássio
+
+TGO/TGP
+
+Bilirrubinas
+
+Fosfatase alcalina e GGT
+
+PCR
+
+EAS (Urina tipo 1)
+
+Lipidograma
+
+TSH e T4 livre
+
+Imagem
+
+RX de tórax (PA e perfil)
+
+Ultrassonografia de abdome total
+
+Ultrassonografia de vias urinárias
+
+Tomografia de crânio sem contraste
+
+Eletrocardiograma (opcional, manter como complementar)
+
+Todos vêm marcados por padrão, exceto exames que possam ser inadequados sem contexto (ex: obstétrico), se necessário.
+
+5) CAMPOS CLÍNICOS OPCIONAIS (ANTES DE IMPRIMIR)
+
+Adicionar campos opcionais:
+
+Hipótese diagnóstica / Justificativa clínica (textarea)
+
+Unidade de saúde (texto simples ou puxar do perfil do usuário, se existir)
+
+Se vazios, devem aparecer como espaço em branco no impresso.
+
+6) GERAÇÃO DO PEDIDO (TEXTO)
+
+Gerar automaticamente um texto estruturado contendo:
+
+Título: SOLICITAÇÃO DE EXAMES – SUS
+
+Identificação do paciente
+
+Data atual
+
+Listagem de exames laboratoriais
+
+Listagem de exames de imagem
+
+Campo de hipótese/justificativa
+
+Espaço para assinatura e carimbo
+
+7) IMPRESSÃO – PADRÃO SUS (OBRIGATÓRIO)
+Layout da impressão
+
+Formato A4
+
+Preto no branco
+
+Margens adequadas
+
+Campos delimitados por linhas
+
+Área grande e visível para:
+
+Data
+
+Assinatura e carimbo do profissional
+
+Não imprimir menus, botões ou navegação
+
+Usar CSS @media print.
+
+8) SEPARAÇÃO AUTOMÁTICA DE FOLHAS (CRÍTICO)
+
+Implementar separação automática conforme regra abaixo:
+
+const PRINT_RULES = {
+  lab: "singlePage",       // todos os exames laboratoriais em uma folha
+  imaging: "onePerExam",   // cada exame de imagem em uma folha separada
+};
+
+
+Regras:
+
+Laboratório → uma única folha
+
+Imagem → uma folha por exame
+
+Exames adicionados em “Outros” seguem a regra da aba onde foram inseridos
+
+Usar page-break-after / break-after: page
+
+9) AÇÕES DO USUÁRIO
+
+Botões fixos ao final da tela:
+
+Copiar
+
+Copia o texto do pedido completo
+
+Mostrar feedback “Copiado”
+
+Imprimir
+
+Abre visualização e chama window.print()
+
+Voltar ou Fechar
+
+10) PERSISTÊNCIA TEMPORÁRIA
+
+Salvar automaticamente em localStorage:
+
+Dados do paciente
+
+Seleção de exames
+
+Campo “Outros”
+
+Hipótese diagnóstica
+
+Chave sugerida:
+
+pedido_exames_draft
+
+
+Ao abrir a tela, recuperar o rascunho.
+
+11) CHECKLIST DE QUALIDADE (OBRIGATÓRIO)
+
+ Nome é obrigatório
+
+ Abas funcionam corretamente
+
+ Exames vêm pré-selecionados
+
+ “Outros” entra no pedido e na impressão
+
+ Laboratório imprime em 1 folha
+
+ Imagem imprime 1 exame por folha
+
+ Espaço para carimbo e data existe
+
+ Impressão limpa, padrão SUS
+
+ Sem erros no console
+
+ Nenhuma tela existente foi quebrada
+
+12) ENTREGA FINAL
+
+Ao concluir:
+
+Listar arquivos criados/alterados
+
+Explicar como testar em 5 minutos
+
+Mostrar onde editar listas e regras de impressão
+
+IMPORTANTE: Não criar funcionalidades extras. Executar somente o que está descrito acima, com máxima estabilidade.
