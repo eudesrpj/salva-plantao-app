@@ -74,6 +74,9 @@ export default function Admin() {
           <TabsTrigger value="donations" className="gap-1">
             <Heart className="h-4 w-4" /> Doações
           </TabsTrigger>
+          <TabsTrigger value="emergency" className="gap-1">
+            <Zap className="h-4 w-4" /> Emergência
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -122,6 +125,10 @@ export default function Admin() {
 
         <TabsContent value="donations">
           <DonationsTab />
+        </TabsContent>
+
+        <TabsContent value="emergency">
+          <EmergencyPanelTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -5862,6 +5869,322 @@ function DonationsTab() {
                 ))}
                 {(!donations || donations.length === 0) && (
                   <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhuma doação registrada.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+interface EmergencyPanelItemData {
+  id: number;
+  label: string;
+  subtitle: string | null;
+  kind: string;
+  enabled: boolean;
+  adultOnly: boolean;
+  pedOnly: boolean;
+  sortOrder: number;
+  payload: unknown;
+  updatedAt: string | null;
+}
+
+function EmergencyPanelTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<EmergencyPanelItemData | null>(null);
+  const [label, setLabel] = useState("");
+  const [subtitle, setSubtitle] = useState("");
+  const [kind, setKind] = useState("med");
+  const [enabled, setEnabled] = useState(true);
+  const [adultOnly, setAdultOnly] = useState(false);
+  const [pedOnly, setPedOnly] = useState(false);
+  const [payloadDose, setPayloadDose] = useState("");
+  const [payloadTemplate, setPayloadTemplate] = useState("");
+  const [payloadLink, setPayloadLink] = useState("");
+
+  const { data: items, isLoading } = useQuery<EmergencyPanelItemData[]>({
+    queryKey: ["/api/emergency-panel-items"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: unknown) => {
+      const res = await apiRequest("POST", "/api/admin/emergency-panel-items", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/emergency-panel-items"] });
+      toast({ title: "Item criado!" });
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao criar item", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: unknown }) => {
+      const res = await apiRequest("PATCH", `/api/admin/emergency-panel-items/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/emergency-panel-items"] });
+      toast({ title: "Item atualizado!" });
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao atualizar item", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/emergency-panel-items/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/emergency-panel-items"] });
+      toast({ title: "Item removido!" });
+    },
+    onError: () => toast({ title: "Erro ao remover item", variant: "destructive" }),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/admin/emergency-panel-items/${id}`, { enabled });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/emergency-panel-items"] });
+    },
+    onError: () => toast({ title: "Erro ao alterar status", variant: "destructive" }),
+  });
+
+  const resetForm = () => {
+    setLabel("");
+    setSubtitle("");
+    setKind("med");
+    setEnabled(true);
+    setAdultOnly(false);
+    setPedOnly(false);
+    setPayloadDose("");
+    setPayloadTemplate("");
+    setPayloadLink("");
+    setEditingItem(null);
+  };
+
+  const openEdit = (item: EmergencyPanelItemData) => {
+    setEditingItem(item);
+    setLabel(item.label);
+    setSubtitle(item.subtitle || "");
+    setKind(item.kind);
+    setEnabled(item.enabled !== false);
+    setAdultOnly(item.adultOnly === true);
+    setPedOnly(item.pedOnly === true);
+    const p = item.payload as Record<string, string> | null;
+    setPayloadDose(p?.dose || "");
+    setPayloadTemplate(p?.template || "");
+    setPayloadLink(p?.link || "");
+    setDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    const payload: Record<string, string> = {};
+    if (payloadDose) payload.dose = payloadDose;
+    if (payloadTemplate) payload.template = payloadTemplate;
+    if (payloadLink) payload.link = payloadLink;
+
+    const data = {
+      label,
+      subtitle: subtitle || null,
+      kind,
+      enabled,
+      adultOnly,
+      pedOnly,
+      payload: Object.keys(payload).length > 0 ? payload : null,
+      sortOrder: editingItem?.sortOrder || (items?.length || 0),
+    };
+
+    if (editingItem) {
+      updateMutation.mutate({ id: editingItem.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  const moveItem = (id: number, direction: "up" | "down") => {
+    if (!items) return;
+    const sorted = [...items].sort((a, b) => a.sortOrder - b.sortOrder);
+    const idx = sorted.findIndex(i => i.id === id);
+    if (idx < 0) return;
+    if (direction === "up" && idx === 0) return;
+    if (direction === "down" && idx === sorted.length - 1) return;
+
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    const newOrder = sorted.map((item, i) => {
+      if (i === idx) return { id: item.id, sortOrder: swapIdx };
+      if (i === swapIdx) return { id: item.id, sortOrder: idx };
+      return { id: item.id, sortOrder: i };
+    });
+
+    apiRequest("POST", "/api/admin/emergency-panel-items/reorder", { items: newOrder })
+      .then(() => qc.invalidateQueries({ queryKey: ["/api/emergency-panel-items"] }))
+      .catch(() => toast({ title: "Erro ao reordenar", variant: "destructive" }));
+  };
+
+  const kindLabels: Record<string, string> = {
+    med: "Medicação",
+    protocol: "Protocolo",
+    calc: "Calculadora",
+    shortcut: "Atalho",
+  };
+
+  if (isLoading) return <PageLoader text="Carregando painel de emergência..." />;
+
+  const sortedItems = items ? [...items].sort((a, b) => a.sortOrder - b.sortOrder) : [];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-red-500" /> Painel de Emergência
+            </CardTitle>
+            <CardDescription>Configure os itens que aparecem no botão de Emergência.</CardDescription>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1" onClick={resetForm} data-testid="button-add-emergency-item">
+                <Plus className="h-4 w-4" /> Novo Item
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{editingItem ? "Editar Item" : "Novo Item"}</DialogTitle>
+                <DialogDescription>Configure o item do painel de emergência.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div>
+                  <label className="text-sm font-medium">Nome *</label>
+                  <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="Ex: Adrenalina" data-testid="input-emergency-label" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Subtítulo</label>
+                  <Input value={subtitle} onChange={e => setSubtitle(e.target.value)} placeholder="Ex: Dose para PCR" data-testid="input-emergency-subtitle" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Tipo</label>
+                  <Select value={kind} onValueChange={setKind}>
+                    <SelectTrigger data-testid="select-emergency-kind">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="med">Medicação</SelectItem>
+                      <SelectItem value="protocol">Protocolo</SelectItem>
+                      <SelectItem value="calc">Calculadora</SelectItem>
+                      <SelectItem value="shortcut">Atalho</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={enabled} onCheckedChange={(v) => setEnabled(!!v)} data-testid="checkbox-emergency-enabled" />
+                    Ativo
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={adultOnly} onCheckedChange={(v) => { setAdultOnly(!!v); if (v) setPedOnly(false); }} data-testid="checkbox-emergency-adult" />
+                    Só Adulto
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={pedOnly} onCheckedChange={(v) => { setPedOnly(!!v); if (v) setAdultOnly(false); }} data-testid="checkbox-emergency-ped" />
+                    Só Pediátrico
+                  </label>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Dose (payload)</label>
+                  <Input value={payloadDose} onChange={e => setPayloadDose(e.target.value)} placeholder="Ex: 0.01 mg/kg IV" data-testid="input-emergency-dose" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Template (para copiar)</label>
+                  <Textarea value={payloadTemplate} onChange={e => setPayloadTemplate(e.target.value)} placeholder="Texto que será copiado ao clicar" rows={3} data-testid="textarea-emergency-template" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Link (URL)</label>
+                  <Input value={payloadLink} onChange={e => setPayloadLink(e.target.value)} placeholder="https://..." data-testid="input-emergency-link" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={handleSave} disabled={!label.trim()} data-testid="button-save-emergency-item">
+                  {createMutation.isPending || updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">#</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Filtro</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedItems.map((item, idx) => (
+                  <TableRow key={item.id} data-testid={`row-emergency-item-${item.id}`}>
+                    <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                    <TableCell>
+                      <div>
+                        <span className="font-medium">{item.label}</span>
+                        {item.subtitle && <span className="text-xs text-muted-foreground ml-2">{item.subtitle}</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell><Badge variant="outline">{kindLabels[item.kind] || item.kind}</Badge></TableCell>
+                    <TableCell>
+                      {item.adultOnly && <Badge variant="secondary" className="mr-1">Adulto</Badge>}
+                      {item.pedOnly && <Badge variant="secondary">Ped</Badge>}
+                      {!item.adultOnly && !item.pedOnly && <span className="text-muted-foreground text-xs">Todos</span>}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant={item.enabled ? "default" : "outline"}
+                        className="gap-1"
+                        onClick={() => toggleMutation.mutate({ id: item.id, enabled: !item.enabled })}
+                        data-testid={`button-toggle-emergency-${item.id}`}
+                      >
+                        {item.enabled ? <Power className="h-3 w-3" /> : <PowerOff className="h-3 w-3" />}
+                        {item.enabled ? "Ativo" : "Inativo"}
+                      </Button>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => moveItem(item.id, "up")} disabled={idx === 0} data-testid={`button-move-up-${item.id}`}>
+                          <span className="text-xs">↑</span>
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => moveItem(item.id, "down")} disabled={idx === sortedItems.length - 1} data-testid={`button-move-down-${item.id}`}>
+                          <span className="text-xs">↓</span>
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => openEdit(item)} data-testid={`button-edit-emergency-${item.id}`}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(item.id)} data-testid={`button-delete-emergency-${item.id}`}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {sortedItems.length === 0 && (
+                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum item configurado.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
