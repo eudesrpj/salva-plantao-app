@@ -13,8 +13,8 @@ import { Plus, Trash2, Target, TrendingUp, TrendingDown, DollarSign, Edit2 } fro
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { MonthlyExpense, FinancialGoal as FinancialGoalType } from "@shared/schema";
-import { FinancialGoal } from "@/components/FinancialGoal"; // Importando o novo componente
-import { ElectrolyteCalculator } from "@/components/ElectrolyteCalculator"; // Importando a calculadora
+import { EditableFinancialGoal } from "@/components/EditableFinancialGoal"; 
+import { ElectrolyteCalculator } from "@/components/ElectrolyteCalculator"; 
 
 const EXPENSE_CATEGORIES = [
   "Moradia", "Alimentação", "Transporte", "Saúde", "Educação", 
@@ -28,9 +28,6 @@ export default function Finance() {
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<MonthlyExpense | null>(null);
   const [editingGoal, setEditingGoal] = useState<FinancialGoalType | null>(null);
-
-  // Assume a meta mensal fixa por enquanto, idealmente viria do backend
-  const monthlyGoal = 15000;
 
   const { data: expenses = [] } = useQuery<MonthlyExpense[]>({
     queryKey: ['/api/monthly-expenses'],
@@ -169,7 +166,7 @@ export default function Finance() {
       <h1 className="text-3xl font-bold font-display text-foreground" data-testid="text-finance-title">Financeiro</h1>
       
       {/* Seção da Meta Financeira Mensal */}
-      <FinancialGoal monthlyGoal={monthlyGoal} totalAccumulated={totalEarnings} />
+      <EditableFinancialGoal totalAccumulated={totalEarnings} />
 
       <div className="grid md:grid-cols-3 gap-6">
         <Card className="bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 border-none">

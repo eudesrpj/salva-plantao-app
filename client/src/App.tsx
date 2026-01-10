@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import { DesktopSidebar, MobileNav } from "@/components/Sidebar";
 import { FloatingCalculator } from "@/components/FloatingCalculator";
-import { EmergencyButton } from "@/components/EmergencyButton"; // Importa o botão de emergência
+import { EmergencyButton } from "@/components/EmergencyButton";
 import { CreatorFooter } from "@/components/CreatorFooter";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { PreviewBanner } from "@/components/PreviewGate";
@@ -42,6 +42,7 @@ import AiWebView from "@/pages/AiWebView";
 import Memorize from "@/pages/Memorize";
 import ImportTemplates from "@/pages/ImportTemplates";
 import Donate from "@/pages/Donate";
+import Exams from "@/pages/Exams";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -55,7 +56,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
         <CreatorFooter />
       </div>
       <FloatingCalculator />
-      <EmergencyButton /> {/* Adiciona o botão de emergência aqui */}
+      <EmergencyButton />
       <MobileNav />
     </div>
   );
@@ -67,12 +68,10 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"/></div>;
   if (!isAuthenticated) return <Redirect to="/welcome" />;
 
-  // Block only users with 'blocked' status
   if (user?.status === 'blocked') {
     return <PaymentRequired />;
   }
 
-  // Allow preview access for pending users (limited content shown via PreviewGate)
   return (
     <ProtectedLayout>
       <Component />
@@ -154,6 +153,10 @@ function Router() {
         <ProtectedRoute component={Finance} />
       </Route>
 
+       <Route path="/exams">
+        <ProtectedRoute component={Exams} />
+      </Route>
+
       <Route path="/ai-chat">
         <ProtectedRoute component={AiInterconsult} />
       </Route>
@@ -202,7 +205,6 @@ function Router() {
         <ProtectedRoute component={AiWebView} />
       </Route>
 
-      {/* Redirect chat alias to ai-chat for now as we merged functionality or placeholder */}
       <Route path="/chat">
         <Redirect to="/ai-chat" />
       </Route>

@@ -1,3 +1,4 @@
+
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -46,6 +47,7 @@ const NAV_ITEMS = [
   { icon: FileBadge, label: "Atestado", href: "/medical-certificate" },
   { icon: FileCheck, label: "Declaração", href: "/attendance-declaration" },
   { icon: ArrowRightLeft, label: "Encaminhamento", href: "/referral" },
+  { icon: Stethoscope, label: "Exames", href: "/exams" },
   { icon: ClipboardList, label: "Protocolos", href: "/protocols" },
   { icon: CheckSquare, label: "Condutas", href: "/checklists" },
   { icon: Pill, label: "Interações", href: "/drug-interactions" },
@@ -65,6 +67,23 @@ const NAV_ITEMS = [
 function NavContent({ onClose }: { onClose?: () => void }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+
+  const handleSwitchAccount = () => {
+    // Limpa toda a sessão local para garantir que nenhum token antigo permaneça
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Constrói a URL de logout que redireciona para o login com os parâmetros corretos
+    const loginUrl = new URL('/api/login', window.location.origin);
+    loginUrl.searchParams.set('prompt', 'select_account');
+    loginUrl.searchParams.set('ui_locales', 'pt-BR');
+
+    const logoutUrl = new URL('/api/logout', window.location.origin);
+    logoutUrl.searchParams.set('redirect', loginUrl.pathname + loginUrl.search);
+    
+    // Redireciona para o fluxo de logout -> login
+    window.location.href = logoutUrl.toString();
+  };
 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-slate-100">
@@ -124,9 +143,7 @@ function NavContent({ onClose }: { onClose?: () => void }) {
         <Button
           variant="ghost"
           className="w-full justify-start text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-          onClick={() => {
-            window.location.href = "/api/logout?redirect=/api/login";
-          }}
+          onClick={handleSwitchAccount}
           data-testid="button-switch-account"
         >
           <RefreshCw className="mr-2 h-4 w-4" />

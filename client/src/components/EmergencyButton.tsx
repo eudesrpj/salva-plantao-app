@@ -1,17 +1,17 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Zap, Syringe, Wind, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { FC, ReactNode } from 'react';
+import { EmergencyFloatingPanel } from "./EmergencyFloatingPanel";
 
 interface DoseCalculation {
   drug: string;
   dose: (weight: number) => string;
-  unit: (weight: number) => string; // Corrected: unit is now a function
+  unit: (weight: number) => string;
 }
 
 interface EmergencyDoseCardProps {
@@ -55,7 +55,6 @@ const EmergencyDoseCard: FC<EmergencyDoseCardProps> = ({ title, icon, weight, on
               <p className="font-bold text-xl text-blue-600 dark:text-blue-400">
                 {calc.dose(weight)}
               </p>
-              {/* Corrected: calling unit as a function with weight */}
               <p className="text-xs text-muted-foreground">{calc.unit(weight)}</p>
             </div>
           ))}
@@ -105,16 +104,14 @@ const NoradrenalineCard: FC = () => (
   </Card>
 )
 
-
 export function EmergencyButton() {
-  const [open, setOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [weight, setWeight] = useState(70);
 
   const adrenalineDoses: DoseCalculation[] = [
       { 
           drug: "Adrenalina (1mg/ml)", 
           dose: (w) => `${(0.01 * w).toFixed(2)} mg`, 
-          // Corrected: unit is now a function that uses the weight
           unit: (w) => `Volume: ${(0.01 * w).toFixed(2)} ml da ampola pura.`
       },
       { 
@@ -138,38 +135,35 @@ export function EmergencyButton() {
   ]
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          className="fixed bottom-6 right-24 h-14 w-14 rounded-full bg-red-600 hover:bg-red-700 shadow-2xl animate-pulse z-50 md:bottom-8 md:right-28"
-          size="icon"
-          data-testid="emergency-button"
-        >
-          <Zap className="h-7 w-7 text-white" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-4xl bg-slate-100 dark:bg-slate-950">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-red-600">Ações Rápidas de Emergência</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-1 md:p-4">
-          <EmergencyDoseCard
-            title="Adrenalina (PCR)"
-            icon={<Zap className="text-yellow-500" />}
-            weight={weight}
-            onWeightChange={setWeight}
-            doseCalculations={adrenalineDoses}
-          />
-          <NoradrenalineCard />
-          <EmergencyDoseCard
-            title="Intubação (SRI)"
-            icon={<Wind className="text-green-500" />}
-            weight={weight}
-            onWeightChange={setWeight}
-            doseCalculations={sriDoses}
-          />
+    <>
+      <Button
+        onClick={() => setIsPanelOpen(true)}
+        className="fixed bottom-6 right-24 h-14 w-14 rounded-full bg-red-600 hover:bg-red-700 shadow-2xl animate-pulse z-30 md:bottom-8 md:right-28"
+        size="icon"
+        data-testid="emergency-button"
+      >
+        <Zap className="h-7 w-7 text-white" />
+      </Button>
+
+      <EmergencyFloatingPanel isOpen={isPanelOpen} onClose={() => setIsPanelOpen(false)}>
+        <div className="grid grid-cols-1 gap-4">
+            <EmergencyDoseCard
+                title="Adrenalina (PCR)"
+                icon={<Zap className="text-yellow-500" />}
+                weight={weight}
+                onWeightChange={setWeight}
+                doseCalculations={adrenalineDoses}
+            />
+            <NoradrenalineCard />
+            <EmergencyDoseCard
+                title="Intubação (SRI)"
+                icon={<Wind className="text-green-500" />}
+                weight={weight}
+                onWeightChange={setWeight}
+                doseCalculations={sriDoses}
+            />
         </div>
-      </DialogContent>
-    </Dialog>
+      </EmergencyFloatingPanel>
+    </>
   );
 }
