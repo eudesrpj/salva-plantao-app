@@ -4275,6 +4275,51 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(settings);
   });
 
+  // --- Sound Settings ---
+  app.get("/api/sound-settings", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const settings = await storage.getUserNotificationSettings(userId);
+    res.json({
+      soundEnabled: settings?.soundEnabled ?? true,
+      soundVolume: settings?.soundVolume ?? 70,
+      soundTheme: settings?.soundTheme ?? "default",
+      chatSoundEnabled: settings?.chatSoundEnabled ?? true,
+      notificationSoundEnabled: settings?.notificationSoundEnabled ?? true,
+    });
+  });
+
+  app.patch("/api/sound-settings", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { soundEnabled, soundVolume, soundTheme, chatSoundEnabled, notificationSoundEnabled } = req.body;
+    
+    const existingSettings = await storage.getUserNotificationSettings(userId);
+    
+    const settings = await storage.saveUserNotificationSettings({
+      userId,
+      segments: existingSettings?.segments || [],
+      quietHoursStart: existingSettings?.quietHoursStart || null,
+      quietHoursEnd: existingSettings?.quietHoursEnd || null,
+      allowEmergencyOverride: existingSettings?.allowEmergencyOverride !== false,
+      soundEnabled: soundEnabled ?? existingSettings?.soundEnabled ?? true,
+      soundVolume: soundVolume ?? existingSettings?.soundVolume ?? 70,
+      soundTheme: soundTheme ?? existingSettings?.soundTheme ?? "default",
+      chatSoundEnabled: chatSoundEnabled ?? existingSettings?.chatSoundEnabled ?? true,
+      notificationSoundEnabled: notificationSoundEnabled ?? existingSettings?.notificationSoundEnabled ?? true,
+    });
+    
+    res.json({
+      soundEnabled: settings.soundEnabled,
+      soundVolume: settings.soundVolume,
+      soundTheme: settings.soundTheme,
+      chatSoundEnabled: settings.chatSoundEnabled,
+      notificationSoundEnabled: settings.notificationSoundEnabled,
+    });
+  });
+
   // Get notification inbox for user
   app.get("/api/notifications/inbox", isAuthenticated, async (req, res) => {
     const userId = getUserId(req);

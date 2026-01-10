@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { playChatSound, playNotificationSound } from "@/lib/soundPlayer";
 
 interface Notification {
   type: string;
@@ -44,9 +45,14 @@ export function useWebSocket(): UseWebSocketReturn {
         
         if (data.type === "connected") {
           setIsConnected(true);
-        } else if (data.type === "new_message" || data.type === "new_support_message" || data.type === "notification") {
+        } else if (data.type === "new_message" || data.type === "new_support_message") {
           setNotifications(prev => [data, ...prev].slice(0, 50));
           setUnreadCount(prev => prev + 1);
+          playChatSound();
+        } else if (data.type === "notification") {
+          setNotifications(prev => [data, ...prev].slice(0, 50));
+          setUnreadCount(prev => prev + 1);
+          playNotificationSound();
         }
       } catch {
         // Ignore parse errors

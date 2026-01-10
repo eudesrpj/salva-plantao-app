@@ -1288,6 +1288,12 @@ export const userNotificationSettings = pgTable("user_notification_settings", {
   quietHoursStart: text("quiet_hours_start"), // "HH:MM" format
   quietHoursEnd: text("quiet_hours_end"), // "HH:MM" format
   allowEmergencyOverride: boolean("allow_emergency_override").default(true),
+  // Sound Settings
+  soundEnabled: boolean("sound_enabled").default(true),
+  soundVolume: integer("sound_volume").default(70), // 0-100
+  soundTheme: text("sound_theme").default("default"), // default, soft, alert, medical
+  chatSoundEnabled: boolean("chat_sound_enabled").default(true),
+  notificationSoundEnabled: boolean("notification_sound_enabled").default(true),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

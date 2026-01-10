@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Bell, Clock, Shield, Save, Loader2 } from "lucide-react";
 import { NotificationToggle } from "./NotificationToggle";
+import { SoundSettings } from "./SoundSettings";
 
 export function NotificationSettings() {
   const { toast } = useToast();
@@ -187,6 +188,8 @@ export function NotificationSettings() {
         )}
         Salvar Preferências
       </Button>
+      
+      <SoundSettings />
     </div>
   );
 }
