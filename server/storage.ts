@@ -86,8 +86,15 @@ import {
   userOneTimeMessages, type UserOneTimeMessages, type InsertUserOneTimeMessages,
   userPreviewState, type UserPreviewState, type InsertUserPreviewState
 } from "@shared/schema";
+import { 
+  authIdentities, type AuthIdentity, type InsertAuthIdentity,
+  emailAuthTokens, type EmailAuthToken, type InsertEmailAuthToken,
+  billingPlans, type BillingPlan, type InsertBillingPlan,
+  billingOrders, type BillingOrder, type InsertBillingOrder,
+  userEntitlements, type UserEntitlement, type InsertUserEntitlement
+} from "@shared/models/auth";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql, isNull, lt, gte, gt, inArray, ne } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, isNull, lt, gte, gt, inArray, ne, lte } from "drizzle-orm";
 import { users } from "@shared/models/auth";
 
 // Helper function to normalize text (remove accents, lowercase, trim)
@@ -3252,13 +3259,227 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     }
-    // Create new preview state if not exists
     const [created] = await db.insert(userPreviewState).values({ 
       userId, 
       previewStartedAt: new Date(),
       actionsUsed: 1 
     }).returning();
     return created;
+  }
+
+  // --- Auth Identities ---
+  async getAuthIdentityByProvider(provider: string, providerUserId: string): Promise<AuthIdentity | undefined> {
+    const [identity] = await db.select().from(authIdentities)
+      .where(and(eq(authIdentities.provider, provider), eq(authIdentities.providerUserId, providerUserId)));
+    return identity;
+  }
+
+  async getAuthIdentitiesByUserId(userId: string): Promise<AuthIdentity[]> {
+    return await db.select().from(authIdentities).where(eq(authIdentities.userId, userId));
+  }
+
+  async createAuthIdentity(data: InsertAuthIdentity): Promise<AuthIdentity> {
+    const [identity] = await db.insert(authIdentities).values(data).returning();
+    return identity;
+  }
+
+  async deleteAuthIdentity(id: number): Promise<void> {
+    await db.delete(authIdentities).where(eq(authIdentities.id, id));
+  }
+
+  // --- Email Auth Tokens ---
+  async createEmailAuthToken(data: InsertEmailAuthToken): Promise<EmailAuthToken> {
+    const [token] = await db.insert(emailAuthTokens).values(data).returning();
+    return token;
+  }
+
+  async getValidEmailAuthToken(email: string): Promise<EmailAuthToken | undefined> {
+    const [token] = await db.select().from(emailAuthTokens)
+      .where(and(
+        eq(emailAuthTokens.email, email),
+        isNull(emailAuthTokens.usedAt),
+        gt(emailAuthTokens.expiresAt, new Date())
+      ))
+      .orderBy(desc(emailAuthTokens.createdAt))
+      .limit(1);
+    return token;
+  }
+
+  async markEmailAuthTokenUsed(id: number): Promise<void> {
+    await db.update(emailAuthTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(emailAuthTokens.id, id));
+  }
+
+  async deleteExpiredEmailAuthTokens(): Promise<void> {
+    await db.delete(emailAuthTokens).where(lt(emailAuthTokens.expiresAt, new Date()));
+  }
+
+  // --- Billing Plans ---
+  async getBillingPlans(): Promise<BillingPlan[]> {
+    return await db.select().from(billingPlans)
+      .where(eq(billingPlans.isActive, true))
+      .orderBy(billingPlans.displayOrder);
+  }
+
+  async getBillingPlan(code: string): Promise<BillingPlan | undefined> {
+    const [plan] = await db.select().from(billingPlans).where(eq(billingPlans.code, code));
+    return plan;
+  }
+
+  async createBillingPlan(data: InsertBillingPlan): Promise<BillingPlan> {
+    const [plan] = await db.insert(billingPlans).values(data).returning();
+    return plan;
+  }
+
+  async updateBillingPlan(code: string, data: Partial<InsertBillingPlan>): Promise<BillingPlan | undefined> {
+    const [plan] = await db.update(billingPlans)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(billingPlans.code, code))
+      .returning();
+    return plan;
+  }
+
+  async upsertBillingPlan(data: InsertBillingPlan): Promise<BillingPlan> {
+    const existing = await this.getBillingPlan(data.code);
+    if (existing) {
+      const [updated] = await db.update(billingPlans)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(billingPlans.code, data.code))
+        .returning();
+      return updated;
+    }
+    return this.createBillingPlan(data);
+  }
+
+  // --- Billing Orders ---
+  async createBillingOrder(data: InsertBillingOrder): Promise<BillingOrder> {
+    const [order] = await db.insert(billingOrders).values(data).returning();
+    return order;
+  }
+
+  async getBillingOrder(id: number): Promise<BillingOrder | undefined> {
+    const [order] = await db.select().from(billingOrders).where(eq(billingOrders.id, id));
+    return order;
+  }
+
+  async getBillingOrderByAsaasId(asaasPaymentId: string): Promise<BillingOrder | undefined> {
+    const [order] = await db.select().from(billingOrders)
+      .where(eq(billingOrders.asaasPaymentId, asaasPaymentId));
+    return order;
+  }
+
+  async getUserBillingOrders(userId: string): Promise<BillingOrder[]> {
+    return await db.select().from(billingOrders)
+      .where(eq(billingOrders.userId, userId))
+      .orderBy(desc(billingOrders.createdAt));
+  }
+
+  async updateBillingOrder(id: number, data: Partial<BillingOrder>): Promise<BillingOrder | undefined> {
+    const [order] = await db.update(billingOrders)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(billingOrders.id, id))
+      .returning();
+    return order;
+  }
+
+  // --- User Entitlements ---
+  async getUserEntitlement(userId: string): Promise<UserEntitlement | undefined> {
+    const [entitlement] = await db.select().from(userEntitlements)
+      .where(eq(userEntitlements.userId, userId));
+    return entitlement;
+  }
+
+  async upsertUserEntitlement(data: InsertUserEntitlement): Promise<UserEntitlement> {
+    const existing = await this.getUserEntitlement(data.userId);
+    if (existing) {
+      const [updated] = await db.update(userEntitlements)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(userEntitlements.userId, data.userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(userEntitlements).values(data).returning();
+    return created;
+  }
+
+  async activateUserEntitlement(userId: string, planCode: string, durationDays: number, orderId: number): Promise<UserEntitlement> {
+    const existing = await this.getUserEntitlement(userId);
+    const now = new Date();
+    let accessUntil: Date;
+    
+    if (existing?.accessUntil && existing.accessUntil > now) {
+      accessUntil = new Date(existing.accessUntil.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    } else {
+      accessUntil = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    }
+    
+    return this.upsertUserEntitlement({
+      userId,
+      status: "active",
+      planCode,
+      accessUntil,
+      lastOrderId: orderId
+    });
+  }
+
+  async checkAndExpireEntitlements(): Promise<void> {
+    await db.update(userEntitlements)
+      .set({ status: "expired", updatedAt: new Date() })
+      .where(and(
+        eq(userEntitlements.status, "active"),
+        lte(userEntitlements.accessUntil, new Date())
+      ));
+  }
+
+  async hasActiveEntitlement(userId: string): Promise<boolean> {
+    const entitlement = await this.getUserEntitlement(userId);
+    if (!entitlement) return false;
+    if (entitlement.status !== "active") return false;
+    if (!entitlement.accessUntil) return false;
+    return entitlement.accessUntil > new Date();
+  }
+
+  // --- Seed Default Billing Plans ---
+  async seedBillingPlans(): Promise<void> {
+    const plans: InsertBillingPlan[] = [
+      {
+        code: "monthly",
+        name: "Mensal",
+        description: "Acesso por 30 dias",
+        priceCents: 2990,
+        durationDays: 30,
+        discountPercent: 0,
+        isActive: true,
+        displayOrder: 1
+      },
+      {
+        code: "semiannual",
+        name: "Semestral",
+        description: "Acesso por 6 meses",
+        priceCents: 14990,
+        originalPriceCents: 17940,
+        durationDays: 180,
+        discountPercent: 17,
+        isActive: true,
+        displayOrder: 2
+      },
+      {
+        code: "annual",
+        name: "Anual",
+        description: "Acesso por 1 ano",
+        priceCents: 27990,
+        originalPriceCents: 35880,
+        durationDays: 365,
+        discountPercent: 22,
+        isActive: true,
+        displayOrder: 3
+      }
+    ];
+
+    for (const plan of plans) {
+      await this.upsertBillingPlan(plan);
+    }
   }
 }
 

@@ -1,0 +1,205 @@
+Quero implementar e corrigir DEFINITIVAMENTE o sistema de AUTENTICAÇÃO + ASSINATURA + PAGAMENTO no meu app web, de forma segura, automática e profissional, SEM usar Replit Auth, SEM bugs e SEM quebrar o app.
+
+────────────────────────────────────────────
+CONTEXTO GERAL
+────────────────────────────────────────────
+- Stack: React + Vite (frontend) | Express + TypeScript (backend) | Postgres/Drizzle
+- App: Salva Plantão
+- Hoje há problemas em:
+  - Login (tela de consentimento do Replit)
+  - Troca de conta
+  - Fluxo de assinatura/pagamento
+- Quero tudo funcionando de forma automática e integrada ao Asaas
+
+────────────────────────────────────────────
+OBJETIVOS PRINCIPAIS
+────────────────────────────────────────────
+1) REMOVER COMPLETAMENTE o login “secured by Replit”.
+2) Implementar autenticação própria segura com:
+   - Email (CÓDIGO de 6 dígitos + MAGIC LINK no mesmo email)
+   - Google OAuth
+   - Apple OAuth (opcional; se não der agora, deixar preparado)
+3) Implementar sistema de PLANOS:
+   - Mensal: R$ 29,90 (30 dias)
+   - Semestral: R$ 149,90 (180 dias)
+   - Anual: R$ 279,90 (365 dias)
+   *Semestral e anual com DESCONTO embutido no preço.*
+4) Pagamento via Asaas com:
+   - Cartão OU Pix
+   - Checkout externo do Asaas (URL absoluta)
+5) CUPOM:
+   - Continua sendo configurado e validado no app
+   - Apenas 1 cupom por vez
+   - Cupom é aplicado SOBRE o preço do plano
+6) O VALOR FINAL (plano + desconto + cupom) deve aparecer corretamente no checkout do Asaas.
+7) Liberação AUTOMÁTICA do acesso após pagamento confirmado (via webhook).
+8) Trocar conta e excluir conta devem funcionar de verdade.
+9) Paywall inteligente: aparece só para quem não é assinante ativo.
+
+────────────────────────────────────────────
+REGRAS OBRIGATÓRIAS
+────────────────────────────────────────────
+- NÃO usar Replit Auth em nenhum ponto.
+- NÃO expor chave do Asaas no frontend.
+- NÃO usar polling para status de pagamento.
+- NÃO permitir empilhar cupons.
+- NÃO quebrar funcionalidades existentes.
+- Cookies HttpOnly + sessão segura.
+- npm run dev e npm run build devem continuar funcionando.
+
+────────────────────────────────────────────
+PARTE A — AUTENTICAÇÃO (SEM REPLIT)
+────────────────────────────────────────────
+A1) Banco (Drizzle):
+- users (id, email, name, createdAt, deletedAt)
+- auth_identities (id, userId, provider: email|google|apple, providerUserId, email)
+- email_auth_tokens:
+  - email
+  - codeHash (6 dígitos)
+  - tokenHash (magic link)
+  - expiresAt (10 min)
+  - usedAt
+
+A2) Fluxo Email (código + link juntos):
+- POST /api/auth/email/request
+  - gera código + token
+  - envia email com:
+    - código de 6 dígitos
+    - botão magic link (https://DOMINIO/auth/magic?token=XXX)
+- POST /api/auth/email/verify-code
+- GET /api/auth/email/verify-magic
+  → ambos criam sessão e invalidam o outro método
+
+A3) Google OAuth:
+- /api/auth/google/start
+- /api/auth/google/callback
+- vincular por email para evitar duplicados
+
+A4) Sessão:
+- Cookies HttpOnly, Secure em prod, SameSite=Lax
+
+A5) Conta:
+- POST /api/auth/logout
+- DELETE /api/account (soft delete + logout)
+
+────────────────────────────────────────────
+PARTE B — PLANOS E DESCONTOS
+────────────────────────────────────────────
+B1) billing_plans:
+- code (monthly|semiannual|annual)
+- priceCents
+- durationDays
+- isActive
+
+Defaults:
+- monthly: 2990 / 30
+- semiannual: 14990 / 180
+- annual: 27990 / 365
+
+B2) Regra de cálculo (OBRIGATÓRIA):
+1. Pega preço do plano
+2. (Plano semestral/anual já tem desconto embutido)
+3. Aplica APENAS 1 cupom (se existir)
+4. Gera valor final
+5. Envia SOMENTE o valor final para o Asaas
+
+────────────────────────────────────────────
+PARTE C — PAGAMENTO ASAAS
+────────────────────────────────────────────
+C1) billing_orders:
+- id
+- userId
+- planCode
+- originalPriceCents
+- discountCents
+- finalPriceCents
+- couponCode
+- paymentMethod (PIX|CREDIT_CARD)
+- asaasPaymentId
+- status
+
+C2) POST /api/billing/checkout
+Entrada: { planCode, couponCode?, paymentMethod }
+- validar user
+- validar cupom (1 por vez)
+- calcular valor final
+- criar billing_order (pending)
+- criar checkout no Asaas com:
+  - value = finalPrice
+  - externalReference = userId
+  - description = planCode + orderId
+  - returnUrl/successUrl/cancelUrl (DOMÍNIO PUBLICADO)
+- retornar { url }
+
+Frontend deve usar:
+window.location.href = url
+
+────────────────────────────────────────────
+PARTE D — WEBHOOK (LIBERAÇÃO AUTOMÁTICA)
+────────────────────────────────────────────
+D1) POST /api/webhooks/asaas
+- validar origem
+- idempotência
+- ao confirmar pagamento:
+  - billing_order.status = paid
+  - atualizar user_entitlements:
+    - status = active
+    - planCode
+    - accessUntil = max(accessUntil_atual, now) + durationDays
+
+D2) user_entitlements:
+- userId
+- status
+- planCode
+- accessUntil
+
+────────────────────────────────────────────
+PARTE E — PAYWALL
+────────────────────────────────────────────
+E1) GET /api/billing/status
+- retorna status + accessUntil
+
+E2) PaywallModal:
+- aparece se não ativo ou accessUntil < now
+- mostra planos com preços
+- mostra método Pix/Cartão
+- campo cupom (1 por vez)
+- botão Assinar → checkout
+
+E3) /billing/success
+- chama GET /api/billing/status
+- libera acesso
+
+────────────────────────────────────────────
+PARTE F — ADMIN
+────────────────────────────────────────────
+F1) Admin pode:
+- editar preço do semestral/anual
+- ver planos ativos
+- rodar sync manual com Asaas (fallback)
+
+F2) Chave Asaas:
+- SOMENTE via ENV no backend
+- frontend nunca vê a chave
+
+────────────────────────────────────────────
+TESTES OBRIGATÓRIOS
+────────────────────────────────────────────
+1) Login por código funciona
+2) Login por magic link funciona
+3) Google login funciona
+4) Usuário não assinante vê paywall
+5) Desconto do plano aparece no checkout do Asaas
+6) Cupom funciona (1 por vez)
+7) Pagamento libera acesso automaticamente
+8) Trocar conta funciona
+9) Excluir conta funciona
+10) Nenhuma tela do Replit aparece
+
+────────────────────────────────────────────
+ENTREGA
+────────────────────────────────────────────
+- listar arquivos alterados
+- listar migrations
+- confirmar que desconto + cupom aparecem corretamente no Asaas
+- confirmar liberação automática sem polling
