@@ -153,7 +153,26 @@ Admin users bypass payment checks and have access to user management, content mo
 - **Recharts**: Financial charts for shift earnings visualization
 - **p-limit/p-retry**: Rate limiting and retry logic for AI batch operations
 
+### Version 2.6 Features (January 2026)
+- **Asaas Checkout Integration**:
+  - External checkout redirect via Asaas Payment Links API
+  - POST /api/billing/checkout creates payment link and returns external URL
+  - GET /api/billing/status checks subscription status
+  - Billing success/cancel pages with redirect handling
+  - Uses REPLIT_DOMAINS for successUrl to avoid Replit workspace redirects
+- **Preview Mode for Trial Users**:
+  - Database table: user_preview_state (previewStartedAt, actionsUsed, previewExpired)
+  - 10-minute time limit + 20 action limit for non-subscribers
+  - GET /api/preview/status returns remaining time/actions
+  - POST /api/preview/consume tracks and decrements action count
+  - PreviewProvider context for app-wide preview state
+  - PreviewGate blocks content when preview expires
+  - PreviewBanner shows remaining time/actions
+  - PreviewExpiredOverlay paywall redirects to /welcome when expired
+  - Subscribers and admins bypass all preview checks via hasFullAccess
+
 ### Payment Integration
-- **Manual Pix**: Brazilian instant payment system (QR code/key display)
-- Admin manually verifies payments and activates user accounts
-- No automated payment gateway integration
+- **Asaas Payment Gateway**: Automated checkout via external hosted payment page
+- Payment links with PIX and credit card options
+- User activated upon successful payment confirmation
+- Manual admin override still available for edge cases
