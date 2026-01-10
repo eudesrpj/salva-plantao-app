@@ -108,20 +108,21 @@ export default function Chat() {
   }, [messages]);
 
   useEffect(() => {
-    if (!user?.chatTermsAcceptedAt || !selectedRoom) return;
+    if (!user?.chatTermsAcceptedAt || !user?.id || !selectedRoom) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "chat:subscribe", roomId: selectedRoom.id }));
+      ws.send(JSON.stringify({ type: "auth", userId: user.id }));
+      ws.send(JSON.stringify({ type: "chat_subscribe", roomId: selectedRoom.id }));
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === "chat:message" && data.roomId === selectedRoom.id) {
+        if (data.type === "chat_message" && data.roomId === selectedRoom.id) {
           queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms", selectedRoom.id, "messages"] });
         }
       } catch {}
@@ -129,11 +130,11 @@ export default function Chat() {
 
     return () => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "chat:unsubscribe", roomId: selectedRoom.id }));
+        ws.send(JSON.stringify({ type: "chat_unsubscribe", roomId: selectedRoom.id }));
       }
       ws.close();
     };
-  }, [user?.chatTermsAcceptedAt, selectedRoom, queryClient]);
+  }, [user?.chatTermsAcceptedAt, user?.id, selectedRoom, queryClient]);
 
   const acceptTermsMutation = useMutation({
     mutationFn: async () => {
