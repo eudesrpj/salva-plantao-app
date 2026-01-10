@@ -1217,3 +1217,89 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+
+// Notification Messages (Inbox - all sent notifications)
+export const notificationMessages = pgTable("notification_messages", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  url: text("url"),
+  category: text("category").notNull().default("general"), // general, emergency, update
+  segment: text("segment"), // target segment if applicable
+  sentByUserId: text("sent_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationMessageSchema = createInsertSchema(notificationMessages).omit({ id: true, createdAt: true });
+export type NotificationMessage = typeof notificationMessages.$inferSelect;
+export type InsertNotificationMessage = z.infer<typeof insertNotificationMessageSchema>;
+
+// Notification Deliveries (Audit log)
+export const notificationDeliveries = pgTable("notification_deliveries", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull().references(() => notificationMessages.id),
+  targetType: text("target_type").notNull(), // all, userIds, segments
+  targetValue: text("target_value"), // JSON of userIds or segments
+  targetCount: integer("target_count").default(0),
+  successCount: integer("success_count").default(0),
+  failCount: integer("fail_count").default(0),
+  inboxOnlyCount: integer("inbox_only_count").default(0), // quiet hours skipped
+  createdByUserId: text("created_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationDeliverySchema = createInsertSchema(notificationDeliveries).omit({ id: true, createdAt: true });
+export type NotificationDelivery = typeof notificationDeliveries.$inferSelect;
+export type InsertNotificationDelivery = z.infer<typeof insertNotificationDeliverySchema>;
+
+// Notification Delivery Items (Per-user delivery status)
+export const notificationDeliveryItems = pgTable("notification_delivery_items", {
+  id: serial("id").primaryKey(),
+  deliveryId: integer("delivery_id").notNull().references(() => notificationDeliveries.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  subscriptionId: integer("subscription_id").references(() => pushSubscriptions.id),
+  status: text("status").notNull().default("pending"), // pending, sent, failed, invalid_removed, inbox_only
+  errorCode: text("error_code"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationDeliveryItemSchema = createInsertSchema(notificationDeliveryItems).omit({ id: true, createdAt: true });
+export type NotificationDeliveryItem = typeof notificationDeliveryItems.$inferSelect;
+export type InsertNotificationDeliveryItem = z.infer<typeof insertNotificationDeliveryItemSchema>;
+
+// Notification Reads (User read status)
+export const notificationReads = pgTable("notification_reads", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  messageId: integer("message_id").notNull().references(() => notificationMessages.id),
+  readAt: timestamp("read_at").defaultNow(),
+}, (table) => ({
+  userMessageUnique: unique("notification_reads_user_message_unique").on(table.userId, table.messageId),
+}));
+
+export const insertNotificationReadSchema = createInsertSchema(notificationReads).omit({ id: true, readAt: true });
+export type NotificationRead = typeof notificationReads.$inferSelect;
+export type InsertNotificationRead = z.infer<typeof insertNotificationReadSchema>;
+
+// User Notification Settings (Preferences)
+export const userNotificationSettings = pgTable("user_notification_settings", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  segments: jsonb("segments").$type<string[]>().default([]), // subscribed segments
+  quietHoursStart: text("quiet_hours_start"), // "HH:MM" format
+  quietHoursEnd: text("quiet_hours_end"), // "HH:MM" format
+  allowEmergencyOverride: boolean("allow_emergency_override").default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserNotificationSettingsSchema = createInsertSchema(userNotificationSettings).omit({ updatedAt: true });
+export type UserNotificationSettings = typeof userNotificationSettings.$inferSelect;
+export type InsertUserNotificationSettings = z.infer<typeof insertUserNotificationSettingsSchema>;
+
+// Admin Emergency Rate Limit Tracker
+export const emergencyNotificationLimits = pgTable("emergency_notification_limits", {
+  id: serial("id").primaryKey(),
+  adminUserId: text("admin_user_id").notNull().references(() => users.id),
+  lastSentAt: timestamp("last_sent_at").defaultNow(),
+});
+
+export type EmergencyNotificationLimit = typeof emergencyNotificationLimits.$inferSelect;

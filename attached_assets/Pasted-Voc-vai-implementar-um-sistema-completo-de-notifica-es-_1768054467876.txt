@@ -1,0 +1,196 @@
+Você vai implementar um sistema completo de notificações no meu app (React+Vite + Express+TS + Postgres/Drizzle), mantendo a versão web funcionando exatamente como está. Tudo deve ser aditivo, isolado e com mínimo risco.
+
+OBJETIVO FINAL
+1) PWA completo (instalável) + Web Push (Android + iOS) usando VAPID.
+2) Admin envia notificações para:
+   - todos
+   - usuários selecionados (por userId)
+   - segmentos (especialidades/locais)
+3) Usuário configura:
+   - preferências de segmentos/categorias
+   - horário silencioso (quiet hours)
+4) Inbox interno: toda notificação enviada vira registro consultável dentro do app.
+5) Deep link: notificação pode abrir uma rota específica (ex: /protocolos/anafilaxia).
+6) Canal de emergência: notificação “vermelha” com limite (rate limit) e auditoria.
+7) Auditoria completa: quem enviou, quando, para quantos, payload, status.
+8) Anti-vazamento leve: bloqueio/alerta básico para evitar dados sensíveis (CPF etc.), sem travar o app.
+
+RESTRIÇÕES OBRIGATÓRIAS (NÃO QUEBRAR O WEB)
+- NÃO reescrever frontend, NÃO mudar rotas existentes, NÃO alterar o fluxo atual do app.
+- Alterações devem ser modulares: novos arquivos + pequenas integrações.
+- npm run dev e npm run build devem continuar funcionando.
+- Sem dependências desnecessárias.
+- Não colocar chaves privadas no frontend.
+
+ASSUMA
+- Existe autenticação e userId disponível no backend (req.user ou session). Se não existir, crie uma função helper clara para obter userId e role.
+- Existe Postgres e Drizzle ORM configurado.
+- Existe painel do admin e UI de usuário.
+
+PARTE A — PWA MÍNIMO E ESTÁVEL
+1) Criar/ajustar manifest.json:
+   - name, short_name, start_url, display=standalone
+   - theme_color, background_color
+   - icons (placeholder ok; documentar onde trocar)
+2) Criar/ajustar service worker simples:
+   - cache app shell (arquivos estáticos do dist)
+   - strategy: cache-first para estáticos, network-first para API
+   - não cachear respostas sensíveis da API
+3) Registrar SW no frontend:
+   - sem alterar layout: apenas inserir registro no boot do app.
+
+PARTE B — WEB PUSH (VAPID)
+Dependência permitida no backend: web-push (ou equivalente) para envio.
+4) VAPID:
+   - gerar keys se não existirem (script util)
+   - usar env vars:
+     VAPID_PUBLIC_KEY
+     VAPID_PRIVATE_KEY
+     VAPID_SUBJECT (mailto:)
+5) Endpoints (Express):
+   - POST /api/push/vapid-public-key -> retorna VAPID_PUBLIC_KEY
+   - POST /api/push/subscribe -> salva subscription associada ao userId autenticado
+   - POST /api/push/unsubscribe -> remove subscription para aquele userId
+   - POST /api/push/admin/send -> envia (somente admin) com alvo: all | userIds | segments
+6) Persistência:
+   - criar tabelas Drizzle:
+     a) push_subscriptions:
+        id (uuid)
+        userId (fk)
+        endpoint (text unique)
+        p256dh (text)
+        auth (text)
+        userAgent (text nullable)
+        createdAt
+        updatedAt
+     b) notification_messages (INBOX):
+        id (uuid)
+        title
+        body
+        url (text nullable)
+        category (text: "general" | "emergency" | "update" etc.)
+        segment (text nullable)
+        sentByUserId (admin)
+        createdAt
+     c) notification_deliveries (AUDITORIA):
+        id (uuid)
+        messageId
+        targetType ("all"|"userIds"|"segments")
+        targetCount (int)
+        successCount (int)
+        failCount (int)
+        createdAt
+        createdByUserId
+     d) notification_delivery_items (opcional mas recomendado):
+        id (uuid)
+        deliveryId
+        userId
+        subscriptionId
+        status ("sent"|"failed"|"invalid_removed")
+        errorCode (text nullable)
+        createdAt
+     e) user_notification_settings:
+        userId (pk)
+        segments (json/text array)
+        quietHoursStart (string "HH:MM" nullable)
+        quietHoursEnd (string "HH:MM" nullable)
+        allowEmergencyOverride (boolean default true)
+        updatedAt
+7) Envio:
+   - /api/push/admin/send recebe:
+     { title, body, url?, category?, target: { type, userIds?, segments? }, emergency?: boolean }
+   - cria notification_messages + notification_deliveries
+   - resolve usuários alvo:
+     - all: todos os usuários ativos (ou todos com subscription)
+     - userIds: somente os especificados
+     - segments: usuários cujo settings.segments contém algum segmento selecionado
+   - respeitar quiet hours:
+     - se estiver em quiet hours e não for emergency, NÃO enviar push; ainda assim criar Inbox message e marcar como “inbox_only”
+     - se emergency e allowEmergencyOverride=true, enviar mesmo em quiet hours
+   - ao enviar via web-push:
+     - se erro 410/404: remover subscription do banco e marcar status invalid_removed
+     - contabilizar success/fail
+8) Frontend - ativar notificações:
+   - criar componente/botão "Ativar notificações" (ideal em Settings/Perfil)
+   - fluxo:
+     a) checar suporte: 'serviceWorker' in navigator e 'PushManager' in window
+     b) registrar SW
+     c) buscar VAPID public key em /api/push/vapid-public-key
+     d) Notification.requestPermission()
+     e) criar subscription: swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey })
+     f) POST /api/push/subscribe com subscription JSON
+   - criar botão “Desativar” (opcional):
+     - unsubscribe do pushManager + POST /api/push/unsubscribe
+   - exibir feedback simples sem refazer layout
+9) Deep link:
+   - no click da notificação (quando app aberto): navegar para url (rota interna)
+   - no service worker: notificationclick -> abrir/focar janela e navegar para url (via clients.openWindow)
+   - se url não existir, cair em /notificacoes (Inbox)
+
+PARTE C — PREFERÊNCIAS, SEGMENTAÇÃO, QUIET HOURS (USER)
+10) Criar UI de configurações do usuário:
+   - lista de segmentos (exemplo inicial):
+     ["Clínica Médica","Pediatria","Ginecologia/Obstetrícia","Cirurgia","UTI","UPA","UBS","Emergência","Atualizações"]
+   - permitir marcar múltiplos
+   - configurar quiet hours (início/fim)
+   - toggle allowEmergencyOverride
+11) Endpoints:
+   - GET /api/notifications/settings (user)
+   - POST /api/notifications/settings (user) -> salva segments + quietHours + override
+
+PARTE D — INBOX (HISTÓRICO DENTRO DO APP)
+12) Criar tela/rota leve: /notificacoes
+   - lista paginada das notification_messages relevantes ao usuário:
+     - gerais (category general/update)
+     - segmentadas para segmentos do usuário
+     - emergency
+   - exibir: title, body, createdAt, tag category/segment, botão “Abrir” se url existir
+13) Opcional (bom): status de lida
+   - tabela notification_reads:
+     userId + messageId + readAt
+   - endpoint POST /api/notifications/read
+
+PARTE E — CANAL DE EMERGÊNCIA + LIMITES
+14) Emergência:
+   - category="emergency"
+   - UI admin destaca como vermelho e avisa uso responsável
+15) Rate limit:
+   - limite para emergency por admin: ex 1 a cada 6 horas (configurável)
+   - se exceder: retornar 429 e registrar tentativa em log
+   - também limitar envios massivos (ex: 1 por minuto) para evitar abuso/acidente
+
+PARTE F — AUDITORIA + ANTI-VAZAMENTO LEVE
+16) Auditoria:
+   - tela admin: “Histórico de envios”
+   - mostra deliveries + contadores + quem enviou + quando
+   - ao clicar, mostra detalhes e falhas
+17) Anti-vazamento leve (não agressivo):
+   - antes de enviar, rodar validação no backend:
+     - detectar padrão de CPF: \b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b
+     - detectar termos tipo “nome:” “cpf:” “rg:” e alertar
+   - se detectar:
+     - para emergency: bloquear envio (retornar erro) e pedir correção
+     - para normal: exigir flag "confirmSensitiveOverride=false" (ou simplesmente bloquear e orientar)
+   - no UI admin, mostrar aviso fixo: “Não inclua dados de paciente. Notificação é pública no celular.”
+
+DOCUMENTAÇÃO E TESTES (OBRIGATÓRIO NO FINAL)
+18) Documentar:
+   - Como gerar VAPID keys (comando usando web-push ou util)
+   - Como setar env vars no Replit
+   - Como testar:
+     a) Android Chrome: ativar notificações e enviar teste
+     b) iOS: requer iOS 16.4+, instalar na Tela de Início, abrir pelo ícone, ativar notificações, enviar teste
+   - Como depurar:
+     - DevTools Application -> Service Workers
+     - logs do servidor ao enviar
+19) Criar endpoint de teste (somente admin):
+   - POST /api/push/admin/test-self -> envia para o próprio usuário logado
+
+ENTREGA
+20) Ao final, liste:
+   - arquivos criados/alterados
+   - migrações/tabelas Drizzle criadas
+   - comandos para rodar e testar
+   - pontos de atenção iOS (instalado na tela inicial + iOS 16.4+)
+
+IMPORTANTE: priorize estabilidade e isolamento. Se houver dúvidas sobre onde colocar UI (admin/user), crie componentes simples e reutilizáveis sem refatorar o app inteiro.

@@ -72,7 +72,13 @@ import {
   type DoseRule, type InsertDoseRule,
   type Formulation, type InsertFormulation,
   type EmergencyPanelItem, type InsertEmergencyPanelItem,
-  pushSubscriptions, type PushSubscription, type InsertPushSubscription
+  pushSubscriptions, type PushSubscription, type InsertPushSubscription,
+  notificationMessages, type NotificationMessage, type InsertNotificationMessage,
+  notificationDeliveries, type NotificationDelivery, type InsertNotificationDelivery,
+  notificationDeliveryItems, type NotificationDeliveryItem, type InsertNotificationDeliveryItem,
+  notificationReads, type NotificationRead, type InsertNotificationRead,
+  userNotificationSettings, type UserNotificationSettings, type InsertUserNotificationSettings,
+  emergencyNotificationLimits, type EmergencyNotificationLimit
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, isNull, lt, gte, gt, inArray, ne } from "drizzle-orm";
@@ -2829,6 +2835,173 @@ export class DatabaseStorage implements IStorage {
   async getUserPushSubscriptions(userId: string): Promise<PushSubscription[]> {
     return await db.select().from(pushSubscriptions)
       .where(eq(pushSubscriptions.userId, userId));
+  }
+
+  // --- Notification Messages (Inbox) ---
+  async createNotificationMessage(data: InsertNotificationMessage): Promise<NotificationMessage> {
+    const [msg] = await db.insert(notificationMessages).values(data).returning();
+    return msg;
+  }
+
+  async getNotificationMessages(options?: { category?: string; segment?: string; limit?: number; offset?: number }): Promise<NotificationMessage[]> {
+    let query = db.select().from(notificationMessages).orderBy(desc(notificationMessages.createdAt));
+    if (options?.limit) {
+      query = query.limit(options.limit) as any;
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset) as any;
+    }
+    return await query;
+  }
+
+  async getNotificationMessagesForUser(userId: string, userSegments: string[], limit: number = 50, offset: number = 0): Promise<NotificationMessage[]> {
+    // Get messages that are: general, emergency, update, or targeted to user's segments
+    const conditions = [
+      eq(notificationMessages.category, "general"),
+      eq(notificationMessages.category, "emergency"),
+      eq(notificationMessages.category, "update"),
+      isNull(notificationMessages.segment),
+    ];
+    if (userSegments.length > 0) {
+      conditions.push(inArray(notificationMessages.segment, userSegments));
+    }
+    return await db.select().from(notificationMessages)
+      .where(or(...conditions))
+      .orderBy(desc(notificationMessages.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  // --- Notification Deliveries (Audit) ---
+  async createNotificationDelivery(data: InsertNotificationDelivery): Promise<NotificationDelivery> {
+    const [del] = await db.insert(notificationDeliveries).values(data).returning();
+    return del;
+  }
+
+  async updateNotificationDelivery(id: number, data: Partial<NotificationDelivery>): Promise<NotificationDelivery> {
+    const [updated] = await db.update(notificationDeliveries).set(data).where(eq(notificationDeliveries.id, id)).returning();
+    return updated;
+  }
+
+  async getNotificationDeliveries(limit: number = 50): Promise<(NotificationDelivery & { message: NotificationMessage })[]> {
+    const result = await db.select({
+      delivery: notificationDeliveries,
+      message: notificationMessages,
+    })
+    .from(notificationDeliveries)
+    .leftJoin(notificationMessages, eq(notificationDeliveries.messageId, notificationMessages.id))
+    .orderBy(desc(notificationDeliveries.createdAt))
+    .limit(limit);
+    return result.map(r => ({ ...r.delivery, message: r.message! }));
+  }
+
+  // --- Notification Delivery Items ---
+  async createNotificationDeliveryItem(data: InsertNotificationDeliveryItem): Promise<NotificationDeliveryItem> {
+    const [item] = await db.insert(notificationDeliveryItems).values(data).returning();
+    return item;
+  }
+
+  async updateNotificationDeliveryItem(id: number, data: Partial<NotificationDeliveryItem>): Promise<void> {
+    await db.update(notificationDeliveryItems).set(data).where(eq(notificationDeliveryItems.id, id));
+  }
+
+  async getDeliveryItems(deliveryId: number): Promise<NotificationDeliveryItem[]> {
+    return await db.select().from(notificationDeliveryItems)
+      .where(eq(notificationDeliveryItems.deliveryId, deliveryId))
+      .orderBy(desc(notificationDeliveryItems.createdAt));
+  }
+
+  // --- Notification Reads ---
+  async markNotificationRead(userId: string, messageId: number): Promise<NotificationRead> {
+    const existing = await db.select().from(notificationReads)
+      .where(and(eq(notificationReads.userId, userId), eq(notificationReads.messageId, messageId)));
+    if (existing.length > 0) return existing[0];
+    const [read] = await db.insert(notificationReads).values({ userId, messageId }).returning();
+    return read;
+  }
+
+  async getUserNotificationReads(userId: string): Promise<number[]> {
+    const reads = await db.select({ messageId: notificationReads.messageId }).from(notificationReads)
+      .where(eq(notificationReads.userId, userId));
+    return reads.map(r => r.messageId);
+  }
+
+  // --- User Notification Settings ---
+  async getUserNotificationSettings(userId: string): Promise<UserNotificationSettings | null> {
+    const [settings] = await db.select().from(userNotificationSettings)
+      .where(eq(userNotificationSettings.userId, userId));
+    return settings || null;
+  }
+
+  async saveUserNotificationSettings(data: InsertUserNotificationSettings): Promise<UserNotificationSettings> {
+    const existing = await this.getUserNotificationSettings(data.userId);
+    if (existing) {
+      const [updated] = await db.update(userNotificationSettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(userNotificationSettings.userId, data.userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(userNotificationSettings).values(data).returning();
+    return created;
+  }
+
+  async getUsersWithSegment(segment: string): Promise<string[]> {
+    const result = await db.select({ userId: userNotificationSettings.userId })
+      .from(userNotificationSettings)
+      .where(sql`${userNotificationSettings.segments} @> ${JSON.stringify([segment])}`);
+    return result.map(r => r.userId);
+  }
+
+  async getUsersWithAnySegment(segments: string[]): Promise<string[]> {
+    if (segments.length === 0) return [];
+    const conditions = segments.map(seg => 
+      sql`${userNotificationSettings.segments} @> ${JSON.stringify([seg])}`
+    );
+    const result = await db.select({ userId: userNotificationSettings.userId })
+      .from(userNotificationSettings)
+      .where(or(...conditions));
+    return [...new Set(result.map(r => r.userId))];
+  }
+
+  // --- Emergency Rate Limiting ---
+  async getLastEmergencyNotificationTime(adminUserId: string): Promise<Date | null> {
+    const [record] = await db.select().from(emergencyNotificationLimits)
+      .where(eq(emergencyNotificationLimits.adminUserId, adminUserId));
+    return record?.lastSentAt || null;
+  }
+
+  async updateEmergencyNotificationLimit(adminUserId: string): Promise<void> {
+    const existing = await db.select().from(emergencyNotificationLimits)
+      .where(eq(emergencyNotificationLimits.adminUserId, adminUserId));
+    if (existing.length > 0) {
+      await db.update(emergencyNotificationLimits)
+        .set({ lastSentAt: new Date() })
+        .where(eq(emergencyNotificationLimits.adminUserId, adminUserId));
+    } else {
+      await db.insert(emergencyNotificationLimits).values({ adminUserId, lastSentAt: new Date() });
+    }
+  }
+
+  // --- Bulk User Subscription Lookup ---
+  async getAllActiveUserIds(): Promise<string[]> {
+    const result = await db.select({ id: users.id }).from(users)
+      .where(eq(users.status, "active"));
+    return result.map(r => r.id);
+  }
+
+  async getUsersWithSubscriptions(userIds?: string[]): Promise<{ userId: string; subscriptions: PushSubscription[] }[]> {
+    let query = db.select().from(pushSubscriptions);
+    if (userIds && userIds.length > 0) {
+      query = query.where(inArray(pushSubscriptions.userId, userIds)) as any;
+    }
+    const subs = await query;
+    const grouped: Record<string, PushSubscription[]> = {};
+    for (const sub of subs) {
+      if (!grouped[sub.userId]) grouped[sub.userId] = [];
+      grouped[sub.userId].push(sub);
+    }
+    return Object.entries(grouped).map(([userId, subscriptions]) => ({ userId, subscriptions }));
   }
 }
 
