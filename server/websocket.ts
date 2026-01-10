@@ -4,6 +4,7 @@ import type { Server } from "http";
 interface ConnectedClient {
   ws: WebSocket;
   userId: string;
+  subscribedRooms: Set<number>;
 }
 
 const clients: Map<string, ConnectedClient> = new Map();
@@ -20,8 +21,22 @@ export function setupWebSocket(httpServer: Server) {
         
         if (message.type === "auth" && message.userId) {
           userId = message.userId as string;
-          clients.set(userId, { ws, userId });
+          clients.set(userId, { ws, userId, subscribedRooms: new Set() });
           ws.send(JSON.stringify({ type: "connected", userId }));
+        }
+
+        if (message.type === "chat_subscribe" && message.roomId && userId) {
+          const client = clients.get(userId);
+          if (client) {
+            client.subscribedRooms.add(Number(message.roomId));
+          }
+        }
+
+        if (message.type === "chat_unsubscribe" && message.roomId && userId) {
+          const client = clients.get(userId);
+          if (client) {
+            client.subscribedRooms.delete(Number(message.roomId));
+          }
         }
       } catch {
         // Ignore parse errors
@@ -100,4 +115,22 @@ export function broadcastToAll(notification: {
 
 export function getConnectedUsers(): string[] {
   return Array.from(clients.keys());
+}
+
+export function broadcastToRoom(roomId: number, chatMessage: {
+  type: string;
+  roomId: number;
+  message: any;
+}) {
+  let notified = 0;
+  clients.forEach((client) => {
+    if (client.ws.readyState === WebSocket.OPEN && client.subscribedRooms.has(roomId)) {
+      client.ws.send(JSON.stringify({
+        ...chatMessage,
+        timestamp: new Date().toISOString(),
+      }));
+      notified++;
+    }
+  });
+  return notified;
 }
