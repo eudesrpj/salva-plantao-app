@@ -3615,6 +3615,56 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(messages);
   });
 
+  // Get all chat users with UF info (admin)
+  app.get("/api/admin/chat/users", isAuthenticated, checkAdmin, async (req, res) => {
+    const usersWithUf = await storage.getChatUsersWithUf();
+    res.json(usersWithUf);
+  });
+
+  // Admin change user UF
+  app.patch("/api/admin/chat/users/:userId/uf", isAuthenticated, checkAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const { uf } = req.body;
+    
+    const validUfs = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
+    if (!uf || !validUfs.includes(uf)) {
+      return res.status(400).json({ message: "Estado inválido" });
+    }
+    
+    const result = await storage.changeUserUf(userId, uf, true);
+    if (!result.success) {
+      return res.status(400).json({ message: result.error });
+    }
+    res.json({ success: true });
+  });
+
+  // User change own UF (once per month)
+  app.post("/api/chat/change-uf", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { uf } = req.body;
+    const validUfs = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
+    if (!uf || !validUfs.includes(uf)) {
+      return res.status(400).json({ message: "Estado inválido" });
+    }
+    
+    const result = await storage.changeUserUf(userId, uf, false);
+    if (!result.success) {
+      return res.status(400).json({ message: result.error });
+    }
+    res.json({ success: true });
+  });
+
+  // Check if user can change UF
+  app.get("/api/chat/can-change-uf", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const result = await storage.canUserChangeUf(userId);
+    res.json(result);
+  });
+
   // --- Seed Data ---
   await seedDatabase();
 
