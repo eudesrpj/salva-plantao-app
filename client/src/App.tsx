@@ -1,3 +1,8 @@
+/*
+© Salva Plantão
+Uso não autorizado é proibido.
+Contato oficial: suporte@appsalvaplantao.com
+*/
 
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
@@ -46,6 +51,7 @@ import Donate from "@/pages/Donate";
 import Exams from "@/pages/Exams";
 import Chat from "@/pages/Chat";
 import Notifications from "@/pages/Notifications";
+import About from "@/pages/About";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -215,6 +221,10 @@ function Router() {
 
       <Route path="/notificacoes">
         <ProtectedRoute component={Notifications} />
+      </Route>
+
+      <Route path="/sobre">
+        <ProtectedRoute component={About} />
       </Route>
 
       <Route component={NotFound} />

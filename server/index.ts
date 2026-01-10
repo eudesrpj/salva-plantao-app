@@ -1,3 +1,9 @@
+/*
+© Salva Plantão
+Uso não autorizado é proibido.
+Contato oficial: suporte@appsalvaplantao.com
+*/
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";

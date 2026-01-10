@@ -1,0 +1,131 @@
+Quero fortalecer a proteção institucional, legal e autoral do app, mantendo credibilidade profissional e adicionando uma assinatura pessoal discreta do criador, sem expor dados pessoais e sem quebrar nada do que já existe.
+
+CONTEXTO
+- App web: React + Vite + Express + TypeScript
+- Produto chama-se “Salva Plantão”
+- Atualmente existe referência ao criador com nome pessoal
+- Quero migrar para identidade institucional, mantendo uma assinatura pessoal simbólica
+- Objetivo: proteção legal, anti-plágio, profissionalismo e segurança pessoal
+- Email oficial de suporte: suporte@appsalvaplantao.com
+
+REGRAS OBRIGATÓRIAS
+1) NÃO remover funcionalidades existentes.
+2) NÃO alterar lógica de pagamento, notificações ou backend crítico.
+3) Mudanças devem ser apenas institucionais, legais e de UI simples.
+4) Tudo deve ser leve, sem bibliotecas pesadas.
+5) npm run dev e npm run build devem continuar funcionando.
+
+────────────────────────
+PARTE 1 — IDENTIDADE INSTITUCIONAL (OBRIGATÓRIA)
+────────────────────────
+1) Padronizar o app como produto institucional:
+   - Nome principal: “Salva Plantão”
+   - Direitos autorais: “© Salva Plantão”
+
+2) Remover qualquer exibição direta de nome pessoal completo no app público.
+
+────────────────────────
+PARTE 2 — ASSINATURA PESSOAL DISCRETA (CRIADOR)
+────────────────────────
+3) Adicionar no RODAPÉ do app (footer), de forma discreta:
+   Texto:
+   “Criado por ERPJ”
+
+4) ERPJ é apenas uma assinatura simbólica (iniciais), sem link, sem redirecionamento, sem redes sociais.
+
+5) Opcional (bom):
+   - Tooltip ao passar o mouse:
+     “ERPJ — criador do Salva Plantão”
+   - Não exibir em mobile se ficar poluído (usar CSS responsivo).
+
+────────────────────────
+PARTE 3 — MENU “SOBRE” (NOVO)
+────────────────────────
+6) Adicionar no menu principal um item:
+   - “Sobre”
+
+7) A tela “Sobre” deve conter seções organizadas:
+
+A) SOBRE O APP  
+Texto institucional simples:
+“Salva Plantão é uma plataforma desenvolvida para apoiar médicos na tomada de decisões durante o plantão, oferecendo organização, agilidade e segurança no dia a dia clínico.”
+
+B) TERMO DE COMPROMISSO  
+Texto base:
+“O Salva Plantão é uma ferramenta de apoio à prática médica. As informações disponibilizadas não substituem o julgamento clínico do profissional, que permanece integralmente responsável pelas decisões tomadas.”
+
+C) POLÍTICA DE PRIVACIDADE  
+Incluir texto padrão cobrindo:
+- Coleta mínima de dados
+- Uso apenas para funcionamento do serviço
+- Não compartilhamento com terceiros, exceto quando exigido por lei
+- Uso de cookies/sessão (se aplicável)
+- Conformidade com LGPD
+- Canal de contato para dúvidas ou solicitações:
+  suporte@appsalvaplantao.com
+
+D) DIREITOS AUTORAIS  
+Texto claro:
+“Todo o conteúdo, design, fluxos, funcionalidades e identidade visual do Salva Plantão são protegidos por direitos autorais.
+É proibida a reprodução, distribuição ou criação de produtos derivados sem autorização expressa.”
+
+E) MARCA E PROPRIEDADE  
+Texto:
+“Salva Plantão é uma marca protegida.
+Qualquer uso indevido, cópia ou tentativa de plágio poderá resultar em medidas legais.”
+
+F) CONTATO OFICIAL  
+Texto:
+“Para suporte, dúvidas ou solicitações institucionais, entre em contato pelo email:
+suporte@appsalvaplantao.com”
+
+G) ASSINATURA FINAL  
+Rodapé da página “Sobre”:
+“© Salva Plantão”
+“Acesso institucional”
+“Criado por ERPJ”
+
+────────────────────────
+PARTE 4 — IMPLEMENTAÇÃO TÉCNICA
+────────────────────────
+8) Frontend:
+- Criar página/rota: /sobre
+- Criar componente Footer (se ainda não existir) ou ajustar o existente
+- Garantir visual simples, profissional e leve
+- Inserir o email de suporte no rodapé de forma discreta (ex: “Suporte: suporte@appsalvaplantao.com”)
+- Não adicionar animações pesadas
+
+9) Backend:
+- NÃO é necessário criar endpoints novos
+- Todo o conteúdo pode ser estático no frontend
+
+────────────────────────
+PARTE 5 — PROTEÇÃO ANTI-PLÁGIO (LEVE)
+────────────────────────
+10) Inserir comentários de copyright em arquivos-chave do frontend e backend:
+Exemplo:
+/*
+© Salva Plantão
+Uso não autorizado é proibido.
+Contato oficial: suporte@appsalvaplantao.com
+*/
+
+11) Garantir que o nome “Salva Plantão” apareça como:
+- App name
+- Title da página
+- Rodapé
+- Página Sobre
+
+────────────────────────
+ENTREGA OBRIGATÓRIA
+────────────────────────
+12) Listar:
+- Arquivos criados/alterados
+- Onde foi inserido o rodapé
+- Onde foi adicionado o menu “Sobre”
+
+13) Confirmar:
+- Que não há nome pessoal completo exposto
+- Que o email de suporte está visível apenas como canal institucional
+- Que o app mantém credibilidade institucional
+- Que a assinatura ERPJ é discreta e não clicável

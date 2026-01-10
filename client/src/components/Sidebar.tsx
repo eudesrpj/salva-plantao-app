@@ -1,3 +1,8 @@
+/*
+© Salva Plantão
+Uso não autorizado é proibido.
+Contato oficial: suporte@appsalvaplantao.com
+*/
 
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -35,7 +40,8 @@ import {
   MessageCircle,
   Upload,
   Heart,
-  Users
+  Users,
+  Info
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -66,6 +72,7 @@ const NAV_ITEMS = [
   { icon: MessageSquareText, label: "Notificações", href: "/notificacoes" },
   { icon: User, label: "Meu Perfil", href: "/profile" },
   { icon: Palette, label: "Personalizar", href: "/settings" },
+  { icon: Info, label: "Sobre", href: "/sobre" },
 ];
 
 function NavContent({ onClose }: { onClose?: () => void }) {
@@ -87,7 +94,7 @@ function NavContent({ onClose }: { onClose?: () => void }) {
           </h1>
           <NotificationBell />
         </div>
-        <p className="text-xs text-slate-500 mt-1">Dr. Eudes Rodrigues</p>
+        <p className="text-xs text-slate-500 mt-1">Apoio ao Plantonista</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1">

@@ -1,3 +1,9 @@
+/*
+© Salva Plantão
+Uso não autorizado é proibido.
+Contato oficial: suporte@appsalvaplantao.com
+*/
+
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
