@@ -2961,7 +2961,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select({ userId: userNotificationSettings.userId })
       .from(userNotificationSettings)
       .where(or(...conditions));
-    return [...new Set(result.map(r => r.userId))];
+    return Array.from(new Set(result.map(r => r.userId)));
   }
 
   // --- Emergency Rate Limiting ---

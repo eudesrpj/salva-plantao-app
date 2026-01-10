@@ -3728,57 +3728,367 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(subs);
   });
 
-  // Admin send push notification
-  // AVISO: Nunca inclua dados sensíveis de pacientes nas notificações
+  // Anti-PHI detection patterns
+  const PHI_PATTERNS = [
+    { pattern: /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/, type: "CPF" },
+    { pattern: /\b\d{15}\b/, type: "CNS" },
+    { pattern: /\(\d{2}\)\s*\d{4,5}-?\d{4}/, type: "Telefone" },
+    { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, type: "Email" },
+    { pattern: /\b(nome|cpf|rg|telefone|endereço|paciente):\s*\S+/i, type: "Dados pessoais" },
+  ];
+  
+  function detectPHI(text: string): string[] {
+    const detected: string[] = [];
+    for (const p of PHI_PATTERNS) {
+      if (p.pattern.test(text)) {
+        detected.push(p.type);
+      }
+    }
+    return detected;
+  }
+
+  // Available segments for users to subscribe
+  const NOTIFICATION_SEGMENTS = [
+    "Clínica Médica", "Pediatria", "Ginecologia/Obstetrícia", "Cirurgia",
+    "UTI", "UPA", "UBS", "Emergência", "Ortopedia", "Psiquiatria",
+    "Cardiologia", "Neurologia", "Dermatologia", "Atualizações"
+  ];
+  
+  app.get("/api/notifications/segments", (req, res) => {
+    res.json(NOTIFICATION_SEGMENTS);
+  });
+
+  // Get user notification settings
+  app.get("/api/notifications/settings", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const settings = await storage.getUserNotificationSettings(userId);
+    res.json(settings || { 
+      userId, 
+      segments: [], 
+      quietHoursStart: null, 
+      quietHoursEnd: null, 
+      allowEmergencyOverride: true 
+    });
+  });
+
+  // Save user notification settings
+  app.post("/api/notifications/settings", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { segments, quietHoursStart, quietHoursEnd, allowEmergencyOverride } = req.body;
+    
+    const settings = await storage.saveUserNotificationSettings({
+      userId,
+      segments: segments || [],
+      quietHoursStart: quietHoursStart || null,
+      quietHoursEnd: quietHoursEnd || null,
+      allowEmergencyOverride: allowEmergencyOverride !== false,
+    });
+    
+    res.json(settings);
+  });
+
+  // Get notification inbox for user
+  app.get("/api/notifications/inbox", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+    
+    const settings = await storage.getUserNotificationSettings(userId);
+    const userSegments = (settings?.segments as string[]) || [];
+    
+    const messages = await storage.getNotificationMessagesForUser(userId, userSegments, limit, offset);
+    const readIds = await storage.getUserNotificationReads(userId);
+    
+    res.json({
+      messages: messages.map(m => ({
+        ...m,
+        isRead: readIds.includes(m.id),
+      })),
+    });
+  });
+
+  // Mark notification as read
+  app.post("/api/notifications/read", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { messageId } = req.body;
+    if (!messageId) return res.status(400).json({ message: "messageId required" });
+    
+    await storage.markNotificationRead(userId, messageId);
+    res.json({ success: true });
+  });
+
+  // Check if user is in quiet hours
+  function isInQuietHours(quietStart: string | null, quietEnd: string | null): boolean {
+    if (!quietStart || !quietEnd) return false;
+    const now = new Date();
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    if (quietStart <= quietEnd) {
+      return currentTime >= quietStart && currentTime <= quietEnd;
+    } else {
+      return currentTime >= quietStart || currentTime <= quietEnd;
+    }
+  }
+
+  // Rate limit state (in-memory, 1 emergency per 6 hours per admin)
+  const EMERGENCY_RATE_LIMIT_HOURS = 6;
+  const GENERAL_RATE_LIMIT_SECONDS = 60;
+  let lastGeneralSendTime: Date | null = null;
+
+  // Admin send push notification (enhanced)
   app.post("/api/push/admin/send", isAuthenticated, checkAdmin, async (req, res) => {
     if (!vapidPublicKey || !vapidPrivateKey) {
       return res.status(500).json({ message: "Push notifications not configured" });
     }
     
-    const { title, body, url, mode, userIds } = req.body;
+    const adminUserId = getUserId(req);
+    if (!adminUserId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { title, body, url, category, target, emergency, confirmSensitiveOverride } = req.body;
     
     if (!title || !body) {
       return res.status(400).json({ message: "Title and body required" });
     }
     
-    let subscriptions;
-    if (mode === "selected" && userIds && userIds.length > 0) {
-      subscriptions = await storage.getPushSubscriptions(userIds);
-    } else {
-      subscriptions = await storage.getPushSubscriptions();
+    // Anti-PHI detection
+    const phiDetected = detectPHI(`${title} ${body}`);
+    if (phiDetected.length > 0) {
+      if (emergency) {
+        return res.status(400).json({ 
+          message: `Dados sensíveis detectados (${phiDetected.join(", ")}). Para notificações de emergência, remova antes de enviar.`,
+          phiDetected 
+        });
+      }
+      if (!confirmSensitiveOverride) {
+        return res.status(400).json({ 
+          message: `Possíveis dados sensíveis detectados (${phiDetected.join(", ")}). Confirme que não contém PHI.`,
+          phiDetected,
+          requiresConfirmation: true
+        });
+      }
     }
     
-    const payload = JSON.stringify({
-      title,
-      body,
-      url: url || "/",
-      icon: "/icon-512.png",
-      badge: "/icon-512.png",
-    });
+    // Rate limiting for general notifications
+    if (!emergency) {
+      if (lastGeneralSendTime && (Date.now() - lastGeneralSendTime.getTime()) < GENERAL_RATE_LIMIT_SECONDS * 1000) {
+        return res.status(429).json({ message: `Aguarde ${GENERAL_RATE_LIMIT_SECONDS} segundos entre envios.` });
+      }
+    }
     
-    const results = { success: 0, failed: 0, removed: 0 };
-    
-    for (const sub of subscriptions) {
-      try {
-        await webPush.default.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth }
-          },
-          payload
-        );
-        results.success++;
-      } catch (error: any) {
-        if (error.statusCode === 410 || error.statusCode === 404) {
-          await storage.deletePushSubscriptionByEndpoint(sub.endpoint);
-          results.removed++;
-        } else {
-          results.failed++;
+    // Emergency rate limiting
+    if (emergency) {
+      const lastEmergency = await storage.getLastEmergencyNotificationTime(adminUserId);
+      if (lastEmergency) {
+        const hoursSince = (Date.now() - lastEmergency.getTime()) / (1000 * 60 * 60);
+        if (hoursSince < EMERGENCY_RATE_LIMIT_HOURS) {
+          return res.status(429).json({ 
+            message: `Limite de emergência: aguarde ${Math.ceil(EMERGENCY_RATE_LIMIT_HOURS - hoursSince)} horas.` 
+          });
         }
       }
     }
     
-    res.json({ message: "Notifications sent", results });
+    // Create notification message (for inbox)
+    const notifCategory = emergency ? "emergency" : (category || "general");
+    const segment = target?.segments?.[0] || null;
+    
+    const message = await storage.createNotificationMessage({
+      title,
+      body,
+      url: url || null,
+      category: notifCategory,
+      segment,
+      sentByUserId: adminUserId,
+    });
+    
+    // Resolve target users
+    let targetUserIds: string[] = [];
+    const targetType = target?.type || "all";
+    
+    if (targetType === "userIds" && target?.userIds?.length > 0) {
+      targetUserIds = target.userIds;
+    } else if (targetType === "segments" && target?.segments?.length > 0) {
+      targetUserIds = await storage.getUsersWithAnySegment(target.segments);
+    } else {
+      targetUserIds = await storage.getAllActiveUserIds();
+    }
+    
+    // Create delivery record
+    const delivery = await storage.createNotificationDelivery({
+      messageId: message.id,
+      targetType,
+      targetValue: JSON.stringify(targetType === "userIds" ? target?.userIds : target?.segments || []),
+      targetCount: targetUserIds.length,
+      successCount: 0,
+      failCount: 0,
+      inboxOnlyCount: 0,
+      createdByUserId: adminUserId,
+    });
+    
+    // Get subscriptions for target users
+    const userSubs = await storage.getUsersWithSubscriptions(targetUserIds);
+    
+    const payload = JSON.stringify({
+      title,
+      body,
+      url: url || "/notificacoes",
+      icon: "/icon-512.png",
+      badge: "/icon-512.png",
+      category: notifCategory,
+    });
+    
+    let successCount = 0;
+    let failCount = 0;
+    let inboxOnlyCount = 0;
+    let removedCount = 0;
+    
+    for (const { userId, subscriptions } of userSubs) {
+      // Check quiet hours
+      const userSettings = await storage.getUserNotificationSettings(userId);
+      const inQuietHours = isInQuietHours(
+        userSettings?.quietHoursStart || null,
+        userSettings?.quietHoursEnd || null
+      );
+      
+      // Skip push if in quiet hours (unless emergency + override allowed)
+      if (inQuietHours && !(emergency && userSettings?.allowEmergencyOverride !== false)) {
+        inboxOnlyCount++;
+        await storage.createNotificationDeliveryItem({
+          deliveryId: delivery.id,
+          userId,
+          subscriptionId: null,
+          status: "inbox_only",
+          errorCode: null,
+        });
+        continue;
+      }
+      
+      // Send to all subscriptions for this user
+      for (const sub of subscriptions) {
+        try {
+          await webPush.default.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          );
+          successCount++;
+          await storage.createNotificationDeliveryItem({
+            deliveryId: delivery.id,
+            userId,
+            subscriptionId: sub.id,
+            status: "sent",
+            errorCode: null,
+          });
+        } catch (error: any) {
+          if (error.statusCode === 410 || error.statusCode === 404) {
+            await storage.deletePushSubscriptionByEndpoint(sub.endpoint);
+            removedCount++;
+            await storage.createNotificationDeliveryItem({
+              deliveryId: delivery.id,
+              userId,
+              subscriptionId: sub.id,
+              status: "invalid_removed",
+              errorCode: String(error.statusCode),
+            });
+          } else {
+            failCount++;
+            await storage.createNotificationDeliveryItem({
+              deliveryId: delivery.id,
+              userId,
+              subscriptionId: sub.id,
+              status: "failed",
+              errorCode: error.message?.slice(0, 100) || "Unknown",
+            });
+          }
+        }
+      }
+    }
+    
+    // Update delivery stats
+    await storage.updateNotificationDelivery(delivery.id, {
+      successCount,
+      failCount,
+      inboxOnlyCount,
+    });
+    
+    // Update rate limit trackers
+    lastGeneralSendTime = new Date();
+    if (emergency) {
+      await storage.updateEmergencyNotificationLimit(adminUserId);
+    }
+    
+    res.json({ 
+      message: "Notifications sent", 
+      results: { 
+        success: successCount, 
+        failed: failCount, 
+        inboxOnly: inboxOnlyCount,
+        removed: removedCount,
+        totalTargeted: targetUserIds.length,
+      },
+      messageId: message.id,
+      deliveryId: delivery.id,
+    });
+  });
+
+  // Admin test notification (sends to self)
+  app.post("/api/push/admin/test-self", isAuthenticated, checkAdmin, async (req, res) => {
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      return res.status(500).json({ message: "Push notifications not configured" });
+    }
+    
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const subs = await storage.getUserPushSubscriptions(userId);
+    if (subs.length === 0) {
+      return res.status(400).json({ message: "Você não tem notificações ativadas. Ative primeiro." });
+    }
+    
+    const payload = JSON.stringify({
+      title: "Teste de Notificação",
+      body: "Esta é uma notificação de teste do Salva Plantão!",
+      url: "/",
+      icon: "/icon-512.png",
+      badge: "/icon-512.png",
+    });
+    
+    let success = 0;
+    for (const sub of subs) {
+      try {
+        await webPush.default.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload
+        );
+        success++;
+      } catch (error: any) {
+        if (error.statusCode === 410 || error.statusCode === 404) {
+          await storage.deletePushSubscriptionByEndpoint(sub.endpoint);
+        }
+      }
+    }
+    
+    res.json({ success: success > 0, sent: success });
+  });
+
+  // Admin get notification delivery history
+  app.get("/api/push/admin/deliveries", isAuthenticated, checkAdmin, async (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const deliveries = await storage.getNotificationDeliveries(limit);
+    res.json(deliveries);
+  });
+
+  // Admin get delivery items (detailed status per user)
+  app.get("/api/push/admin/deliveries/:id/items", isAuthenticated, checkAdmin, async (req, res) => {
+    const deliveryId = parseInt(req.params.id);
+    const items = await storage.getDeliveryItems(deliveryId);
+    res.json(items);
   });
 
   // --- Seed Data ---
