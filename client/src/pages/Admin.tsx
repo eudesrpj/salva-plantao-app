@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart, MessageCircle, Clock, MapPin } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart, MessageCircle, Clock, MapPin, Bell, Send } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
@@ -80,6 +80,9 @@ export default function Admin() {
           <TabsTrigger value="chat" className="gap-1">
             <ShieldAlert className="h-4 w-4" /> Chat
           </TabsTrigger>
+          <TabsTrigger value="push" className="gap-1">
+            <Bell className="h-4 w-4" /> Push
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -136,6 +139,10 @@ export default function Admin() {
 
         <TabsContent value="chat">
           <ChatModerationTab />
+        </TabsContent>
+
+        <TabsContent value="push">
+          <PushNotificationsTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -7118,6 +7125,133 @@ function ChatUserUfManagement() {
             </TableBody>
           </Table>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PushNotificationsTab() {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [url, setUrl] = useState("");
+  const [mode, setMode] = useState<"all" | "selected">("all");
+  const [userIdsInput, setUserIdsInput] = useState("");
+  const { toast } = useToast();
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      const userIds = mode === "selected" 
+        ? userIdsInput.split(",").map(id => id.trim()).filter(Boolean)
+        : undefined;
+      
+      const res = await apiRequest("POST", "/api/push/admin/send", {
+        title,
+        body,
+        url: url || undefined,
+        mode,
+        userIds
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Notificações enviadas", 
+        description: `Sucesso: ${data.results?.success || 0}, Falhas: ${data.results?.failed || 0}, Removidas: ${data.results?.removed || 0}`
+      });
+      setTitle("");
+      setBody("");
+      setUrl("");
+      setUserIdsInput("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    }
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Bell className="h-5 w-5" />
+          Enviar Notificação Push
+        </CardTitle>
+        <CardDescription>
+          Envie notificações para os usuários do aplicativo.
+          <br />
+          <strong className="text-yellow-600">AVISO: Nunca inclua dados sensíveis de pacientes nas notificações.</strong>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Título da Notificação</label>
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Ex: Nova atualização disponível"
+            data-testid="input-push-title"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Mensagem</label>
+          <Textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Ex: Confira as novidades do Salva Plantão!"
+            rows={3}
+            data-testid="input-push-body"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">URL ao clicar (opcional)</label>
+          <Input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="Ex: /novidades ou deixe vazio para ir à home"
+            data-testid="input-push-url"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Destinatários</label>
+          <Select value={mode} onValueChange={(v) => setMode(v as "all" | "selected")}>
+            <SelectTrigger data-testid="select-push-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os usuários</SelectItem>
+              <SelectItem value="selected">Usuários selecionados</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {mode === "selected" && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">IDs dos Usuários (separados por vírgula)</label>
+            <Textarea
+              value={userIdsInput}
+              onChange={(e) => setUserIdsInput(e.target.value)}
+              placeholder="user-id-1, user-id-2, user-id-3"
+              rows={2}
+              data-testid="input-push-userids"
+            />
+          </div>
+        )}
+
+        <Button 
+          onClick={() => sendMutation.mutate()}
+          disabled={!title || !body || sendMutation.isPending}
+          className="w-full"
+          data-testid="button-send-push"
+        >
+          {sendMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <Send className="h-4 w-4 mr-2" />
+          )}
+          Enviar Notificação
+        </Button>
       </CardContent>
     </Card>
   );

@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { NotificationBell } from "@/components/NotificationBell";
+import { NotificationToggle } from "@/components/NotificationToggle";
 import { useState } from "react";
 
 const NAV_ITEMS = [
@@ -128,6 +129,9 @@ function NavContent({ onClose }: { onClose?: () => void }) {
       </nav>
 
       <div className="p-4 border-t border-slate-800 space-y-2">
+        <div className="pb-2 border-b border-slate-800">
+          <NotificationToggle />
+        </div>
         {user?.status !== 'active' && user?.role !== 'admin' && (
           <SubscribeButton className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg" />
         )}
