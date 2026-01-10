@@ -1,0 +1,41 @@
+Quero corrigir a geração/impressão do arquivo (PDF/print) da aba “Exames” porque está criando várias páginas desnecessárias (páginas em branco ou com um detalhe pequeno). Hoje está funcionando, só precisa ajustar a paginação/estilo de impressão.
+
+Regras obrigatórias:
+1) NÃO alterar lógica de separação dos exames (modelo SUS) e NÃO mexer em outras abas/funcionalidades.
+2) A mudança deve ser isolada apenas no fluxo de impressão/exportação e/ou CSS de impressão.
+3) Manter o mesmo layout visual, apenas corrigir a quebra de páginas.
+
+O que você deve fazer:
+A) Identificar onde o PDF/print é gerado:
+   - se usa window.print + CSS @media print
+   - ou biblioteca (html2pdf, jsPDF, puppeteer, react-to-print, etc.)
+B) Corrigir as quebras de página indevidas:
+   - Ajustar CSS de impressão:
+     - usar @media print
+     - aplicar page-break-inside: avoid; break-inside: avoid; em containers (cards, tabelas, blocos de exames)
+     - remover/evitar height/min-height fixos que empurram conteúdo
+     - evitar margens/paddings gigantes no print
+     - garantir que elementos vazios não gerem página (display: none no print)
+     - evitar transform/translate e overflow que podem causar páginas extras
+   - Se existir “page-break-after: always” ou “break-after: page” em elementos errados, remover.
+   - Se o conteúdo for dividido em seções, permitir quebra só entre seções grandes, não em cada item.
+
+C) Se for PDF gerado por lib:
+   - Ajustar tamanho do page format (A4), scale e margins
+   - Corrigir cálculo de altura para não criar páginas em branco no final
+   - Se houver “addPage” sobrando, remover
+   - Garantir que o último page não seja criado se não há conteúdo.
+
+D) Adicionar um “modo impressão” seguro:
+   - Um wrapper único para o conteúdo imprimível
+   - Ocultar tudo que não é exame durante impressão (nav, botões, sombras)
+   - Garantir que o conteúdo imprimível tenha width A4 e fluxo normal
+
+Entrega:
+1) Mostrar exatamente quais arquivos foram alterados.
+2) Explicar em 5 linhas o que causava as páginas extras e como foi corrigido.
+3) Garantir que o output final fique com o mínimo de páginas possível, sem páginas em branco.
+
+Importante:
+- Não alterar funcionalidades existentes, apenas impressão/paginação.
+- Rodar e validar o fluxo antes de finalizar.

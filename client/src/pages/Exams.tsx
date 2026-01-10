@@ -416,21 +416,22 @@ export default function Exams() {
       <div ref={printRef} className="hidden print:block">
         <style>{`
           @media print {
-            @page { size: A4; margin: 15mm; }
-            body { font-family: Arial, sans-serif; font-size: 12pt; color: #000; background: #fff; }
-            .print-page { page-break-after: always; min-height: 100vh; padding: 0; }
+            @page { size: A4; margin: 12mm; }
+            body { font-family: Arial, sans-serif; font-size: 11pt; color: #000; background: #fff; margin: 0; padding: 0; }
+            .print-page { page-break-after: always; page-break-inside: avoid; break-inside: avoid; padding: 0; box-sizing: border-box; }
             .print-page:last-child { page-break-after: auto; }
-            .print-header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-            .print-title { font-size: 16pt; font-weight: bold; text-align: center; margin-bottom: 10px; }
-            .print-section { margin-bottom: 20px; }
-            .print-section-title { font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
-            .print-field { margin-bottom: 8px; }
+            .print-header { border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+            .print-title { font-size: 14pt; font-weight: bold; text-align: center; margin-bottom: 6px; }
+            .print-section { margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid; }
+            .print-section-title { font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 4px; margin-bottom: 8px; font-size: 11pt; }
+            .print-field { margin-bottom: 4px; }
             .print-field-label { font-weight: bold; }
             .print-list { list-style: none; padding: 0; margin: 0; }
-            .print-list li { padding: 4px 0; border-bottom: 1px dotted #ccc; }
-            .print-signature { margin-top: 60px; text-align: center; }
-            .print-signature-line { border-top: 1px solid #000; width: 300px; margin: 0 auto 10px; padding-top: 10px; }
-            .print-date { text-align: right; margin-bottom: 20px; }
+            .print-list li { padding: 2px 0; border-bottom: 1px dotted #ccc; }
+            .print-signature { margin-top: 30px; text-align: center; page-break-inside: avoid; break-inside: avoid; }
+            .print-signature-line { border-top: 1px solid #000; width: 280px; margin: 0 auto 8px; padding-top: 8px; }
+            .print-date { text-align: right; margin-bottom: 12px; font-size: 10pt; }
+            * { box-sizing: border-box; }
           }
         `}</style>
 
