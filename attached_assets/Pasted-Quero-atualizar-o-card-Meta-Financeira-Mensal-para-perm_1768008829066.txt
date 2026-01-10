@@ -1,0 +1,136 @@
+Quero atualizar o card “Meta Financeira Mensal” para permitir que o usuário edite e exclua a própria meta.
+
+REGRAS OBRIGATÓRIAS (anti-bug)
+
+Não reescreva o app inteiro. Alterações mínimas e isoladas.
+
+Não mexa em autenticação, rotas, layout global ou tema sem necessidade.
+
+Não criar novas dependências.
+
+Manter exatamente o visual atual do card (barra de progresso, textos e layout).
+
+Tudo deve funcionar em desktop e mobile.
+
+Se algo falhar, garantir fallback seguro (nada pode travar a tela).
+
+OBJETIVO FUNCIONAL
+
+Adicionar no card “Meta Financeira Mensal”:
+
+Botão ✏️ Editar
+
+Botão 🗑️ Excluir
+
+Esses botões devem ficar no canto direito do título do card.
+
+COMPORTAMENTO DOS BOTÕES
+✏️ Editar
+
+Abre um modal leve (não tela cheia).
+
+Campo: “Valor da meta mensal (R$)”
+
+Aceitar apenas valores numéricos positivos (> 0).
+
+Mostrar erro se valor inválido.
+
+Ao salvar:
+
+Atualizar a barra de progresso em tempo real.
+
+Atualizar o texto “Faltam R$ X para atingir sua meta”.
+
+Persistir o valor:
+
+Prioridade: backend existente (se houver endpoint).
+
+Fallback obrigatório: localStorage.
+
+🗑️ Excluir
+
+Exibir confirmação antes de executar.
+
+Ao excluir:
+
+Remover/resetar a meta do usuário.
+
+Limpar a barra de progresso.
+
+Exibir mensagem orientando o usuário a definir nova meta.
+
+Persistir remoção (backend ou localStorage).
+
+DADOS / ESTADO
+
+A meta é individual por usuário.
+
+Nome sugerido para persistência local:
+
+meta_financeira_mensal
+
+Se existir backend:
+
+meta = number | null
+
+REGRAS DE UI / UX
+
+Não permitir meta ≤ 0.
+
+Formatar valores sempre em BRL (pt-BR).
+
+A barra de progresso deve:
+
+Nunca passar de 100%.
+
+Nunca ficar negativa.
+
+Modal deve:
+
+Ter botão Salvar e Cancelar
+
+Fechar ao clicar fora ou no Cancelar
+
+Não quebrar o layout existente.
+
+PASSOS TÉCNICOS (faça nessa ordem)
+
+Localizar o componente do card Meta Financeira Mensal.
+
+Adicionar os botões Editar e Excluir no header do card.
+
+Criar modal simples para edição do valor.
+
+Implementar persistência (backend ou localStorage).
+
+Atualizar cálculo da barra e textos dinamicamente.
+
+Testar em desktop e mobile.
+
+CHECKLIST FINAL (obrigatório antes de concluir)
+
+ Botões aparecem corretamente
+
+ Modal abre e fecha corretamente
+
+ Validação de valor funciona
+
+ Barra atualiza sem refresh
+
+ Excluir realmente remove a meta
+
+ Não gerou erro no console
+
+ Não quebrou nenhuma outra tela
+
+ENTREGA FINAL
+
+Ao concluir:
+
+Liste todos os arquivos alterados/criados.
+
+Explique rapidamente como testar.
+
+Informe se usou backend ou apenas localStorage.
+
+Importante: não criar features extras. Só isso, com estabilidade máxima.
