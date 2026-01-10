@@ -40,3 +40,10 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_log_in_with_replit:2.0.0", "javascript_database:1.0.0", "javascript_openai_ai_integrations:2.0.0"]
+
+[userenv]
+
+[userenv.shared]
+VAPID_PUBLIC_KEY = "BHTXPQSm5JXTLB1XjeRFIwORlkN6bnjXB9JfrSW1xV_AD-R54Ua_UySNxImazAjgp88HJ6R8o2aVhG8QFE0SS1s"
+VAPID_PRIVATE_KEY = "IFenNRX9WFPYb2SnyZqiyLkYf7prDIi25_6WwoiLDUY"
+VAPID_SUBJECT = "mailto:admin@appsalvaplantao.com"

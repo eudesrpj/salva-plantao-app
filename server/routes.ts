@@ -3665,6 +3665,122 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(result);
   });
 
+  // --- Push Notifications ---
+  const webPush = await import("web-push");
+  
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+  const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@appsalvaplantao.com";
+  
+  if (vapidPublicKey && vapidPrivateKey) {
+    webPush.default.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+  }
+
+  // Get VAPID public key
+  app.get("/api/push/vapid-key", (req, res) => {
+    if (!vapidPublicKey) {
+      return res.status(500).json({ message: "Push notifications not configured" });
+    }
+    res.json({ publicKey: vapidPublicKey });
+  });
+
+  // Subscribe to push notifications
+  app.post("/api/push/subscribe", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { endpoint, keys, userAgent } = req.body;
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return res.status(400).json({ message: "Invalid subscription" });
+    }
+    
+    await storage.savePushSubscription({
+      userId,
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      userAgent: userAgent || null,
+    });
+    
+    res.json({ success: true });
+  });
+
+  // Unsubscribe from push notifications
+  app.post("/api/push/unsubscribe", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { endpoint } = req.body;
+    if (!endpoint) {
+      return res.status(400).json({ message: "Endpoint required" });
+    }
+    
+    await storage.deletePushSubscription(userId, endpoint);
+    res.json({ success: true });
+  });
+
+  // Get user's push subscriptions
+  app.get("/api/push/subscriptions", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const subs = await storage.getUserPushSubscriptions(userId);
+    res.json(subs);
+  });
+
+  // Admin send push notification
+  // AVISO: Nunca inclua dados sensíveis de pacientes nas notificações
+  app.post("/api/push/admin/send", isAuthenticated, checkAdmin, async (req, res) => {
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      return res.status(500).json({ message: "Push notifications not configured" });
+    }
+    
+    const { title, body, url, mode, userIds } = req.body;
+    
+    if (!title || !body) {
+      return res.status(400).json({ message: "Title and body required" });
+    }
+    
+    let subscriptions;
+    if (mode === "selected" && userIds && userIds.length > 0) {
+      subscriptions = await storage.getPushSubscriptions(userIds);
+    } else {
+      subscriptions = await storage.getPushSubscriptions();
+    }
+    
+    const payload = JSON.stringify({
+      title,
+      body,
+      url: url || "/",
+      icon: "/icon-512.png",
+      badge: "/icon-512.png",
+    });
+    
+    const results = { success: 0, failed: 0, removed: 0 };
+    
+    for (const sub of subscriptions) {
+      try {
+        await webPush.default.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth }
+          },
+          payload
+        );
+        results.success++;
+      } catch (error: any) {
+        if (error.statusCode === 410 || error.statusCode === 404) {
+          await storage.deletePushSubscriptionByEndpoint(sub.endpoint);
+          results.removed++;
+        } else {
+          results.failed++;
+        }
+      }
+    }
+    
+    res.json({ message: "Notifications sent", results });
+  });
+
   // --- Seed Data ---
   await seedDatabase();
 
