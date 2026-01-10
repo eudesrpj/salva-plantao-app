@@ -34,7 +34,8 @@ import {
   ArrowRightLeft,
   MessageCircle,
   Upload,
-  Heart
+  Heart,
+  Users
 } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscriptionDialog";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -57,6 +58,7 @@ const NAV_ITEMS = [
   { icon: CalendarDays, label: "Plantões", href: "/shifts" },
   { icon: DollarSign, label: "Financeiro", href: "/finance" },
   { icon: MessageCircle, label: "Assistente IA", href: "/ai-webview" },
+  { icon: Users, label: "Chat Médico", href: "/chat" },
   { icon: Library, label: "Biblioteca", href: "/library" },
   { icon: StickyNote, label: "Anotações", href: "/notes" },
   { icon: Heart, label: "Doar", href: "/donate" },

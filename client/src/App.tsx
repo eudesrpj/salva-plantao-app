@@ -43,6 +43,7 @@ import Memorize from "@/pages/Memorize";
 import ImportTemplates from "@/pages/ImportTemplates";
 import Donate from "@/pages/Donate";
 import Exams from "@/pages/Exams";
+import Chat from "@/pages/Chat";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -206,7 +207,7 @@ function Router() {
       </Route>
 
       <Route path="/chat">
-        <Redirect to="/ai-chat" />
+        <ProtectedRoute component={Chat} />
       </Route>
 
       <Route component={NotFound} />
