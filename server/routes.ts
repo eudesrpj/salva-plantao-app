@@ -499,9 +499,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
+  app.get("/api/admin/dashboard-config", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const config = await storage.getDashboardConfig("user_default");
+      res.json(config?.widgets || []);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar config do dashboard" });
+    }
+  });
+
   app.post("/api/admin/dashboard-config", isAuthenticated, checkAdmin, async (req, res) => {
     try {
-      const config = await storage.upsertDashboardConfig(req.body);
+      const config = await storage.upsertDashboardConfig({ scope: "user_default", widgets: req.body.widgets || req.body });
       res.json(config);
     } catch (error) {
       res.status(500).json({ message: "Erro ao salvar config do dashboard" });
@@ -519,9 +528,19 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
+  app.get("/api/admin/quick-access-config", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const configs = await storage.getQuickAccessConfigs();
+      const config = configs.find(c => c.patientType === "ambos") || configs[0];
+      res.json(config?.items || []);
+    } catch (error) {
+      res.status(500).json({ message: "Erro ao buscar config de acesso rápido" });
+    }
+  });
+
   app.post("/api/admin/quick-access-config", isAuthenticated, checkAdmin, async (req, res) => {
     try {
-      const config = await storage.upsertQuickAccessConfig(req.body);
+      const config = await storage.upsertQuickAccessConfig({ patientType: "ambos", items: req.body.items || req.body, isActive: true });
       res.json(config);
     } catch (error) {
       res.status(500).json({ message: "Erro ao salvar config de acesso rápido" });

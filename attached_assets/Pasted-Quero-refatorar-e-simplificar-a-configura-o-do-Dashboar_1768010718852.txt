@@ -1,0 +1,222 @@
+Quero refatorar e simplificar a configuração do Dashboard do usuário e do Acesso Rápido no Painel Administrativo, dando muito mais liberdade, menos campos manuais, e uma experiência intuitiva e moderna, sem quebrar o funcionamento atual.
+
+0) REGRAS OBRIGATÓRIAS (ANTI-BUG)
+
+Não reescrever o app inteiro — mudanças pontuais e bem isoladas.
+
+Não quebrar dashboards já configurados (migração automática).
+
+Não adicionar novas dependências externas.
+
+Manter compatibilidade com dados já salvos no banco.
+
+Tudo deve funcionar bem em desktop e mobile.
+
+UX simples: o admin deve configurar tudo em menos de 1 minuto.
+
+1) PROBLEMA A SER RESOLVIDO
+
+Atualmente:
+
+O admin precisa digitar ID manual
+
+A ordem numérica é pouco intuitiva
+
+Não há preview visual
+
+Não há drag and drop
+
+Ativar/desativar itens é trabalhoso
+
+Quero liberdade total, com simplicidade.
+
+2) NOVO MODELO CONCEITUAL (IMPORTANTE)
+
+Transformar Dashboard e Acesso Rápido em listas de blocos configuráveis, baseados em:
+
+Tipo do bloco
+
+Conteúdo referenciado (rota, protocolo, calculadora, exame, etc.)
+
+Rótulo exibido
+
+Ícone
+
+Status (ativo/inativo)
+
+Ordem visual (drag & drop)
+
+❌ Sem campo manual de ID
+❌ Sem campo de ordem numérica
+✅ Tudo visual
+
+3) DASHBOARD – NOVO COMPORTAMENTO
+Interface
+
+Lista visual de itens do Dashboard
+
+Cada item exibido como card
+
+Cada card tem:
+
+Ícone
+
+Rótulo
+
+Tipo (badge)
+
+Toggle Ativo/Inativo
+
+Botões: ✏️ Editar | 🗑️ Remover
+
+Alça de drag & drop para reordenar
+
+Criar novo item
+
+Botão “Adicionar ao Dashboard” abre modal com:
+
+Tipo (select):
+
+Protocolo
+
+Calculadora
+
+Prescrição
+
+Exames
+
+Rota interna
+
+Card customizado
+
+Conteúdo:
+
+Select dinâmico baseado no tipo (ex: lista de protocolos existentes)
+
+Rótulo (opcional – default vem do item)
+
+Ícone (select simples)
+
+Visibilidade:
+
+Todos os usuários
+
+Apenas assinantes (se existir essa regra)
+
+Salvar → item aparece imediatamente na lista.
+
+4) ACESSO RÁPIDO – NOVO COMPORTAMENTO
+Interface
+
+Grid/lista visual semelhante ao Dashboard
+
+Mesmo padrão de cards
+
+Drag & drop para ordenar
+
+Toggle Ativo/Inativo
+
+Preview visual do botão como o usuário verá
+
+Criar novo atalho
+
+Modal com:
+
+Tipo:
+
+Rota
+
+Prescrição
+
+Exames
+
+Calculadora
+
+Protocolo
+
+Destino (select dinâmico ou input de rota)
+
+Rótulo
+
+Ícone
+
+Cor opcional (se o design permitir)
+
+5) DRAG & DROP (OBRIGATÓRIO)
+
+Implementar ordenação visual por arrastar
+
+Ao soltar:
+
+Atualizar automaticamente a ordem no estado e no backend
+
+Não usar campo “ordem” manual
+
+6) MIGRAÇÃO AUTOMÁTICA (CRÍTICO)
+
+Na primeira carga:
+
+Converter estrutura antiga:
+
+ID → referência
+
+Ordem numérica → posição na lista
+
+Não perder dados existentes
+
+Garantir retrocompatibilidade
+
+7) MODELO DE DADOS (SUGESTÃO)
+
+Pode manter tabela atual, mas internamente trabalhar assim:
+
+{
+  id,
+  type,
+  refId,        // protocoloId, calculatorId, route, etc
+  label,
+  icon,
+  active,
+  position,     // índice automático
+  visibility,
+}
+
+8) UX EXTRAS QUE RESOLVEM DE VERDADE
+
+Adicionar:
+
+Preview do Dashboard do usuário (somente visual)
+
+Botão “Desativar tudo” (opcional)
+
+Confirmação ao remover
+
+Toasts claros: “Item adicionado”, “Ordem atualizada”
+
+9) CHECKLIST DE QUALIDADE
+
+ Admin consegue configurar sem digitar ID
+
+ Ordem via drag & drop funciona
+
+ Ativar/desativar com 1 clique
+
+ Dashboard do usuário reflete mudanças imediatamente
+
+ Acesso rápido fica visual e editável
+
+ Nenhuma configuração antiga foi perdida
+
+ Sem erros no console
+
+10) ENTREGA FINAL
+
+Ao concluir:
+
+Listar arquivos alterados/criados
+
+Explicar como o admin usa em 1 minuto
+
+Mostrar como editar tipos e conteúdos no futuro
+
+IMPORTANTE: Não adicionar funcionalidades extras além dessas. Fazer simples, poderoso e estável.

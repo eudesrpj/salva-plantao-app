@@ -421,6 +421,7 @@ export interface IStorage {
 
   // Quick Access Config
   getQuickAccessConfigs(patientType?: string): Promise<QuickAccessConfig[]>;
+  getQuickAccessConfig(patientType: string): Promise<QuickAccessConfig | undefined>;
   upsertQuickAccessConfig(item: InsertQuickAccessConfig): Promise<QuickAccessConfig>;
 
   // Donation Causes
@@ -2316,6 +2317,12 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(quickAccessConfig)
       .where(eq(quickAccessConfig.isActive, true))
       .orderBy(quickAccessConfig.sortOrder);
+  }
+
+  async getQuickAccessConfig(patientType: string): Promise<QuickAccessConfig | undefined> {
+    const [config] = await db.select().from(quickAccessConfig)
+      .where(eq(quickAccessConfig.patientType, patientType));
+    return config;
   }
 
   async upsertQuickAccessConfig(item: InsertQuickAccessConfig): Promise<QuickAccessConfig> {
