@@ -1,0 +1,188 @@
+Preciso reparar COMPLETAMENTE o fluxo de pagamento/assinatura e também o botão “trocar de conta” do menu principal. Atualmente:
+- Ao clicar em assinar dá erro (fluxo quebrado).
+- O botão de troca de conta no menu principal não funciona.
+Além disso, quero um controle melhor no ADMIN:
+- Um botão/área de “Sincronizar com Asaas” dentro do painel do administrador
+- Onde eu coloco a chave/API do Asaas (de forma segura) e vinculo o sistema
+- Para que sempre que o usuário NÃO estiver assinante ATIVO (exceto assinante ativo), apareça a opção de assinar com planos mensal/semestral/anual.
+- Meu plano mensal é R$ 29,90 e aceita cupons como já configurado no app.
+
+OBJETIVO FINAL
+1) Corrigir o fluxo de checkout/assinatura para SEMPRE redirecionar para a página do Asaas (cartão ou pix), nunca para Replit/workspace.
+2) Criar uma “Paywall/Modal de Assinatura” inteligente:
+   - Aparece quando usuário não é assinante ativo
+   - Não aparece quando usuário é assinante ativo
+   - Mostra planos: mensal, semestral, anual
+   - Aplica cupom (validação e desconto continuam no app)
+   - Botão “Assinar” cria checkout no Asaas e redireciona.
+3) Consertar o botão “Trocar de conta”:
+   - Deve deslogar/limpar sessão e voltar para tela de login/seleção de conta.
+   - Deve funcionar 100% no web (Replit e domínio).
+4) Adicionar no ADMIN uma seção “Integração Asaas”:
+   - Campo para salvar a API key de forma segura (NUNCA no frontend)
+   - Botão “Sincronizar agora”
+   - Exibir status: conectado/erro, último sync, contagem de assinaturas atualizadas
+   - Esse sync deve atualizar o status de assinatura no banco (cache local), sem quebrar nem refatorar o Asaas inteiro.
+
+REGRAS OBRIGATÓRIAS
+- NÃO quebrar o web atual.
+- NÃO refatorar o app inteiro.
+- Alterar apenas código relacionado a: pagamento/assinatura/cupom/conta/logout/admin-asaas.
+- NÃO expor chave do Asaas no frontend.
+- Implementar tudo com dependências mínimas e performance boa.
+- Garantir npm run dev e npm run build funcionando.
+
+────────────────────────────────────────────
+PARTE A — CORRIGIR “TROCAR DE CONTA” (MENU)
+────────────────────────────────────────────
+A1) Identificar o botão “Trocar de conta” no menu principal e corrigir:
+- Deve chamar um endpoint de logout (backend) OU limpar sessão de forma correta.
+- Após logout, redirecionar para a rota de login/entrada (ex: /login).
+- Se existe multi-conta, deve limpar o contexto da conta atual.
+A2) Corrigir causas comuns:
+- handler não conectado
+- rota inexistente
+- conflito com router
+- falha ao limpar cookie/session/localStorage
+A3) Entregar:
+- funcionamento testado: clicar “Trocar de conta” -> desloga -> volta login -> consegue logar de novo.
+
+────────────────────────────────────────────
+PARTE B — ARQUITETURA CERTA DO PAGAMENTO (SEM CAIR NO REPLIT)
+────────────────────────────────────────────
+B1) Padronizar o fluxo:
+Frontend -> POST /api/billing/checkout -> recebe { url } -> window.location.href = url (URL ABSOLUTA do Asaas)
+
+B2) Criar/ajustar endpoints backend:
+1) GET /api/billing/plans
+   Retorna planos disponíveis para o frontend (para renderizar o modal).
+   Planos:
+   - monthly: 29.90
+   - semiannual: (definir valor e/ou regra; se já existir no app, usar o existente; se não, criar configurável no admin)
+   - annual: (idem)
+   Obs: valores podem ficar no backend como config (sem hardcode espalhado).
+
+2) POST /api/billing/checkout
+   Entrada: { plan: "monthly"|"semiannual"|"annual", couponCode? }
+   Regras:
+   - Validar usuário autenticado e userId
+   - Buscar preço do plano
+   - Validar cupom do jeito que já existe (não mudar regras atuais)
+   - Calcular preço final (desconto)
+   - Criar checkout no Asaas e obter URL EXTERNA para pagamento (cartão/pix)
+   - Retornar { url }
+   Importante: url deve ser absoluta e do Asaas (https://asaas.com/....)
+
+3) GET /api/billing/status
+   Retorna { isActiveSubscriber, status, nextDueDate?, plan?, isOverdue? }
+   Fonte de verdade:
+   - O cache local no banco (user_billing_status)
+   - Atualizado via webhook (se já existe) OU via “sync manual/admin” (Parte D)
+
+4) Rotas de retorno:
+   - Front: /billing/success
+   - Front: /billing/cancel
+   - Backend opcional: POST /api/billing/refresh-self para forçar re-check do status do usuário após voltar do Asaas.
+
+B3) Consertar o erro ao clicar em assinar:
+- identificar stacktrace e corrigir
+- garantir que o botão não chama rota do Replit nem abre o editor
+- garantir que qualquer link seja absoluto
+
+B4) Garantir que o modal de assinatura apareça em TODOS os casos necessários:
+- Se usuário NÃO é assinante ativo:
+  - ao entrar no app (dashboard)
+  - ao tentar usar ações premium (se existir)
+  - e como fallback quando clicar em “Assinar” no menu
+- Se usuário é assinante ativo: nunca mostrar modal/pedido de assinatura
+
+────────────────────────────────────────────
+PARTE C — MODAL “ASSINAR” INTELIGENTE (FRONTEND)
+────────────────────────────────────────────
+C1) Criar um componente PaywallModal (leve, sem libs grandes):
+- Mostra planos: Mensal / Semestral / Anual
+- Mensal: R$ 29,90
+- Campo de cupom (opcional)
+- Botão “Aplicar cupom” (valida via endpoint existente ou via /api/billing/checkout que já calcula)
+- Botão “Assinar” -> chama POST /api/billing/checkout e redireciona
+- Estado de loading + erro amigável
+
+C2) UX inteligente:
+- Se status=overdue ou canceled: mostrar “Sua assinatura está inativa. Assine para continuar.”
+- Se trial/preview (se existir): mostrar “Assine para continuar após o preview.”
+
+C3) Performance:
+- Buscar /api/billing/status uma vez por carregamento (usar react-query se já existe)
+- Não fazer polling.
+
+────────────────────────────────────────────
+PARTE D — ADMIN “INTEGRAÇÃO ASAAS” COM SYNC MANUAL (SEM EXPOR CHAVE)
+────────────────────────────────────────────
+D1) Criar página/seção no painel do Admin: “Integração Asaas”
+Com:
+- Campo para inserir API key (somente admin)
+- Botão “Salvar chave” (salva no backend)
+- Botãoão “Sincronizar agora”
+- Status: conectado/erro + último sync + quantidade de usuários atualizados
+
+D2) Segurança da chave:
+- A chave NÃO pode ficar no frontend.
+- Salvar a chave com segurança:
+  Opção preferida: armazenar como ENV no Replit (documentar)
+  Opção alternativa: salvar no banco criptografada (se existir util de crypto no backend). Se fizer, use AES-GCM e uma master key em env.
+- Nunca retornar a chave completa para o frontend (no máximo mostrar “****abcd”).
+
+D3) Endpoint admin:
+- POST /api/admin/asaas/save-key
+- POST /api/admin/asaas/sync
+- GET /api/admin/asaas/status
+
+D4) O sync deve:
+- Buscar assinaturas/cobranças no Asaas usando a chave
+- Atualizar tabela cache local user_billing_status:
+  - status (active/overdue/canceled)
+  - nextDueDate
+  - lastPaymentDate
+  - subscriptionId/customerId (se existirem)
+- Não quebrar nada existente (se já existe webhook, não remover; sync é complementar).
+
+────────────────────────────────────────────
+PARTE E — DADOS/MODELO (MÍNIMO NECESSÁRIO)
+────────────────────────────────────────────
+E1) Garantir tabela cache (se já existe, reutilizar; se não, criar):
+user_billing_status:
+- userId (pk)
+- status (text: active|overdue|canceled|trial)
+- plan (monthly|semiannual|annual)
+- nextDueDate (date nullable)
+- lastPaymentDate (date nullable)
+- asaasCustomerId (nullable)
+- asaasSubscriptionId (nullable)
+- updatedAt
+
+E2) Garantir que cupom continue no app (sem depender do Asaas).
+
+────────────────────────────────────────────
+TESTES OBRIGATÓRIOS (ANTES DE FINALIZAR)
+────────────────────────────────────────────
+1) Usuário não assinante:
+- entra no app -> vê modal “Assinar”
+- escolhe mensal -> checkout -> redireciona Asaas -> volta /billing/success -> status fica ativo -> modal some
+
+2) Usuário assinante ativo:
+- entra no app -> NÃO vê modal
+- botão “Assinar” (se existir) não deve atrapalhar; pode abrir “Você já é assinante”.
+
+3) Trocar de conta:
+- clicar -> deslogar -> voltar login -> logar com outra conta -> funcionar
+
+4) Admin Asaas:
+- salvar chave sem expor no frontend
+- rodar sync -> atualizar status no banco -> refletir no /api/billing/status
+
+ENTREGA OBRIGATÓRIA
+- Listar arquivos alterados/criados
+- Mostrar quais endpoints foram criados/ajustados
+- Mostrar quais tabelas/migrations foram criadas/ajustadas
+- Explicar em poucas linhas o motivo do erro ao clicar em assinar e como foi corrigido
+- Confirmar que a integração Asaas foi preservada e apenas complementada com sync manual/admin

@@ -134,11 +134,16 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/switch-account", (req, res) => {
     req.logout(() => {
-      const loginUrl = `/api/login?prompt=select_account`;
+      req.session?.destroy(() => {});
+      res.clearCookie('connect.sid');
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.hostname;
+      const baseUrl = `${protocol}://${host}`;
+      const loginUrl = `${baseUrl}/api/login?prompt=select_account`;
       res.redirect(
         client.buildEndSessionUrl(config, {
           client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}${loginUrl}`,
+          post_logout_redirect_uri: loginUrl,
         }).href
       );
     });

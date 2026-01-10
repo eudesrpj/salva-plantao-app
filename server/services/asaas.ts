@@ -37,7 +37,7 @@ interface AsaasSubscriptionResponse {
   cycle: string;
 }
 
-async function asaasRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export async function asaasRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   if (!ASAAS_API_KEY) {
     throw new Error('ASAAS_API_KEY not configured');
   }

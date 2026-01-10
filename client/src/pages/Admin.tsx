@@ -52,6 +52,9 @@ export default function Admin() {
           <TabsTrigger value="subscriptions" className="gap-1">
             <CreditCard className="h-4 w-4" /> Assinaturas
           </TabsTrigger>
+          <TabsTrigger value="asaas" className="gap-1">
+            <Zap className="h-4 w-4" /> Asaas
+          </TabsTrigger>
           <TabsTrigger value="calculator" className="gap-1">
             <Calculator className="h-4 w-4" /> Calculadora
           </TabsTrigger>
@@ -101,6 +104,10 @@ export default function Admin() {
 
         <TabsContent value="subscriptions">
           <SubscriptionsTab />
+        </TabsContent>
+
+        <TabsContent value="asaas">
+          <AsaasIntegrationTab />
         </TabsContent>
 
         <TabsContent value="calculator">
@@ -2407,6 +2414,138 @@ function SubscriptionsTab() {
             <div className="text-center py-8 text-muted-foreground">
               <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>Nenhuma assinatura encontrada.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AsaasIntegrationTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: asaasStatus, isLoading } = useQuery<{
+    isConfigured: boolean;
+    apiKeyMask: string | null;
+    lastSync: string | null;
+    lastSyncCount: number;
+    status: string;
+    error?: string;
+  }>({
+    queryKey: ["/api/admin/asaas/status"],
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/asaas/sync", {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/asaas/status"] });
+      toast({ 
+        title: "Sincronização concluída!", 
+        description: data.message || `${data.updatedCount} assinaturas atualizadas.` 
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro na sincronização", 
+        description: error.message || "Tente novamente.",
+        variant: "destructive" 
+      });
+    }
+  });
+
+  if (isLoading) return <PageLoader text="Carregando status do Asaas..." />;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="h-5 w-5" /> Integração Asaas
+          </CardTitle>
+          <CardDescription>
+            Gerencie a integração com o Asaas para processar pagamentos automaticamente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="p-4 border rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Status da Conexão</p>
+              <div className="flex items-center gap-2">
+                {asaasStatus?.isConfigured ? (
+                  <>
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                    <span className="font-medium text-green-600">Conectado</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-3 h-3 bg-red-500 rounded-full" />
+                    <span className="font-medium text-red-600">Não configurado</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 border rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Chave API</p>
+              <p className="font-mono text-sm">
+                {asaasStatus?.apiKeyMask || "Não configurada"}
+              </p>
+            </div>
+
+            <div className="p-4 border rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Última Sincronização</p>
+              <p className="font-medium">
+                {asaasStatus?.lastSync 
+                  ? new Date(asaasStatus.lastSync).toLocaleString("pt-BR")
+                  : "Nunca"}
+              </p>
+            </div>
+
+            <div className="p-4 border rounded-lg">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Assinaturas Atualizadas</p>
+              <p className="font-medium text-2xl">{asaasStatus?.lastSyncCount || 0}</p>
+            </div>
+          </div>
+
+          {!asaasStatus?.isConfigured && (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-amber-800 dark:text-amber-200">Configuração necessária</p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    Para ativar a integração com o Asaas, configure a variável de ambiente <code className="px-1 py-0.5 bg-amber-100 dark:bg-amber-900 rounded">ASAAS_API_KEY</code> nas configurações do Replit.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <Button
+              onClick={() => syncMutation.mutate()}
+              disabled={!asaasStatus?.isConfigured || syncMutation.isPending}
+              data-testid="button-sync-asaas"
+            >
+              {syncMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4 mr-2" />
+              )}
+              Sincronizar Agora
+            </Button>
+          </div>
+
+          {asaasStatus?.error && (
+            <div className="p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-700 dark:text-red-300">
+                Erro: {asaasStatus.error}
+              </p>
             </div>
           )}
         </CardContent>

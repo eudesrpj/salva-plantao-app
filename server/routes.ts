@@ -3010,6 +3010,93 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(payments);
   });
 
+  // --- Admin Asaas Integration ---
+  app.get("/api/admin/asaas/status", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const asaasService = await import('./services/asaas');
+      const isConfigured = asaasService.isAsaasConfigured();
+      const lastSync = await storage.getAdminSetting("asaas_last_sync");
+      const lastSyncCount = await storage.getAdminSetting("asaas_last_sync_count");
+      const apiKeyMask = process.env.ASAAS_API_KEY ? 
+        `****${process.env.ASAAS_API_KEY.slice(-4)}` : null;
+      
+      res.json({
+        isConfigured,
+        apiKeyMask,
+        lastSync: lastSync?.value || null,
+        lastSyncCount: lastSyncCount?.value ? parseInt(lastSyncCount.value) : 0,
+        status: isConfigured ? 'connected' : 'not_configured'
+      });
+    } catch (error: any) {
+      res.json({ 
+        isConfigured: false, 
+        status: 'error', 
+        error: error.message 
+      });
+    }
+  });
+
+  app.post("/api/admin/asaas/sync", isAuthenticated, checkAdmin, async (req, res) => {
+    try {
+      const asaasService = await import('./services/asaas');
+      if (!asaasService.isAsaasConfigured()) {
+        return res.status(503).json({ 
+          success: false, 
+          message: "Asaas API não configurada. Configure ASAAS_API_KEY nas variáveis de ambiente." 
+        });
+      }
+
+      // Get all subscriptions from Asaas and update local cache
+      const subscriptions = await asaasService.asaasRequest('/subscriptions?limit=100');
+      let updatedCount = 0;
+
+      if (subscriptions?.data) {
+        for (const sub of subscriptions.data) {
+          // Extract userId from externalReference if it follows our pattern
+          const externalRef = sub.externalReference || '';
+          const userMatch = externalRef.match(/user-([^-]+)/);
+          
+          if (userMatch) {
+            const userId = userMatch[1];
+            const status = sub.status === 'ACTIVE' ? 'active' : 
+                          sub.status === 'OVERDUE' ? 'overdue' : 'canceled';
+            
+            await storage.upsertUserBillingStatus({
+              userId,
+              asaasCustomerId: sub.customer || null,
+              asaasSubscriptionId: sub.id || null,
+              status,
+              nextDueDate: sub.nextDueDate ? new Date(sub.nextDueDate) : null,
+              planName: sub.description || null
+            });
+
+            // Also update user status if subscription is active
+            if (status === 'active') {
+              await authStorage.updateUserStatus(userId, 'active');
+            }
+            updatedCount++;
+          }
+        }
+      }
+
+      // Save sync metadata
+      await storage.setAdminSetting("asaas_last_sync", new Date().toISOString());
+      await storage.setAdminSetting("asaas_last_sync_count", updatedCount.toString());
+
+      res.json({ 
+        success: true, 
+        message: `Sincronização concluída. ${updatedCount} assinaturas atualizadas.`,
+        updatedCount
+      });
+    } catch (error: any) {
+      console.error('Asaas sync error:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: error.message || 'Erro na sincronização' 
+      });
+    }
+  });
+
   // User: Get my payments
   app.get("/api/subscription/payments", isAuthenticated, async (req, res) => {
     const payments = await storage.getUserPayments(getUserId(req));
@@ -3091,6 +3178,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     const userId = getUserId(req);
     const user = await authStorage.getUser(userId);
     const subscription = await storage.getActiveSubscription(userId);
+    const billingStatus = await storage.getUserBillingStatus(userId);
     
     res.json({
       isSubscribed: user?.status === 'active' || user?.role === 'admin',
@@ -3099,8 +3187,46 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       subscription: subscription ? {
         status: subscription.status,
         nextBillingDate: subscription.nextBillingDate
+      } : null,
+      billingStatus: billingStatus ? {
+        status: billingStatus.status,
+        planName: billingStatus.planName,
+        nextDueDate: billingStatus.nextDueDate,
+        overdueDays: billingStatus.overdueDays
       } : null
     });
+  });
+
+  // Get available plans
+  app.get("/api/billing/plans", async (req, res) => {
+    await storage.upsertPlans();
+    const allPlans = await storage.getPlans();
+    const activePlans = allPlans.filter((p: any) => p.isActive);
+    res.json(activePlans.map((p: any) => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      priceCents: p.priceCents,
+      priceDisplay: `R$ ${(p.priceCents / 100).toFixed(2).replace('.', ',')}`,
+      billingPeriod: p.billingPeriod,
+      cycle: p.cycle
+    })));
+  });
+
+  // Also serve as /api/plans for backward compat
+  app.get("/api/plans", async (req, res) => {
+    await storage.upsertPlans();
+    const allPlans = await storage.getPlans();
+    const activePlans = allPlans.filter((p: any) => p.isActive);
+    res.json(activePlans.map((p: any) => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      priceCents: p.priceCents,
+      priceDisplay: `R$ ${(p.priceCents / 100).toFixed(2).replace('.', ',')}`,
+      billingPeriod: p.billingPeriod,
+      cycle: p.cycle
+    })));
   });
 
   // --- Preview Mode Endpoints ---
