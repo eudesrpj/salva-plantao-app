@@ -8,7 +8,6 @@ import { useShifts, useShiftStats } from "@/hooks/use-shifts";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ElectrolyteCalculator } from "@/components/ElectrolyteCalculator"; // Importando a calculadora
 import type { FC } from 'react';
 
 interface StatCardProps {
@@ -149,9 +148,6 @@ export default function Dashboard() {
                 <ShortcutCard title="IA Médica" icon={Activity} href="/ai-chat" color="bg-emerald-500" />
              </div>
            </section>
-
-          {/* Electrolyte Calculator */}
-          <ElectrolyteCalculator />
 
           <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl">
              <div className="relative z-10 flex justify-between items-end">

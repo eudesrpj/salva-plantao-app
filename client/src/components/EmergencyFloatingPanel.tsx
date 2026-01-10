@@ -166,7 +166,7 @@ export function EmergencyFloatingPanel({ isOpen, onClose, patientType = "adulto"
           </Button>
         </div>
 
-        <ScrollArea className="p-3 h-full" style={{ maxHeight: "calc(min(80vh, calc(100vh - 64px)) - 44px)" }}>
+        <ScrollArea className="p-3 overflow-y-auto" style={{ height: "calc(min(80vh, calc(100vh - 64px)) - 44px)" }}>
           {children ? (
             children
           ) : isLoading ? (

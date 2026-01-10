@@ -14,7 +14,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { MonthlyExpense, FinancialGoal as FinancialGoalType } from "@shared/schema";
 import { EditableFinancialGoal } from "@/components/EditableFinancialGoal"; 
-import { ElectrolyteCalculator } from "@/components/ElectrolyteCalculator"; 
 
 const EXPENSE_CATEGORIES = [
   "Moradia", "Alimentação", "Transporte", "Saúde", "Educação", 
@@ -204,9 +203,6 @@ export default function Finance() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Seção da Calculadora de Eletrólitos */}
-      <ElectrolyteCalculator />
 
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
