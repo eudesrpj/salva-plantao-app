@@ -78,7 +78,11 @@ import {
   notificationDeliveryItems, type NotificationDeliveryItem, type InsertNotificationDeliveryItem,
   notificationReads, type NotificationRead, type InsertNotificationRead,
   userNotificationSettings, type UserNotificationSettings, type InsertUserNotificationSettings,
-  emergencyNotificationLimits, type EmergencyNotificationLimit
+  emergencyNotificationLimits, type EmergencyNotificationLimit,
+  userAdminProfiles, type UserAdminProfile, type InsertUserAdminProfile,
+  userUsageStats, type UserUsageStats, type InsertUserUsageStats,
+  userCouponUsage, type UserCouponUsage, type InsertUserCouponUsage,
+  userBillingStatus, type UserBillingStatus, type InsertUserBillingStatus
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, isNull, lt, gte, gt, inArray, ne } from "drizzle-orm";
@@ -459,6 +463,26 @@ export interface IStorage {
   updateEmergencyPanelItem(id: number, item: Partial<InsertEmergencyPanelItem>): Promise<EmergencyPanelItem>;
   deleteEmergencyPanelItem(id: number): Promise<void>;
   reorderEmergencyPanelItems(items: { id: number; sortOrder: number }[]): Promise<void>;
+
+  // User Admin Profiles
+  getUserAdminProfile(userId: string): Promise<UserAdminProfile | undefined>;
+  upsertUserAdminProfile(data: InsertUserAdminProfile): Promise<UserAdminProfile>;
+
+  // User Usage Stats
+  getUserUsageStats(userId: string): Promise<UserUsageStats | undefined>;
+  upsertUserUsageStats(data: InsertUserUsageStats): Promise<UserUsageStats>;
+  updateLastSeen(userId: string): Promise<void>;
+  incrementSessionCount(userId: string): Promise<void>;
+  incrementFeatureCount(userId: string, feature: string): Promise<void>;
+
+  // User Coupon Usage
+  getUserCouponUsage(userId: string): Promise<UserCouponUsage[]>;
+  getAllCouponCodes(): Promise<string[]>;
+  createUserCouponUsage(data: InsertUserCouponUsage): Promise<UserCouponUsage>;
+
+  // User Billing Status
+  getUserBillingStatus(userId: string): Promise<UserBillingStatus | undefined>;
+  upsertUserBillingStatus(data: InsertUserBillingStatus): Promise<UserBillingStatus>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3002,6 +3026,118 @@ export class DatabaseStorage implements IStorage {
       grouped[sub.userId].push(sub);
     }
     return Object.entries(grouped).map(([userId, subscriptions]) => ({ userId, subscriptions }));
+  }
+
+  // --- User Admin Profiles ---
+  async getUserAdminProfile(userId: string): Promise<UserAdminProfile | undefined> {
+    const [profile] = await db.select().from(userAdminProfiles).where(eq(userAdminProfiles.userId, userId));
+    return profile;
+  }
+
+  async upsertUserAdminProfile(data: InsertUserAdminProfile): Promise<UserAdminProfile> {
+    const existing = await this.getUserAdminProfile(data.userId);
+    if (existing) {
+      const [updated] = await db.update(userAdminProfiles)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(userAdminProfiles.userId, data.userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(userAdminProfiles).values(data).returning();
+    return created;
+  }
+
+  // --- User Usage Stats ---
+  async getUserUsageStats(userId: string): Promise<UserUsageStats | undefined> {
+    const [stats] = await db.select().from(userUsageStats).where(eq(userUsageStats.userId, userId));
+    return stats;
+  }
+
+  async upsertUserUsageStats(data: InsertUserUsageStats): Promise<UserUsageStats> {
+    const existing = await this.getUserUsageStats(data.userId);
+    if (existing) {
+      const [updated] = await db.update(userUsageStats)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(userUsageStats.userId, data.userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(userUsageStats).values(data).returning();
+    return created;
+  }
+
+  async updateLastSeen(userId: string): Promise<void> {
+    const existing = await this.getUserUsageStats(userId);
+    if (existing) {
+      await db.update(userUsageStats)
+        .set({ lastSeenAt: new Date(), updatedAt: new Date() })
+        .where(eq(userUsageStats.userId, userId));
+    } else {
+      await db.insert(userUsageStats).values({ userId, lastSeenAt: new Date(), sessionsCount: 1 });
+    }
+  }
+
+  async incrementSessionCount(userId: string): Promise<void> {
+    const existing = await this.getUserUsageStats(userId);
+    if (existing) {
+      await db.update(userUsageStats)
+        .set({ 
+          sessionsCount: (existing.sessionsCount || 0) + 1, 
+          lastSeenAt: new Date(),
+          updatedAt: new Date() 
+        })
+        .where(eq(userUsageStats.userId, userId));
+    } else {
+      await db.insert(userUsageStats).values({ userId, lastSeenAt: new Date(), sessionsCount: 1 });
+    }
+  }
+
+  async incrementFeatureCount(userId: string, feature: string): Promise<void> {
+    const existing = await this.getUserUsageStats(userId);
+    const counts = existing?.featureCounts || {};
+    counts[feature] = (counts[feature] || 0) + 1;
+    
+    if (existing) {
+      await db.update(userUsageStats)
+        .set({ featureCounts: counts, updatedAt: new Date() })
+        .where(eq(userUsageStats.userId, userId));
+    } else {
+      await db.insert(userUsageStats).values({ userId, featureCounts: counts });
+    }
+  }
+
+  // --- User Coupon Usage ---
+  async getUserCouponUsage(userId: string): Promise<UserCouponUsage[]> {
+    return await db.select().from(userCouponUsage).where(eq(userCouponUsage.userId, userId));
+  }
+
+  async getAllCouponCodes(): Promise<string[]> {
+    const result = await db.selectDistinct({ code: userCouponUsage.couponCode }).from(userCouponUsage);
+    return result.map(r => r.code);
+  }
+
+  async createUserCouponUsage(data: InsertUserCouponUsage): Promise<UserCouponUsage> {
+    const [created] = await db.insert(userCouponUsage).values(data).returning();
+    return created;
+  }
+
+  // --- User Billing Status ---
+  async getUserBillingStatus(userId: string): Promise<UserBillingStatus | undefined> {
+    const [status] = await db.select().from(userBillingStatus).where(eq(userBillingStatus.userId, userId));
+    return status;
+  }
+
+  async upsertUserBillingStatus(data: InsertUserBillingStatus): Promise<UserBillingStatus> {
+    const existing = await this.getUserBillingStatus(data.userId);
+    if (existing) {
+      const [updated] = await db.update(userBillingStatus)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(userBillingStatus.userId, data.userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(userBillingStatus).values(data).returning();
+    return created;
   }
 }
 
