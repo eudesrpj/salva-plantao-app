@@ -138,8 +138,8 @@ export function EmergencyFloatingPanel({ isOpen, onClose, patientType = "adulto"
         style={{
           left: position.x,
           top: position.y,
-          width: "min(320px, calc(100vw - 32px))",
-          maxHeight: "min(420px, calc(100vh - 64px))",
+          width: "min(360px, calc(100vw - 32px))",
+          maxHeight: "min(80vh, calc(100vh - 64px))",
           touchAction: "none",
         }}
         data-testid="emergency-floating-panel"
@@ -166,7 +166,7 @@ export function EmergencyFloatingPanel({ isOpen, onClose, patientType = "adulto"
           </Button>
         </div>
 
-        <ScrollArea className="p-3" style={{ maxHeight: "calc(min(420px, calc(100vh - 64px)) - 44px)" }}>
+        <ScrollArea className="p-3 h-full" style={{ maxHeight: "calc(min(80vh, calc(100vh - 64px)) - 44px)" }}>
           {children ? (
             children
           ) : isLoading ? (
