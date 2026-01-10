@@ -7130,13 +7130,59 @@ function ChatUserUfManagement() {
   );
 }
 
+const SEGMENT_OPTIONS = [
+  { value: "cardiologia", label: "Cardiologia" },
+  { value: "clinica_geral", label: "Clínica Geral" },
+  { value: "emergencia", label: "Emergência" },
+  { value: "ginecologia", label: "Ginecologia" },
+  { value: "neurologia", label: "Neurologia" },
+  { value: "obstetricia", label: "Obstetrícia" },
+  { value: "ortopedia", label: "Ortopedia" },
+  { value: "pediatria", label: "Pediatria" },
+  { value: "psiquiatria", label: "Psiquiatria" },
+  { value: "uti", label: "UTI" },
+  { value: "updates_app", label: "Atualizações do App" },
+  { value: "updates_protocols", label: "Novos Protocolos" },
+  { value: "updates_medications", label: "Medicamentos" },
+  { value: "tips", label: "Dicas Clínicas" },
+];
+
+const PHI_PATTERNS = [
+  { pattern: /\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, name: "CPF" },
+  { pattern: /\d{15}/g, name: "CNS" },
+  { pattern: /\(\d{2}\)\s?\d{4,5}-?\d{4}/g, name: "Telefone" },
+  { pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, name: "Email" },
+  { pattern: /\b(rua|av|avenida|alameda|travessa)\b.{5,50}\d+/gi, name: "Endereço" },
+];
+
+function detectPHI(text: string): string[] {
+  const found: string[] = [];
+  for (const { pattern, name } of PHI_PATTERNS) {
+    if (pattern.test(text)) {
+      found.push(name);
+    }
+    pattern.lastIndex = 0;
+  }
+  return found;
+}
+
 function PushNotificationsTab() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [url, setUrl] = useState("");
-  const [mode, setMode] = useState<"all" | "selected">("all");
+  const [mode, setMode] = useState<"all" | "segment" | "selected">("all");
   const [userIdsInput, setUserIdsInput] = useState("");
+  const [category, setCategory] = useState<"general" | "update" | "emergency">("general");
+  const [selectedSegments, setSelectedSegments] = useState<string[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const { toast } = useToast();
+
+  const phiWarnings = detectPHI(title + " " + body);
+
+  const { data: historyData, isLoading: historyLoading } = useQuery<{ deliveries: any[] }>({
+    queryKey: ["/api/push/admin/deliveries"],
+    enabled: showHistory,
+  });
 
   const sendMutation = useMutation({
     mutationFn: async () => {
@@ -7149,7 +7195,9 @@ function PushNotificationsTab() {
         body,
         url: url || undefined,
         mode,
-        userIds
+        userIds,
+        category,
+        segments: mode === "segment" ? selectedSegments : undefined,
       });
       return res.json();
     },
@@ -7162,97 +7210,249 @@ function PushNotificationsTab() {
       setBody("");
       setUrl("");
       setUserIdsInput("");
+      setSelectedSegments([]);
     },
     onError: (error: Error) => {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
   });
 
+  const testSelfMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/push/admin/test-self", {
+        title: title || "Teste de Notificação",
+        body: body || "Esta é uma notificação de teste.",
+        url: url || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Teste enviado", description: "Verifique seu dispositivo." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro no teste", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const toggleSegment = (seg: string) => {
+    setSelectedSegments(prev => 
+      prev.includes(seg) ? prev.filter(s => s !== seg) : [...prev, seg]
+    );
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="h-5 w-5" />
-          Enviar Notificação Push
-        </CardTitle>
-        <CardDescription>
-          Envie notificações para os usuários do aplicativo.
-          <br />
-          <strong className="text-yellow-600">AVISO: Nunca inclua dados sensíveis de pacientes nas notificações.</strong>
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Título da Notificação</label>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex: Nova atualização disponível"
-            data-testid="input-push-title"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Mensagem</label>
-          <Textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Ex: Confira as novidades do Salva Plantão!"
-            rows={3}
-            data-testid="input-push-body"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">URL ao clicar (opcional)</label>
-          <Input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="Ex: /novidades ou deixe vazio para ir à home"
-            data-testid="input-push-url"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Destinatários</label>
-          <Select value={mode} onValueChange={(v) => setMode(v as "all" | "selected")}>
-            <SelectTrigger data-testid="select-push-mode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os usuários</SelectItem>
-              <SelectItem value="selected">Usuários selecionados</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {mode === "selected" && (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              Enviar Notificação Push
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+              data-testid="button-toggle-history"
+            >
+              {showHistory ? "Ocultar Histórico" : "Ver Histórico"}
+            </Button>
+          </div>
+          <CardDescription>
+            Envie notificações para os usuários do aplicativo.
+            <br />
+            <strong className="text-yellow-600">AVISO: Nunca inclua dados sensíveis de pacientes nas notificações.</strong>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">IDs dos Usuários (separados por vírgula)</label>
-            <Textarea
-              value={userIdsInput}
-              onChange={(e) => setUserIdsInput(e.target.value)}
-              placeholder="user-id-1, user-id-2, user-id-3"
-              rows={2}
-              data-testid="input-push-userids"
+            <label className="text-sm font-medium">Categoria</label>
+            <Select value={category} onValueChange={(v) => setCategory(v as any)}>
+              <SelectTrigger data-testid="select-push-category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="general">Geral</SelectItem>
+                <SelectItem value="update">Atualização</SelectItem>
+                <SelectItem value="emergency">Emergência (ignora horário silencioso)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Título da Notificação</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex: Nova atualização disponível"
+              data-testid="input-push-title"
             />
           </div>
-        )}
 
-        <Button 
-          onClick={() => sendMutation.mutate()}
-          disabled={!title || !body || sendMutation.isPending}
-          className="w-full"
-          data-testid="button-send-push"
-        >
-          {sendMutation.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <Send className="h-4 w-4 mr-2" />
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Mensagem</label>
+            <Textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Ex: Confira as novidades do Salva Plantão!"
+              rows={3}
+              data-testid="input-push-body"
+            />
+          </div>
+
+          {phiWarnings.length > 0 && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
+              <p className="text-sm text-red-700 dark:text-red-300 font-medium flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Dados sensíveis detectados: {phiWarnings.join(", ")}
+              </p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                Remova esses dados antes de enviar a notificação.
+              </p>
+            </div>
           )}
-          Enviar Notificação
-        </Button>
-      </CardContent>
-    </Card>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">URL ao clicar (opcional)</label>
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Ex: /novidades ou deixe vazio para ir à home"
+              data-testid="input-push-url"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Destinatários</label>
+            <Select value={mode} onValueChange={(v) => setMode(v as any)}>
+              <SelectTrigger data-testid="select-push-mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os usuários</SelectItem>
+                <SelectItem value="segment">Por segmento</SelectItem>
+                <SelectItem value="selected">Usuários específicos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {mode === "segment" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Segmentos</label>
+              <div className="flex flex-wrap gap-2">
+                {SEGMENT_OPTIONS.map((seg) => (
+                  <Badge
+                    key={seg.value}
+                    variant={selectedSegments.includes(seg.value) ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => toggleSegment(seg.value)}
+                    data-testid={`badge-segment-${seg.value}`}
+                  >
+                    {seg.label}
+                  </Badge>
+                ))}
+              </div>
+              {selectedSegments.length === 0 && (
+                <p className="text-xs text-muted-foreground">Selecione pelo menos um segmento</p>
+              )}
+            </div>
+          )}
+
+          {mode === "selected" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">IDs dos Usuários (separados por vírgula)</label>
+              <Textarea
+                value={userIdsInput}
+                onChange={(e) => setUserIdsInput(e.target.value)}
+                placeholder="user-id-1, user-id-2, user-id-3"
+                rows={2}
+                data-testid="input-push-userids"
+              />
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => sendMutation.mutate()}
+              disabled={!title || !body || sendMutation.isPending || phiWarnings.length > 0 || (mode === "segment" && selectedSegments.length === 0)}
+              className="flex-1"
+              data-testid="button-send-push"
+            >
+              {sendMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Enviar Notificação
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => testSelfMutation.mutate()}
+              disabled={testSelfMutation.isPending}
+              data-testid="button-test-self"
+            >
+              {testSelfMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Testar em Mim"
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {showHistory && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Histórico de Notificações</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {historyLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Título</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Sucesso</TableHead>
+                    <TableHead>Falhas</TableHead>
+                    <TableHead>Apenas Inbox</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historyData?.deliveries?.map((d: any) => (
+                    <TableRow key={d.id} data-testid={`row-delivery-${d.id}`}>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(d.sentAt).toLocaleString("pt-BR")}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate">{d.title}</TableCell>
+                      <TableCell>
+                        <Badge variant={d.category === "emergency" ? "destructive" : "secondary"}>
+                          {d.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-green-600">{d.successCount}</TableCell>
+                      <TableCell className="text-red-600">{d.failedCount}</TableCell>
+                      <TableCell className="text-muted-foreground">{d.inboxOnlyCount}</TableCell>
+                    </TableRow>
+                  ))}
+                  {(!historyData?.deliveries || historyData.deliveries.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        Nenhuma notificação enviada ainda.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
