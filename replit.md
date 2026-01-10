@@ -79,6 +79,23 @@ Key database entities include: prescriptions, protocols, checklists, shifts, not
   - Database tables: chat_rooms, chat_room_members, chat_messages, chat_contacts, chat_blocked_messages
   - User fields: uf (state), chatTermsAcceptedAt (terms acceptance timestamp)
 
+### Version 2.4 Features (January 2026)
+- **PWA Support**:
+  - Service worker with offline caching (stale-while-revalidate strategy)
+  - manifest.json with scope and id fields for installability
+  - App icons for home screen installation
+- **Web Push Notifications**:
+  - VAPID-based push notifications using web-push package
+  - Database table: push_subscriptions with (userId, endpoint) unique constraint
+  - User toggle in sidebar to enable/disable notifications
+  - Admin panel tab for sending notifications to all users or selected users
+  - PHI safety warning for admin to never include patient data in notifications
+  - Automatic cleanup of invalid subscriptions (410/404 responses)
+- **UF Change Management**:
+  - UI dialog in Chat page for users to change their state (UF)
+  - 30-day cooldown between changes (enforced server-side)
+  - Admins can change any user's UF without cooldown
+
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)
 - **User Roles**: `user` (default) and `admin`
