@@ -1303,3 +1303,66 @@ export const emergencyNotificationLimits = pgTable("emergency_notification_limit
 });
 
 export type EmergencyNotificationLimit = typeof emergencyNotificationLimits.$inferSelect;
+
+// =====================================================
+// ADMIN USER MANAGEMENT TABLES
+// =====================================================
+
+// User Admin Profile (admin-managed metadata)
+export const userAdminProfiles = pgTable("user_admin_profiles", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  isGoodUser: boolean("is_good_user").default(false),
+  isRiskUser: boolean("is_risk_user").default(false),
+  tags: jsonb("tags").$type<string[]>().default([]),
+  adminNotes: text("admin_notes"),
+  isBlocked: boolean("is_blocked").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserAdminProfileSchema = createInsertSchema(userAdminProfiles).omit({ updatedAt: true });
+export type UserAdminProfile = typeof userAdminProfiles.$inferSelect;
+export type InsertUserAdminProfile = z.infer<typeof insertUserAdminProfileSchema>;
+
+// User Usage Stats (activity tracking)
+export const userUsageStats = pgTable("user_usage_stats", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  lastSeenAt: timestamp("last_seen_at"),
+  sessionsCount: integer("sessions_count").default(0),
+  minutesEstimated: integer("minutes_estimated").default(0),
+  featureCounts: jsonb("feature_counts").$type<Record<string, number>>().default({}),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserUsageStatsSchema = createInsertSchema(userUsageStats).omit({ updatedAt: true });
+export type UserUsageStats = typeof userUsageStats.$inferSelect;
+export type InsertUserUsageStats = z.infer<typeof insertUserUsageStatsSchema>;
+
+// User Coupon Usage
+export const userCouponUsage = pgTable("user_coupon_usage", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  couponCode: text("coupon_code").notNull(),
+  usedAt: timestamp("used_at").defaultNow(),
+  campaign: text("campaign"),
+});
+
+export const insertUserCouponUsageSchema = createInsertSchema(userCouponUsage).omit({ id: true, usedAt: true });
+export type UserCouponUsage = typeof userCouponUsage.$inferSelect;
+export type InsertUserCouponUsage = z.infer<typeof insertUserCouponUsageSchema>;
+
+// User Billing Status (local cache, does NOT modify Asaas)
+export const userBillingStatus = pgTable("user_billing_status", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  asaasCustomerId: text("asaas_customer_id"),
+  asaasSubscriptionId: text("asaas_subscription_id"),
+  status: text("status").default("trial"), // active, overdue, canceled, trial
+  nextDueDate: timestamp("next_due_date"),
+  lastPaymentDate: timestamp("last_payment_date"),
+  overdueDays: integer("overdue_days").default(0),
+  planName: text("plan_name"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserBillingStatusSchema = createInsertSchema(userBillingStatus).omit({ updatedAt: true });
+export type UserBillingStatus = typeof userBillingStatus.$inferSelect;
+export type InsertUserBillingStatus = z.infer<typeof insertUserBillingStatusSchema>;

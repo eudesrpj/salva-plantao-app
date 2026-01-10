@@ -1,0 +1,139 @@
+Quero melhorar a aba “Usuários” no painel do ADMIN com um controle completo de cada usuário, mantendo tudo que já existe, sem quebrar nada e sem atrapalhar a integração atual com o Asaas.
+
+REGRAS OBRIGATÓRIAS
+1) NÃO alterar fluxos existentes de cobrança/assinatura e NÃO mudar a lógica atual do Asaas.
+2) Se precisar de dados do Asaas, apenas CONSUMIR os dados já armazenados no banco ou as funções já existentes. Não refatorar a integração.
+3) Mudanças devem ser aditivas: novos campos/tabelas/rotas e UI nova/expandida, sem mexer nas telas atuais além da aba Usuários do admin.
+4) Garantir que npm run dev e npm run build continuam funcionando.
+5) Tudo com UI simples e rápida (lista + detalhes), sem exagero.
+
+OBJETIVO (O que o admin precisa ver e fazer)
+Na lista de usuários e/ou no detalhe do usuário, mostrar:
+A) Identificação:
+- userId, nome, email, telefone (se existir), data de cadastro
+- última atividade (lastSeen)
+- tempo de uso total (ex: soma de sessões, ou dias ativos desde cadastro)
+- status geral do usuário: “ativo”, “inativo”, “teste”, “cancelado”
+
+B) Assinatura / Pagamento (sem mexer no Asaas):
+- plano atual (se existir)
+- status de assinatura: ativa / atrasada / cancelada / trial
+- data do próximo vencimento / última cobrança
+- dias em atraso (se aplicável)
+- ID(s) de referência Asaas (customerId/subscriptionId/invoiceId) se já existir no sistema
+- indicador visual: verde (ok), amarelo (vencendo), vermelho (atrasado)
+
+C) Cupom / Código promocional:
+- qual código de cupom o usuário usou
+- data de uso do cupom
+- campanha vinculada (se houver)
+- permitir filtrar por cupom na lista
+
+D) “Qualidade do usuário” (score simples, sem IA pesada):
+- “bom usuário” (toggle manual pelo admin)
+- “risco”/“atenção” (toggle manual)
+- notas internas do admin (campo texto)
+- tags (ex: “cliente antigo”, “divulgador”, “solicitou suporte”)
+
+E) Uso do app (métricas básicas úteis pro produto):
+- total de logins/sessões (aprox)
+- tempo estimado de uso (ex: minutos totais ou número de eventos)
+- principais recursos usados (contagem simples por categoria: prescrições, exames, protocolos, etc.)
+- data/hora do último uso
+
+FUNCIONALIDADES DA TELA (ADMIN)
+1) Tabela/lista de usuários com:
+- busca por nome/email
+- filtros rápidos:
+  - status assinatura: ativa/atrasada/cancelada/trial
+  - bom usuário: sim/não
+  - cupom: (dropdown/lista)
+  - atividade: “ativos últimos 7 dias”, “30 dias”, “inativos”
+- colunas:
+  - Nome/Email
+  - Status assinatura (badge)
+  - Próximo vencimento / atraso
+  - Cupom usado
+  - Último uso
+  - Tempo de uso (resumo)
+  - Bom usuário (badge)
+- ação: “Ver detalhes”
+
+2) Tela/Drawer de detalhes do usuário:
+- resumo no topo (status, vencimento, atraso, cupom, lastSeen)
+- abas internas:
+  - “Assinatura”: dados do Asaas (somente leitura) + histórico local se existir
+  - “Uso”: métricas e últimos eventos
+  - “Notas”: tags, bom usuário, risco, observações internas
+  - “Ações”: (somente ações seguras)
+    - marcar/desmarcar “bom usuário”
+    - adicionar tag
+    - adicionar nota
+    - (se existir no sistema) bloquear/desbloquear acesso localmente (SEM mexer no Asaas) — apenas flag local “isBlocked”
+
+DADOS / BACKEND (SEM QUEBRAR ASAAS)
+1) Criar/ajustar tabelas no Postgres/Drizzle (apenas se não existirem):
+a) user_admin_profile (1 por usuário):
+- userId (pk/fk)
+- isGoodUser (boolean default false)
+- isRiskUser (boolean default false)
+- tags (json array text)
+- adminNotes (text)
+- isBlocked (boolean default false)
+- updatedAt
+
+b) user_usage_stats:
+- userId (pk/fk)
+- lastSeenAt (timestamp)
+- sessionsCount (int default 0)
+- minutesEstimated (int default 0)
+- featureCounts (json: {prescricoes: n, exames: n, protocolos: n, ...})
+- updatedAt
+
+c) user_coupon_usage (se não existir):
+- id
+- userId
+- couponCode
+- usedAt
+- campaign (nullable)
+
+d) user_billing_status (somente cache local, sem refatorar Asaas):
+- userId (pk/fk)
+- asaasCustomerId (nullable)
+- asaasSubscriptionId (nullable)
+- status (text: active|overdue|canceled|trial)
+- nextDueDate (date nullable)
+- lastPaymentDate (date nullable)
+- overdueDays (int default 0)
+- updatedAt
+
+2) Popular/atualizar dados:
+- lastSeenAt: atualizar no login ou em algum middleware de request autenticado (sem impacto)
+- sessionsCount: incrementar no login (ou primeira request do dia)
+- featureCounts: incrementar de forma leve quando o usuário usa módulos (prescrição/exames/protocolos). Se não der para instrumentar tudo agora, implemente pelo menos lastSeen + sessionsCount e deixe featureCounts preparado.
+
+3) Integração com Asaas:
+- NÃO alterar o módulo do Asaas.
+- Onde precisar mostrar status, buscar:
+  - primeiro do cache local user_billing_status (se existe)
+  - se não existir, usar os campos já existentes no banco atual (se tiver)
+  - se o sistema já tem um “sync” do Asaas, apenas chamar o que já existe (sem refatorar)
+- Não criar novos webhooks agora. Apenas manter compatível.
+
+ENDPOINTS (ADMIN)
+- GET /api/admin/users -> lista paginada com filtros
+- GET /api/admin/users/:id -> detalhes completos agregados
+- POST /api/admin/users/:id/flags -> {isGoodUser?, isRiskUser?, isBlocked?}
+- POST /api/admin/users/:id/tags -> add/remove
+- POST /api/admin/users/:id/notes -> update notes
+- (Opcional) POST /api/admin/users/:id/refresh-billing -> se já existir função de sync, usar; senão, não implementar
+
+SEGURANÇA
+- Todos endpoints /api/admin/* devem validar role admin
+- isBlocked deve impedir login/acesso via middleware (local), mas não mexer no Asaas.
+
+ENTREGA
+1) Liste arquivos alterados/criados.
+2) Mostre as migrations/tabelas Drizzle.
+3) Garanta que a aba Usuários do admin está mais completa, com filtros e detalhes.
+4) Confirme que nada foi alterado na lógica de integração Asaas — somente leitura/consumo.
