@@ -1,0 +1,66 @@
+Quero implementar PWA + Web Push Notifications (Android e iOS) neste projeto sem quebrar a versão web atual.
+
+Contexto:
+- Frontend: React + Vite
+- Backend: Express + TypeScript
+- Preciso manter o web funcionando exatamente como está hoje
+- Quero notificações push e um botão no painel do administrador para enviar notificação para:
+  (a) todos os usuários
+  (b) usuários selecionados (por userId)
+
+Requisitos obrigatórios:
+1) PWA mínimo:
+   - Criar/ajustar manifest.json (name, short_name, display standalone, icons placeholders ok)
+   - Criar/ajustar service worker simples e registrar no frontend
+   - Não alterar rotas/UX atual
+
+2) Web Push (padrão VAPID):
+   - Backend:
+     - Gerar/usar VAPID keys (armazenar em variáveis de ambiente)
+     - Implementar endpoints:
+       a) POST /api/push/subscribe  -> recebe subscription do navegador e associa ao userId logado
+       b) POST /api/push/unsubscribe -> remove subscription
+       c) POST /api/push/admin/send -> envia push (somente admin)
+     - Persistir subscriptions no banco existente (Postgres/Drizzle) com:
+       - id
+       - userId
+       - endpoint
+       - keys.p256dh
+       - keys.auth
+       - userAgent (opcional)
+       - createdAt
+     - Ao enviar, lidar com falhas:
+       - se status 410/404, remover subscription inválida
+
+   - Frontend:
+     - Criar função "Ativar notificações":
+       - checar suporte a Service Worker e PushManager
+       - solicitar permissão Notification
+       - registrar SW
+       - criar subscription com applicationServerKey (VAPID public key)
+       - chamar /api/push/subscribe
+     - Criar função "Desativar notificações" (opcional) chamando /api/push/unsubscribe
+     - Exibir feedback simples (sucesso/erro) sem mudar layout geral
+
+3) Admin:
+   - No painel do administrador, adicionar um botão/form simples:
+     - Título da notificação
+     - Corpo/mensagem
+     - Opcional: URL/rota para abrir ao clicar
+     - Modo: "todos" ou "selecionados"
+     - Se selecionados: campo para colar lista de userIds (separado por vírgula)
+   - Ao enviar, chamar /api/push/admin/send
+
+4) Segurança:
+   - /api/push/admin/send deve exigir autenticação e checar se o usuário é admin
+   - Nunca enviar dados sensíveis de paciente na notificação (deixar aviso no código/label)
+
+5) Documentar no final:
+   - Como configurar VAPID keys e variáveis de ambiente
+   - Como testar no Android (Chrome) e no iOS (iPhone: instalar na Tela de Início + iOS 16.4+)
+   - Como validar que subscriptions estão salvando e que push está chegando
+
+IMPORTANTE:
+- Não quebrar npm run dev e npm run build
+- Não reescrever componentes grandes; alterações devem ser aditivas e isoladas
+- Listar arquivos alterados/criados ao final

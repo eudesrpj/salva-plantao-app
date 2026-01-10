@@ -71,7 +71,8 @@ import {
   type DonationReceipt, type InsertDonationReceipt,
   type DoseRule, type InsertDoseRule,
   type Formulation, type InsertFormulation,
-  type EmergencyPanelItem, type InsertEmergencyPanelItem
+  type EmergencyPanelItem, type InsertEmergencyPanelItem,
+  pushSubscriptions, type PushSubscription, type InsertPushSubscription
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, isNull, lt, gte, gt, inArray, ne } from "drizzle-orm";
@@ -2786,6 +2787,48 @@ export class DatabaseStorage implements IStorage {
     .from(users)
     .where(sql`${users.chatTermsAcceptedAt} IS NOT NULL`)
     .orderBy(users.firstName);
+  }
+
+  async savePushSubscription(data: InsertPushSubscription): Promise<PushSubscription> {
+    const existing = await db.select().from(pushSubscriptions)
+      .where(and(
+        eq(pushSubscriptions.userId, data.userId),
+        eq(pushSubscriptions.endpoint, data.endpoint)
+      ));
+    if (existing.length > 0) {
+      const [updated] = await db.update(pushSubscriptions)
+        .set({ p256dh: data.p256dh, auth: data.auth, userAgent: data.userAgent })
+        .where(eq(pushSubscriptions.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    const [sub] = await db.insert(pushSubscriptions).values(data).returning();
+    return sub;
+  }
+
+  async deletePushSubscription(userId: string, endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions)
+      .where(and(
+        eq(pushSubscriptions.userId, userId),
+        eq(pushSubscriptions.endpoint, endpoint)
+      ));
+  }
+
+  async deletePushSubscriptionByEndpoint(endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  async getPushSubscriptions(userIds?: string[]): Promise<PushSubscription[]> {
+    if (userIds && userIds.length > 0) {
+      return await db.select().from(pushSubscriptions)
+        .where(inArray(pushSubscriptions.userId, userIds));
+    }
+    return await db.select().from(pushSubscriptions);
+  }
+
+  async getUserPushSubscriptions(userId: string): Promise<PushSubscription[]> {
+    return await db.select().from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, userId));
   }
 }
 

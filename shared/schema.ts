@@ -1200,3 +1200,18 @@ export const emergencyPanelItems = pgTable("emergency_panel_items", {
 export const insertEmergencyPanelItemSchema = createInsertSchema(emergencyPanelItems).omit({ id: true, updatedAt: true });
 export type EmergencyPanelItem = typeof emergencyPanelItems.$inferSelect;
 export type InsertEmergencyPanelItem = z.infer<typeof insertEmergencyPanelItemSchema>;
+
+// Push Subscriptions (Web Push notifications)
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
