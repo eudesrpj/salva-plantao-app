@@ -96,6 +96,17 @@ Key database entities include: prescriptions, protocols, checklists, shifts, not
   - 30-day cooldown between changes (enforced server-side)
   - Admins can change any user's UF without cooldown
 
+### Version 2.5 Features (January 2026)
+- **Enhanced Admin User Management Panel**:
+  - Database tables: user_admin_profiles, user_usage_stats, user_coupon_usage, user_billing_status
+  - Search by name/email with status, role, and quality flag filters
+  - Sorting by created date, last seen, or session count
+  - Paginated list (50 per page) with accurate aggregate stats from full filtered dataset
+  - Detailed user drawer showing activity metrics, quality flags, billing status, and coupon usage
+  - Activity tracking middleware on high-traffic routes (prescriptions, protocols, checklists)
+  - Quality flags: isGoodUser, isRiskUser (admin-configurable per user)
+  - Known limitation: User list loads via authStorage.getAllUsers() (O(n)); acceptable for current scale (50-500 users per state), future enhancement would add user_admin_cache table for SQL-level filtering
+
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)
 - **User Roles**: `user` (default) and `admin`

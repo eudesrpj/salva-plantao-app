@@ -199,31 +199,17 @@ export async function registerRoutes(
     res.json(billing);
   });
 
-  // Get all users with enhanced details for list view
-  app.get("/api/admin/users-enhanced", isAuthenticated, checkAdmin, async (req, res) => {
-    const { search, status, role, tag, hasQualityFlag, sortBy, sortOrder } = req.query;
+  // Get all users with enhanced details for list view (optimized with bulk queries and pagination)
+  app.get("/api/admin/users-enhanced", isAuthenticated, checkAdmin, trackUserActivity, async (req, res) => {
+    const { search, status, role, tag, hasQualityFlag, sortBy, sortOrder, page, limit } = req.query;
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = Math.min(parseInt(limit as string) || 50, 200); // Max 200 per page
+    
     const allUsers = await authStorage.getAllUsers();
     
-    // Fetch all usage stats in parallel
-    const usageStatsMap = new Map<string, any>();
-    const adminProfilesMap = new Map<string, any>();
+    // Apply basic filters first to reduce the dataset before fetching auxiliary data
+    let filtered = allUsers;
     
-    await Promise.all(allUsers.map(async (u) => {
-      const [stats, profile] = await Promise.all([
-        storage.getUserUsageStats(u.id),
-        storage.getUserAdminProfile(u.id)
-      ]);
-      if (stats) usageStatsMap.set(u.id, stats);
-      if (profile) adminProfilesMap.set(u.id, profile);
-    }));
-    
-    let filtered = allUsers.map(u => ({
-      ...u,
-      usageStats: usageStatsMap.get(u.id) || null,
-      adminProfile: adminProfilesMap.get(u.id) || null
-    }));
-    
-    // Apply filters
     if (search && typeof search === "string") {
       const searchLower = search.toLowerCase();
       filtered = filtered.filter(u => 
@@ -238,19 +224,34 @@ export async function registerRoutes(
     if (role && typeof role === "string") {
       filtered = filtered.filter(u => u.role === role);
     }
+    
+    // Extract IDs of filtered users only and fetch auxiliary data in bulk
+    const userIds = filtered.map(u => u.id);
+    const [usageStatsMap, adminProfilesMap] = await Promise.all([
+      storage.getUserUsageStatsBulk(userIds),
+      storage.getUserAdminProfilesBulk(userIds)
+    ]);
+    
+    let enhanced = filtered.map(u => ({
+      ...u,
+      usageStats: usageStatsMap.get(u.id) || null,
+      adminProfile: adminProfilesMap.get(u.id) || null
+    }));
+    
+    // Apply filters that require auxiliary data
     if (tag && typeof tag === "string") {
-      filtered = filtered.filter(u => u.adminProfile?.tags?.includes(tag));
+      enhanced = enhanced.filter(u => u.adminProfile?.tags?.includes(tag));
     }
     if (hasQualityFlag && typeof hasQualityFlag === "string") {
       const flag = hasQualityFlag === "isGoodUser" ? "isGoodUser" : hasQualityFlag === "isRiskUser" ? "isRiskUser" : null;
       if (flag) {
-        filtered = filtered.filter(u => u.adminProfile?.[flag] === true);
+        enhanced = enhanced.filter(u => u.adminProfile?.[flag] === true);
       }
     }
     
     // Sorting
     if (sortBy && typeof sortBy === "string") {
-      filtered.sort((a, b) => {
+      enhanced.sort((a, b) => {
         let aVal: number, bVal: number;
         if (sortBy === "lastSeen") {
           aVal = a.usageStats?.lastSeenAt ? new Date(a.usageStats.lastSeenAt).getTime() : 0;
@@ -268,7 +269,31 @@ export async function registerRoutes(
       });
     }
     
-    res.json(filtered);
+    // Calculate aggregate stats on the full filtered dataset before pagination
+    const stats = {
+      total: enhanced.length,
+      active: enhanced.filter(u => u.status === "active").length,
+      pending: enhanced.filter(u => u.status === "pending").length,
+      blocked: enhanced.filter(u => u.status === "blocked").length,
+      goodUsers: enhanced.filter(u => u.adminProfile?.isGoodUser).length,
+      riskUsers: enhanced.filter(u => u.adminProfile?.isRiskUser).length
+    };
+    
+    // Pagination
+    const totalCount = enhanced.length;
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginatedData = enhanced.slice(startIndex, startIndex + limitNum);
+    
+    res.json({
+      users: paginatedData,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum)
+      },
+      stats
+    });
   });
 
   // --- Admin Settings ---
@@ -1343,7 +1368,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Protocols ---
-  app.get(api.protocols.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.protocols.list.path, isAuthenticated, checkNotBlocked, trackUserActivity, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getProtocols(getUserId(req), ageGroup);
     res.json(items);
@@ -1396,7 +1421,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Checklists ---
-  app.get(api.checklists.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.checklists.list.path, isAuthenticated, checkNotBlocked, trackUserActivity, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getChecklists(getUserId(req), ageGroup);
     res.json(items);

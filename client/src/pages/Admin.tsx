@@ -7,8 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart, MessageCircle, Clock, MapPin, Bell, Send } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart, MessageCircle, Clock, MapPin, Bell, Send, Search, ArrowUp, ArrowDown, Eye, Activity, Tag, ThumbsUp } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
@@ -149,14 +151,106 @@ export default function Admin() {
   );
 }
 
+interface EnhancedUser {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+  role: string | null;
+  status: string | null;
+  uf: string | null;
+  createdAt: Date | null;
+  usageStats: {
+    lastSeenAt: Date | null;
+    sessionsCount: number | null;
+    featureCounts: Record<string, number> | null;
+  } | null;
+  adminProfile: {
+    isGoodUser: boolean | null;
+    isRiskUser: boolean | null;
+    tags: string[] | null;
+    adminNotes: string | null;
+    isBlocked: boolean | null;
+  } | null;
+}
+
+interface UserDetails {
+  user: User;
+  adminProfile: EnhancedUser["adminProfile"];
+  usageStats: EnhancedUser["usageStats"];
+  couponUsage: { id: number; couponCode: string; usedAt: Date; campaign: string | null }[];
+  billingStatus: {
+    asaasCustomerId: string | null;
+    asaasSubscriptionId: string | null;
+    status: string | null;
+    planName: string | null;
+    nextDueDate: Date | null;
+    lastPaymentDate: Date | null;
+    overdueDays: number | null;
+  } | null;
+}
+
+interface PaginatedResponse {
+  users: EnhancedUser[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  stats: {
+    total: number;
+    active: number;
+    pending: number;
+    blocked: number;
+    goodUsers: number;
+    riskUsers: number;
+  };
+}
+
 function UsersTab() {
-  const { data: users, isLoading } = useQuery<User[]>({
-    queryKey: ["/api/admin/users"],
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [flagFilter, setFlagFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const { data: response, isLoading } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/admin/users-enhanced", searchQuery, statusFilter, roleFilter, flagFilter, sortBy, sortOrder, currentPage],
     queryFn: async () => {
-      const res = await fetch("/api/admin/users", { credentials: "include" });
+      const params = new URLSearchParams();
+      if (searchQuery) params.set("search", searchQuery);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (roleFilter !== "all") params.set("role", roleFilter);
+      if (flagFilter !== "all") params.set("hasQualityFlag", flagFilter);
+      if (sortBy) params.set("sortBy", sortBy);
+      params.set("sortOrder", sortOrder);
+      params.set("page", String(currentPage));
+      params.set("limit", "50");
+      
+      const res = await fetch(`/api/admin/users-enhanced?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch users");
       return res.json();
     },
+  });
+
+  const users = response?.users;
+  const pagination = response?.pagination;
+  const stats = response?.stats;
+
+  const { data: userDetails, isLoading: isLoadingDetails } = useQuery<UserDetails>({
+    queryKey: ["/api/admin/users", selectedUserId, "details"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/users/${selectedUserId}/details`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch user details");
+      return res.json();
+    },
+    enabled: !!selectedUserId,
   });
 
   const { toast } = useToast();
@@ -173,6 +267,7 @@ function UsersTab() {
       if (!res.ok) throw new Error("Failed");
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users-enhanced"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Status atualizado!" });
     },
@@ -189,43 +284,156 @@ function UsersTab() {
       if (!res.ok) throw new Error("Failed");
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users-enhanced"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Permissão atualizada!" });
     },
   });
 
-  if (isLoading) return <div className="flex justify-center p-8"><PageLoader text="Carregando usuários..." /></div>;
+  const updateProfile = useMutation({
+    mutationFn: async (data: { userId: string; isGoodUser?: boolean; isRiskUser?: boolean; adminNotes?: string; tags?: string[] }) => {
+      const res = await fetch(`/api/admin/users/${data.userId}/profile`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users-enhanced"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Perfil atualizado!" });
+    },
+  });
 
-  const activeUsers = users?.filter(u => u.status === "active").length || 0;
-  const pendingUsers = users?.filter(u => u.status === "pending").length || 0;
+  const openUserDrawer = (userId: string) => {
+    setSelectedUserId(userId);
+    setIsDrawerOpen(true);
+  };
+
+  const formatLastSeen = (date: Date | null | undefined) => {
+    if (!date) return "Nunca";
+    const d = new Date(date);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 5) return "Agora";
+    if (diffMins < 60) return `${diffMins}min atrás`;
+    if (diffHours < 24) return `${diffHours}h atrás`;
+    if (diffDays < 7) return `${diffDays}d atrás`;
+    return d.toLocaleDateString("pt-BR");
+  };
+
+  if (isLoading) return <div className="flex justify-center p-8"><PageLoader text="Carregando usuários..." /></div>;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total de Usuários</CardDescription>
-            <CardTitle className="text-3xl">{users?.length || 0}</CardTitle>
+            <CardDescription>Total (filtrado)</CardDescription>
+            <CardTitle className="text-3xl">{stats?.total || 0}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Ativos</CardDescription>
-            <CardTitle className="text-3xl text-emerald-600">{activeUsers}</CardTitle>
+            <CardTitle className="text-3xl text-emerald-600">{stats?.active || 0}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Pendentes</CardDescription>
-            <CardTitle className="text-3xl text-amber-600">{pendingUsers}</CardTitle>
+            <CardTitle className="text-3xl text-amber-600">{stats?.pending || 0}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Bons Usuários</CardDescription>
+            <CardTitle className="text-3xl text-sky-600">{stats?.goodUsers || 0}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Risco</CardDescription>
+            <CardTitle className="text-3xl text-red-600">{stats?.riskUsers || 0}</CardTitle>
           </CardHeader>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Gerenciar Usuários</CardTitle>
-          <CardDescription>Libere ou bloqueie acesso dos usuários.</CardDescription>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <CardTitle>Gerenciar Usuários</CardTitle>
+              <CardDescription>Controle completo de usuários, status e métricas.</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 w-48"
+                  data-testid="input-search-users"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32" data-testid="select-status-filter">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="active">Ativos</SelectItem>
+                  <SelectItem value="pending">Pendentes</SelectItem>
+                  <SelectItem value="blocked">Bloqueados</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-32" data-testid="select-role-filter">
+                  <SelectValue placeholder="Função" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="user">Usuário</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={flagFilter} onValueChange={setFlagFilter}>
+                <SelectTrigger className="w-36" data-testid="select-flag-filter">
+                  <SelectValue placeholder="Flags" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas Flags</SelectItem>
+                  <SelectItem value="isGoodUser">Bons Usuários</SelectItem>
+                  <SelectItem value="isRiskUser">Usuários Risco</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-36" data-testid="select-sort-by">
+                  <SelectValue placeholder="Ordenar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="createdAt">Data Criação</SelectItem>
+                  <SelectItem value="lastSeen">Último Acesso</SelectItem>
+                  <SelectItem value="sessions">Sessões</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button 
+                size="icon" 
+                variant="outline" 
+                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                data-testid="button-toggle-sort"
+              >
+                {sortOrder === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -233,62 +441,303 @@ function UsersTab() {
               <TableRow>
                 <TableHead>Usuário</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>UF</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Permissão</TableHead>
+                <TableHead>Flags</TableHead>
+                <TableHead>Último Acesso</TableHead>
+                <TableHead>Sessões</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users?.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow key={user.id} className="cursor-pointer hover-elevate" onClick={() => openUserDrawer(user.id)}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold">
                         {user.firstName?.[0]}{user.lastName?.[0]}
                       </div>
-                      {user.firstName} {user.lastName}
+                      <span>{user.firstName} {user.lastName}</span>
                     </div>
                   </TableCell>
-                  <TableCell>{user.email}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>
                   <TableCell>
-                    <Badge variant={user.status === 'active' ? 'default' : 'secondary'} 
-                      className={user.status === 'active' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}>
+                    {user.uf && <Badge variant="outline" className="text-xs">{user.uf}</Badge>}
+                  </TableCell>
+                  <TableCell>
+                    <Badge 
+                      variant={user.status === 'active' ? 'default' : 'secondary'} 
+                      className={user.status === 'active' ? 'bg-emerald-500 hover:bg-emerald-600' : user.status === 'blocked' ? 'bg-red-500 hover:bg-red-600 text-white' : ''}
+                    >
                       {user.status === 'active' ? 'Ativo' : user.status === 'blocked' ? 'Bloqueado' : 'Pendente'}
                     </Badge>
+                    {user.role === 'admin' && <Badge variant="outline" className="ml-1 text-xs">Admin</Badge>}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{user.role}</Badge>
+                    <div className="flex gap-1">
+                      {user.adminProfile?.isGoodUser && (
+                        <Badge variant="outline" className="bg-sky-50 dark:bg-sky-900 text-sky-700 dark:text-sky-300 border-sky-200 text-xs">
+                          <ThumbsUp className="w-3 h-3 mr-1" />Bom
+                        </Badge>
+                      )}
+                      {user.adminProfile?.isRiskUser && (
+                        <Badge variant="outline" className="bg-red-50 dark:bg-red-900 text-red-700 dark:text-red-300 border-red-200 text-xs">
+                          <AlertTriangle className="w-3 h-3 mr-1" />Risco
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
+                  <TableCell className="text-sm text-muted-foreground">
+                    {formatLastSeen(user.usageStats?.lastSeenAt)}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {user.usageStats?.sessionsCount || 0}
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1">
                       {user.status !== 'active' && (
-                        <Button size="sm" variant="outline" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600"
                           onClick={() => updateStatus.mutate({ id: user.id, status: 'active' })}
+                          title="Liberar"
                           data-testid={`button-activate-${user.id}`}>
-                          <CheckCircle className="w-4 h-4 mr-1" /> Liberar
+                          <CheckCircle className="w-4 h-4" />
                         </Button>
                       )}
                       {user.status === 'active' && (
-                        <Button size="sm" variant="outline" className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-600"
                           onClick={() => updateStatus.mutate({ id: user.id, status: 'blocked' })}
+                          title="Bloquear"
                           data-testid={`button-block-${user.id}`}>
-                          <Ban className="w-4 h-4 mr-1" /> Bloquear
+                          <Ban className="w-4 h-4" />
                         </Button>
                       )}
-                      {user.role !== 'admin' && (
-                        <Button size="sm" variant="ghost" title="Tornar Admin"
-                          onClick={() => updateRole.mutate({ id: user.id, role: 'admin' })}>
-                          <ShieldAlert className="w-4 h-4 text-slate-400" />
-                        </Button>
-                      )}
+                      <Button size="icon" variant="ghost" className="h-8 w-8"
+                        onClick={() => openUserDrawer(user.id)}
+                        title="Detalhes"
+                        data-testid={`button-details-${user.id}`}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <div className="text-sm text-muted-foreground">
+                Página {pagination.page} de {pagination.totalPages} ({pagination.total} usuários)
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={pagination.page <= 1}
+                  data-testid="button-prev-page"
+                >
+                  Anterior
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                  disabled={pagination.page >= pagination.totalPages}
+                  data-testid="button-next-page"
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Detalhes do Usuário</SheetTitle>
+            <SheetDescription>Informações completas e controle do usuário.</SheetDescription>
+          </SheetHeader>
+          
+          {isLoadingDetails ? (
+            <div className="flex justify-center py-8"><PageLoader text="Carregando..." /></div>
+          ) : userDetails ? (
+            <div className="space-y-6 py-4">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xl font-bold">
+                  {userDetails.user.firstName?.[0]}{userDetails.user.lastName?.[0]}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold">{userDetails.user.firstName} {userDetails.user.lastName}</h3>
+                  <p className="text-sm text-muted-foreground">{userDetails.user.email}</p>
+                  <div className="flex gap-2 mt-1">
+                    <Badge variant={userDetails.user.status === 'active' ? 'default' : 'secondary'}>
+                      {userDetails.user.status}
+                    </Badge>
+                    <Badge variant="outline">{userDetails.user.role}</Badge>
+                    {userDetails.user.uf && <Badge variant="outline">{userDetails.user.uf}</Badge>}
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <h4 className="font-medium flex items-center gap-2"><Activity className="w-4 h-4" /> Atividade</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Último Acesso</p>
+                    <p className="font-medium">{formatLastSeen(userDetails.usageStats?.lastSeenAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Total de Sessões</p>
+                    <p className="font-medium">{userDetails.usageStats?.sessionsCount || 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Criado em</p>
+                    <p className="font-medium">{userDetails.user.createdAt ? new Date(userDetails.user.createdAt).toLocaleDateString("pt-BR") : "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Assinatura Expira</p>
+                    <p className="font-medium">
+                      {userDetails.user.subscriptionExpiresAt 
+                        ? new Date(userDetails.user.subscriptionExpiresAt).toLocaleDateString("pt-BR") 
+                        : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <h4 className="font-medium flex items-center gap-2"><Tag className="w-4 h-4" /> Classificação (Admin)</h4>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant={userDetails.adminProfile?.isGoodUser ? "default" : "outline"}
+                    className={userDetails.adminProfile?.isGoodUser ? "bg-sky-500 hover:bg-sky-600" : ""}
+                    onClick={() => updateProfile.mutate({ 
+                      userId: selectedUserId!, 
+                      isGoodUser: !userDetails.adminProfile?.isGoodUser 
+                    })}
+                    data-testid="button-toggle-good-user"
+                  >
+                    <ThumbsUp className="w-4 h-4 mr-1" /> Bom Usuário
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={userDetails.adminProfile?.isRiskUser ? "default" : "outline"}
+                    className={userDetails.adminProfile?.isRiskUser ? "bg-red-500 hover:bg-red-600" : ""}
+                    onClick={() => updateProfile.mutate({ 
+                      userId: selectedUserId!, 
+                      isRiskUser: !userDetails.adminProfile?.isRiskUser 
+                    })}
+                    data-testid="button-toggle-risk-user"
+                  >
+                    <AlertTriangle className="w-4 h-4 mr-1" /> Usuário Risco
+                  </Button>
+                </div>
+                {userDetails.adminProfile?.adminNotes && (
+                  <div className="bg-muted p-3 rounded-md text-sm">
+                    <p className="text-muted-foreground mb-1">Notas do Admin:</p>
+                    <p>{userDetails.adminProfile.adminNotes}</p>
+                  </div>
+                )}
+              </div>
+
+              {userDetails.billingStatus && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <h4 className="font-medium flex items-center gap-2"><CreditCard className="w-4 h-4" /> Faturamento</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Plano</p>
+                        <p className="font-medium">{userDetails.billingStatus.planName || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Status</p>
+                        <Badge variant="outline">{userDetails.billingStatus.status || "N/A"}</Badge>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Próximo Vencimento</p>
+                        <p className="font-medium">
+                          {userDetails.billingStatus.nextDueDate 
+                            ? new Date(userDetails.billingStatus.nextDueDate).toLocaleDateString("pt-BR") 
+                            : "N/A"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Último Pagamento</p>
+                        <p className="font-medium">
+                          {userDetails.billingStatus.lastPaymentDate 
+                            ? new Date(userDetails.billingStatus.lastPaymentDate).toLocaleDateString("pt-BR") 
+                            : "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {userDetails.couponUsage && userDetails.couponUsage.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <h4 className="font-medium flex items-center gap-2"><Ticket className="w-4 h-4" /> Cupons Usados</h4>
+                    <div className="space-y-2">
+                      {userDetails.couponUsage.map((c) => (
+                        <div key={c.id} className="flex justify-between items-center text-sm bg-muted p-2 rounded">
+                          <span className="font-mono">{c.couponCode}</span>
+                          <span className="text-muted-foreground">
+                            {c.usedAt ? new Date(c.usedAt).toLocaleDateString("pt-BR") : ""}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <Separator />
+
+              <div className="flex gap-2 flex-wrap">
+                {userDetails.user.status !== 'active' && (
+                  <Button 
+                    className="bg-emerald-500 hover:bg-emerald-600"
+                    onClick={() => updateStatus.mutate({ id: selectedUserId!, status: 'active' })}
+                    data-testid="button-activate-drawer"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" /> Liberar Acesso
+                  </Button>
+                )}
+                {userDetails.user.status === 'active' && (
+                  <Button 
+                    variant="outline"
+                    className="text-amber-600 border-amber-200"
+                    onClick={() => updateStatus.mutate({ id: selectedUserId!, status: 'blocked' })}
+                    data-testid="button-block-drawer"
+                  >
+                    <Ban className="w-4 h-4 mr-2" /> Bloquear
+                  </Button>
+                )}
+                {userDetails.user.role !== 'admin' && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => updateRole.mutate({ id: selectedUserId!, role: 'admin' })}
+                    data-testid="button-make-admin-drawer"
+                  >
+                    <ShieldAlert className="w-4 h-4 mr-2" /> Tornar Admin
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

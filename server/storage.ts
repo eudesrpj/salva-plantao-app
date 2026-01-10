@@ -466,10 +466,12 @@ export interface IStorage {
 
   // User Admin Profiles
   getUserAdminProfile(userId: string): Promise<UserAdminProfile | undefined>;
+  getUserAdminProfilesBulk(userIds: string[]): Promise<Map<string, UserAdminProfile>>;
   upsertUserAdminProfile(data: InsertUserAdminProfile): Promise<UserAdminProfile>;
 
   // User Usage Stats
   getUserUsageStats(userId: string): Promise<UserUsageStats | undefined>;
+  getUserUsageStatsBulk(userIds: string[]): Promise<Map<string, UserUsageStats>>;
   upsertUserUsageStats(data: InsertUserUsageStats): Promise<UserUsageStats>;
   updateLastSeen(userId: string): Promise<void>;
   incrementSessionCount(userId: string): Promise<void>;
@@ -3034,6 +3036,16 @@ export class DatabaseStorage implements IStorage {
     return profile;
   }
 
+  async getUserAdminProfilesBulk(userIds: string[]): Promise<Map<string, UserAdminProfile>> {
+    if (userIds.length === 0) return new Map();
+    const profiles = await db.select().from(userAdminProfiles).where(inArray(userAdminProfiles.userId, userIds));
+    const map = new Map<string, UserAdminProfile>();
+    for (const p of profiles) {
+      map.set(p.userId, p);
+    }
+    return map;
+  }
+
   async upsertUserAdminProfile(data: InsertUserAdminProfile): Promise<UserAdminProfile> {
     const existing = await this.getUserAdminProfile(data.userId);
     if (existing) {
@@ -3051,6 +3063,16 @@ export class DatabaseStorage implements IStorage {
   async getUserUsageStats(userId: string): Promise<UserUsageStats | undefined> {
     const [stats] = await db.select().from(userUsageStats).where(eq(userUsageStats.userId, userId));
     return stats;
+  }
+
+  async getUserUsageStatsBulk(userIds: string[]): Promise<Map<string, UserUsageStats>> {
+    if (userIds.length === 0) return new Map();
+    const stats = await db.select().from(userUsageStats).where(inArray(userUsageStats.userId, userIds));
+    const map = new Map<string, UserUsageStats>();
+    for (const s of stats) {
+      map.set(s.userId, s);
+    }
+    return map;
   }
 
   async upsertUserUsageStats(data: InsertUserUsageStats): Promise<UserUsageStats> {
