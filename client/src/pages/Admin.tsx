@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart, MessageCircle, Clock } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart, MessageCircle, Clock, MapPin } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
@@ -6955,6 +6955,170 @@ function ChatModerationTab() {
           )}
         </CardContent>
       </Card>
+
+      <ChatUserUfManagement />
     </div>
+  );
+}
+
+function ChatUserUfManagement() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedUf, setSelectedUf] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const BRAZILIAN_STATES = [
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+    "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
+    "RS", "RO", "RR", "SC", "SP", "SE", "TO"
+  ];
+
+  const { data: chatUsers = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/chat/users"],
+  });
+
+  const changeUfMutation = useMutation({
+    mutationFn: async ({ userId, uf }: { userId: string; uf: string }) => {
+      const res = await fetch(`/api/admin/chat/users/${userId}/uf`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ uf }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Erro ao alterar estado");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/chat/users"] });
+      setSelectedUserId("");
+      setSelectedUf("");
+      toast({ title: "Estado alterado com sucesso" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  const handleChangeUf = () => {
+    if (!selectedUserId || !selectedUf) {
+      toast({ title: "Selecione usuário e estado", variant: "destructive" });
+      return;
+    }
+    changeUfMutation.mutate({ userId: selectedUserId, uf: selectedUf });
+  };
+
+  const filteredUsers = chatUsers.filter((u) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      (u.firstName?.toLowerCase() || "").includes(query) ||
+      (u.lastName?.toLowerCase() || "").includes(query) ||
+      (u.email?.toLowerCase() || "").includes(query)
+    );
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="h-5 w-5" />
+          Gerenciar Estado dos Usuários
+        </CardTitle>
+        <CardDescription>
+          Alterar o grupo de estado (UF) dos usuários do chat
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="text-sm font-medium">Buscar Usuário</label>
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Nome ou email..."
+              data-testid="input-search-chat-user"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Usuário</label>
+            <Select value={selectedUserId} onValueChange={(v) => {
+              setSelectedUserId(v);
+              const user = chatUsers.find((u) => u.id === v);
+              if (user?.uf) setSelectedUf("");
+            }}>
+              <SelectTrigger data-testid="select-uf-user">
+                <SelectValue placeholder="Selecione um usuário" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredUsers.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.firstName} {u.lastName} - {u.uf || "Sem UF"} ({u.email})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Novo Estado</label>
+            <Select value={selectedUf} onValueChange={setSelectedUf}>
+              <SelectTrigger data-testid="select-new-uf">
+                <SelectValue placeholder="Selecione o estado" />
+              </SelectTrigger>
+              <SelectContent>
+                {BRAZILIAN_STATES.map((uf) => (
+                  <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <Button 
+          onClick={handleChangeUf} 
+          disabled={changeUfMutation.isPending || !selectedUserId || !selectedUf}
+          data-testid="button-change-uf"
+        >
+          {changeUfMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapPin className="h-4 w-4 mr-2" />}
+          Alterar Estado
+        </Button>
+
+        {isLoading ? (
+          <p className="text-muted-foreground">Carregando usuários...</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Estado Atual</TableHead>
+                <TableHead>Última Mudança</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.map((u) => (
+                <TableRow key={u.id} data-testid={`row-chat-user-${u.id}`}>
+                  <TableCell>{u.firstName} {u.lastName}</TableCell>
+                  <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{u.uf || "—"}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {u.lastUfChangeAt ? new Date(u.lastUfChangeAt).toLocaleDateString("pt-BR") : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filteredUsers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    Nenhum usuário encontrado com acesso ao chat.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
