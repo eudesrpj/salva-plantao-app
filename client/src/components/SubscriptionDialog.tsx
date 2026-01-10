@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,16 +7,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { QrCode, Copy, Check, MessageCircle, Crown } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Crown, CreditCard, Loader2, Tag } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { apiRequest } from "@/lib/queryClient";
 
-interface PaymentSettings {
-  pixKey: string;
-  whatsapp: string;
-  instructions: string;
-  price: string;
+interface Plan {
+  id: number;
+  name: string;
+  slug: string;
+  priceCents: number;
 }
 
 interface SubscriptionDialogProps {
@@ -27,34 +30,63 @@ interface SubscriptionDialogProps {
 export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [copied, setCopied] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
 
-  const { data: settings, isLoading } = useQuery<PaymentSettings>({
-    queryKey: ["/api/public/payment-settings"],
-    queryFn: async () => {
-      const res = await fetch("/api/public/payment-settings");
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
+  const { data: plans, isLoading: plansLoading } = useQuery<Plan[]>({
+    queryKey: ["/api/plans"],
     enabled: open,
   });
 
-  const copyPixKey = () => {
-    if (settings?.pixKey) {
-      navigator.clipboard.writeText(settings.pixKey);
-      setCopied(true);
-      toast({ title: "Copiado!", description: "Chave Pix copiada para a \u00e1rea de transfer\u00eancia." });
-      setTimeout(() => setCopied(false), 2000);
+  const validateCouponMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await apiRequest("POST", "/api/subscription/validate-coupon", { code });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      const discount = data.discountType === 'percentage' 
+        ? data.discountValue 
+        : (data.discountValue * 100);
+      setAppliedCoupon({ code: data.code, discount });
+      toast({ title: "Cupom aplicado!", description: `Desconto de ${data.discountType === 'percentage' ? `${data.discountValue}%` : `R$ ${data.discountValue}`}` });
+    },
+    onError: () => {
+      toast({ title: "Cupom inválido", description: "Verifique o código e tente novamente.", variant: "destructive" });
+    }
+  });
+
+  const checkoutMutation = useMutation({
+    mutationFn: async (planSlug: string) => {
+      const res = await apiRequest("POST", "/api/billing/checkout", { 
+        planSlug, 
+        couponCode: appliedCoupon?.code 
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast({ title: "Erro", description: "URL de checkout não disponível.", variant: "destructive" });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro ao criar checkout", description: error.message || "Tente novamente.", variant: "destructive" });
+    }
+  });
+
+  const handleSubscribe = (planSlug: string) => {
+    checkoutMutation.mutate(planSlug);
+  };
+
+  const handleValidateCoupon = () => {
+    if (couponCode.trim()) {
+      validateCouponMutation.mutate(couponCode.trim());
     }
   };
 
-  const openWhatsApp = () => {
-    if (settings?.whatsapp) {
-      const phone = settings.whatsapp.replace(/\D/g, "");
-      const message = encodeURIComponent("Ol\u00e1! Realizei o pagamento da assinatura do Salva Plant\u00e3o. Segue o comprovante:");
-      window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
-    }
-  };
+  const monthlyPlan = plans?.find(p => p.slug === 'mensal');
+  const price = monthlyPlan ? (monthlyPlan.priceCents / 100).toFixed(2).replace('.', ',') : "29,90";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -63,53 +95,75 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
           <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit mb-2">
             <Crown className="h-8 w-8 text-primary" />
           </div>
-          <DialogTitle className="text-xl font-display">Assinar Salva Plant\u00e3o</DialogTitle>
+          <DialogTitle className="text-xl font-display">Assinar Salva Plantão</DialogTitle>
           <DialogDescription>
-            Ol\u00e1, {user?.firstName}! Desbloqueie acesso completo ao aplicativo.
+            Olá, {user?.firstName}! Desbloqueie acesso completo ao aplicativo.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {isLoading ? (
+          {plansLoading ? (
             <div className="flex justify-center py-6">
               <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
             </div>
           ) : (
             <>
               <div className="bg-muted p-4 rounded-lg text-center space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Chave Pix:</p>
-                <div
-                  className="flex items-center justify-center gap-2 cursor-pointer group"
-                  onClick={copyPixKey}
-                  data-testid="button-copy-pix"
-                >
-                  <p className="text-base font-bold font-mono select-all" data-testid="text-pix-key">
-                    {settings?.pixKey || "Carregando..."}
-                  </p>
-                  {copied ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">(Clique para copiar)</p>
-              </div>
-
-              <div className="text-sm space-y-3">
-                <div className="flex justify-between items-center py-2 border-b">
-                  <span className="text-muted-foreground">Valor:</span>
-                  <span className="font-bold text-lg" data-testid="text-price">
-                    R$ {settings?.price || "29,90"} / m\u00eas
-                  </span>
-                </div>
-                <p className="text-muted-foreground text-sm" data-testid="text-instructions">
-                  {settings?.instructions || "Ap\u00f3s o pagamento, envie o comprovante para libera\u00e7\u00e3o imediata."}
+                <p className="text-sm font-medium text-muted-foreground">Assinatura Mensal</p>
+                <p className="text-3xl font-bold" data-testid="text-price">
+                  R$ {price}
+                  <span className="text-sm font-normal text-muted-foreground">/mês</span>
                 </p>
+                {appliedCoupon && (
+                  <p className="text-sm text-green-600 dark:text-green-400">
+                    Cupom aplicado: {appliedCoupon.code}
+                  </p>
+                )}
               </div>
 
-              <Button onClick={openWhatsApp} className="w-full" size="lg" data-testid="button-send-receipt">
-                <MessageCircle className="mr-2 h-4 w-4" /> Enviar Comprovante via WhatsApp
+              <div className="space-y-2">
+                <Label htmlFor="coupon">Cupom de desconto (opcional)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="coupon"
+                    placeholder="Digite o código"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                    data-testid="input-coupon"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={handleValidateCoupon}
+                    disabled={!couponCode.trim() || validateCouponMutation.isPending}
+                    data-testid="button-validate-coupon"
+                  >
+                    {validateCouponMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Tag className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Button
+                onClick={() => handleSubscribe('mensal')}
+                className="w-full"
+                size="lg"
+                disabled={checkoutMutation.isPending}
+                data-testid="button-subscribe-checkout"
+              >
+                {checkoutMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CreditCard className="mr-2 h-4 w-4" />
+                )}
+                Assinar Agora
               </Button>
+
+              <p className="text-xs text-center text-muted-foreground">
+                Você será redirecionado para a página de pagamento seguro.
+              </p>
             </>
           )}
         </div>

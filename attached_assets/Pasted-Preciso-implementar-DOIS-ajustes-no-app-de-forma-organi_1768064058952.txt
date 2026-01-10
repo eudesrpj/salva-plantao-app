@@ -1,0 +1,150 @@
+Preciso implementar DOIS ajustes no app, de forma organizada, leve e sem quebrar nada do que já existe:
+
+(1) Corrigir o fluxo de assinatura para redirecionar corretamente para o checkout do Asaas (cartão/pix), porque hoje ao clicar para assinar o usuário está caindo em uma aba/URL do Replit.
+(2) Implementar um modo “Preview” para novos usuários: eles podem explorar algumas telas/funcionalidades sem muito spoiler por um tempo curto ou por poucas ações, e depois o app bloqueia e solicita assinatura para continuar.
+
+CONTEXTO
+- App web: React + Vite (frontend) + Express + TypeScript (backend)
+- Pagamentos via Asaas (cartão/pix)
+- Cupons são configurados e validados no app (não no Asaas)
+- Preciso manter o web rodando exatamente como está: mudanças aditivas e isoladas
+- NÃO refatorar integração Asaas inteira: apenas o necessário no fluxo de checkout e retorno
+
+REGRAS OBRIGATÓRIAS
+1) NÃO quebrar o web atual. Não mudar rotas existentes nem reescrever componentes grandes.
+2) NÃO mexer na integração Asaas fora do fluxo de checkout/redirect/retorno.
+3) Cupons continuam sendo validados no app e aplicados no preço antes de criar o checkout.
+4) Implementação leve: sem bibliotecas pesadas, sem polling, sem animação pesada.
+5) Garantir npm run dev e npm run build funcionando.
+
+────────────────────────────────────────────
+PARTE A — CORRIGIR ASSINATURA (REDIRECT ASAAS)
+────────────────────────────────────────────
+Objetivo: quando o usuário clicar “Criar conta e assinar” (ou “Assinar”), o app deve criar um checkout no Asaas e redirecionar para a URL EXTERNA do Asaas (cartão/pix), e depois voltar para uma rota do nosso app (success/return).
+
+A1) Identificar o handler do botão “Criar conta e assinar” e corrigir:
+- NÃO usar Link interno do router para assinar
+- NÃO usar URL relativa que aponte para replit workspace
+- Deve ser redirect externo: window.location.href = checkoutUrl
+
+A2) Criar/ajustar endpoint backend:
+POST /api/billing/checkout
+Entrada: { planId, couponCode? }
+Processo:
+- validar usuário logado (ou criar conta conforme seu fluxo atual, sem quebrar)
+- validar cupom internamente (como já é hoje)
+- calcular preço final
+- criar o checkout no Asaas (opção mais compatível com o projeto)
+Saída: { url } onde url é um link do Asaas para pagamento.
+
+Aceita 2 opções (use a que já se encaixa no projeto):
+- Checkout Session do Asaas: retornar URL no formato https://asaas.com/checkoutSession/show?id=CHECKOUT_ID
+- OU Payment Link do Asaas: retornar a URL do link
+
+A3) Configurar retorno do Asaas:
+- Definir successUrl/returnUrl apontando para o domínio publicado do app (NÃO o workspace)
+  Ex: https://SEU_DOMINIO/billing/success
+- Se houver cancelamento: https://SEU_DOMINIO/billing/cancel
+- Se o Asaas tiver autoRedirect, habilitar para voltar automaticamente quando aplicável.
+
+A4) Criar rotas front/back para retorno:
+- Front route: /billing/success -> mostra “Pagamento confirmado” e atualiza status da assinatura do usuário
+- Front route: /billing/cancel -> mostra “Pagamento não concluído”
+- Backend: endpoint para consultar status local (ou usar webhook já existente)
+  GET /api/billing/status -> retorna { isSubscribed, plan, nextDueDate?, status? }
+
+A5) Corrigir o motivo do bug “cai no Replit”:
+- garantir que URL do checkout retornada é absoluta e do Asaas
+- garantir que qualquer open/new tab use URL absoluta
+- garantir que successUrl/returnUrl use domínio publicado (replit.app ou domínio custom), não URL interna do editor.
+
+ENTREGA A:
+- listar arquivos alterados
+- explicar em poucas linhas por que antes caía no Replit e como o redirect foi corrigido
+- validar fluxo: clique -> Asaas -> retorna success -> status atualizado
+
+────────────────────────────────────────────
+PARTE B — MODO “PREVIEW” PARA NOVO USUÁRIO
+────────────────────────────────────────────
+Objetivo: novo usuário consegue explorar o app “por dentro” sem spoiler total, mas com limitações. Após um tempo/limite de ações, o app bloqueia e pede assinatura para continuar.
+
+B1) Definir regras de preview (implementar de forma configurável):
+- Preview permitido se: usuário NÃO é assinante
+- Limite do preview (escolher 1 ou combinar 2, de forma leve):
+  a) limite por tempo: ex 10 minutos a partir do primeiro acesso
+  b) limite por ações: ex 20 ações (cliques importantes/uso de funcionalidades)
+Use implementação simples e confiável.
+Sugestão: tempo + ações com fallback.
+
+B2) Persistência (backend + banco):
+Criar tabela user_preview_state:
+- userId (pk/fk)
+- previewStartedAt (timestamp nullable)
+- actionsUsed (int default 0)
+- previewExpired (boolean default false)
+- updatedAt
+
+B3) Endpoint backend:
+- GET /api/preview/status -> retorna { isSubscribed, previewAllowed, remainingMinutes?, remainingActions?, previewExpired }
+- POST /api/preview/consume -> incrementa actionsUsed (usar somente em ações-chave, não em tudo)
+
+B4) Frontend:
+- Ao carregar o app (ou dashboard), chamar /api/billing/status + /api/preview/status (ou um endpoint combinado) para saber se:
+  - assinante: acesso normal
+  - não assinante + previewAllowed: acesso com algumas restrições
+  - não assinante + previewExpired: bloquear e pedir assinatura
+
+B5) O que o preview pode mostrar (sem spoiler):
+- permitir navegar em telas principais
+- mostrar exemplos/dados “demo” se necessário (sem dados reais)
+- bloquear ações críticas (ex: gerar documentos finais, impressão definitiva, salvar prescrições finais, etc.)
+A implementação deve ser simples: um guard por rota/ação.
+
+B6) Bloqueio (paywall leve):
+Quando preview expirar:
+- Mostrar overlay/modal flutuante (leve) dizendo:
+  “Seu acesso de demonstração terminou. Assine para continuar usando.”
+- Botões:
+  “Assinar agora” -> chama o fluxo da Parte A (checkout Asaas)
+  “Voltar” -> leva para uma página segura (home) mas mantendo bloqueio.
+
+B7) Admin (opcional mas útil e leve):
+Na aba de usuário do admin, exibir:
+- previewStartedAt
+- actionsUsed
+- previewExpired
+Sem alterar outras coisas.
+
+ENTREGA B:
+- listar arquivos/tabelas criadas
+- explicar regra de preview implementada
+- confirmar que assinantes nunca veem paywall
+- confirmar que o paywall não trava o app nem cria loops
+
+────────────────────────────────────────────
+PARTE C — QUALIDADE E PERFORMANCE
+────────────────────────────────────────────
+C1) Não usar polling para verificar assinatura/preview.
+- Checar status apenas em:
+  - carregamento do dashboard
+  - retorno do /billing/success
+  - refresh manual
+
+C2) Evitar re-render infinito:
+- usar react-query se já existe, com cache adequado
+- ou fetch simples com guards
+
+C3) Segurança:
+- endpoints /api/billing/checkout e /api/preview/* exigem usuário autenticado
+- não expor chaves Asaas no frontend
+- logs sem dados sensíveis
+
+────────────────────────────────────────────
+ENTREGA FINAL (OBRIGATÓRIA)
+────────────────────────────────────────────
+1) Listar arquivos alterados/criados.
+2) Listar migrations/tabelas adicionadas (Drizzle).
+3) Explicar rapidamente:
+   - como o redirect para o Asaas foi corrigido
+   - como funciona o preview e quando bloqueia
+4) Confirmar que o web continua funcionando igual e que o pagamento não cai mais no Replit.

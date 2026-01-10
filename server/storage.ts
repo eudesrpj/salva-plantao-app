@@ -83,7 +83,8 @@ import {
   userUsageStats, type UserUsageStats, type InsertUserUsageStats,
   userCouponUsage, type UserCouponUsage, type InsertUserCouponUsage,
   userBillingStatus, type UserBillingStatus, type InsertUserBillingStatus,
-  userOneTimeMessages, type UserOneTimeMessages, type InsertUserOneTimeMessages
+  userOneTimeMessages, type UserOneTimeMessages, type InsertUserOneTimeMessages,
+  userPreviewState, type UserPreviewState, type InsertUserPreviewState
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, ilike, sql, isNull, lt, gte, gt, inArray, ne } from "drizzle-orm";
@@ -492,6 +493,11 @@ export interface IStorage {
   upsertUserOneTimeMessages(userId: string, data: Partial<InsertUserOneTimeMessages>): Promise<UserOneTimeMessages>;
   getLastUnackedDonation(userId: string, lastAckedId?: number | null): Promise<{ donation: Donation; causeName: string } | null>;
   hasConfirmedPayment(userId: string): Promise<boolean>;
+
+  // User Preview State
+  getUserPreviewState(userId: string): Promise<UserPreviewState | undefined>;
+  upsertUserPreviewState(userId: string, data: Partial<InsertUserPreviewState>): Promise<UserPreviewState>;
+  incrementPreviewActions(userId: string): Promise<UserPreviewState>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3213,6 +3219,46 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(payments.userId, userId), eq(payments.status, "paid")))
       .limit(1);
     return !!payment;
+  }
+
+  // --- User Preview State ---
+  async getUserPreviewState(userId: string): Promise<UserPreviewState | undefined> {
+    const [record] = await db.select().from(userPreviewState).where(eq(userPreviewState.userId, userId));
+    return record;
+  }
+
+  async upsertUserPreviewState(userId: string, data: Partial<InsertUserPreviewState>): Promise<UserPreviewState> {
+    const existing = await this.getUserPreviewState(userId);
+    if (existing) {
+      const [updated] = await db.update(userPreviewState)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(userPreviewState.userId, userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(userPreviewState).values({ userId, ...data }).returning();
+    return created;
+  }
+
+  async incrementPreviewActions(userId: string): Promise<UserPreviewState> {
+    const existing = await this.getUserPreviewState(userId);
+    if (existing) {
+      const [updated] = await db.update(userPreviewState)
+        .set({ 
+          actionsUsed: (existing.actionsUsed || 0) + 1,
+          updatedAt: new Date() 
+        })
+        .where(eq(userPreviewState.userId, userId))
+        .returning();
+      return updated;
+    }
+    // Create new preview state if not exists
+    const [created] = await db.insert(userPreviewState).values({ 
+      userId, 
+      previewStartedAt: new Date(),
+      actionsUsed: 1 
+    }).returning();
+    return created;
   }
 }
 

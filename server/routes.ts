@@ -3016,6 +3016,170 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(payments);
   });
 
+  // --- Billing Checkout (Redirect to Asaas) ---
+  app.post("/api/billing/checkout", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await authStorage.getUser(userId);
+      if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
+
+      const { planSlug, couponCode } = req.body;
+      const planSlugToUse = planSlug || 'mensal';
+      
+      let plan = await storage.getPlanBySlug(planSlugToUse);
+      if (!plan) {
+        await storage.upsertPlans();
+        plan = await storage.getPlanBySlug(planSlugToUse);
+      }
+      if (!plan) {
+        return res.status(400).json({ message: `Plano '${planSlugToUse}' não encontrado.` });
+      }
+
+      let priceCents = plan.priceCents;
+      let discountCents = 0;
+
+      if (couponCode) {
+        const coupon = await storage.getPromoCouponByCode(couponCode.toUpperCase().trim());
+        if (coupon && coupon.isActive) {
+          if (coupon.discountType === 'percentage') {
+            discountCents = Math.floor(priceCents * (Number(coupon.discountValue) / 100));
+          } else {
+            discountCents = Math.floor(Number(coupon.discountValue) * 100);
+          }
+        }
+      }
+
+      const finalValue = Math.max((priceCents - discountCents) / 100, 0);
+      
+      const asaasService = await import('./services/asaas');
+      if (!asaasService.isAsaasConfigured()) {
+        return res.status(503).json({ message: "Sistema de pagamento não configurado." });
+      }
+
+      // Get the app domain for success/cancel URLs
+      const appDomain = process.env.REPLIT_DOMAINS?.split(',')[0] || process.env.REPLIT_DEV_DOMAIN || 'localhost:5000';
+      const protocol = appDomain.includes('localhost') ? 'http' : 'https';
+      const baseUrl = `${protocol}://${appDomain}`;
+
+      const paymentLink = await asaasService.createPaymentLink({
+        name: `Assinatura Salva Plantão - ${plan.name}`,
+        description: `Assinatura ${plan.name} do Salva Plantão`,
+        value: finalValue,
+        billingType: 'UNDEFINED', // Allow user to choose PIX or Card
+        chargeType: 'DETACHED',
+        dueDateLimitDays: 7,
+        notificationEnabled: true,
+        callback: {
+          successUrl: `${baseUrl}/billing/success`,
+          autoRedirect: true
+        },
+        externalReference: `user-${userId}-plan-${plan.id}`
+      });
+
+      res.json({ 
+        url: paymentLink.url,
+        linkId: paymentLink.id
+      });
+    } catch (error: any) {
+      console.error('Error creating checkout:', error);
+      res.status(500).json({ message: error.message || 'Erro ao criar checkout' });
+    }
+  });
+
+  // Billing status check
+  app.get("/api/billing/status", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    const subscription = await storage.getActiveSubscription(userId);
+    
+    res.json({
+      isSubscribed: user?.status === 'active' || user?.role === 'admin',
+      userStatus: user?.status || 'pending',
+      isAdmin: user?.role === 'admin',
+      subscription: subscription ? {
+        status: subscription.status,
+        nextBillingDate: subscription.nextBillingDate
+      } : null
+    });
+  });
+
+  // --- Preview Mode Endpoints ---
+  const PREVIEW_TIME_LIMIT_MINUTES = 10;
+  const PREVIEW_ACTION_LIMIT = 20;
+
+  app.get("/api/preview/status", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    
+    // Subscribers and admins have full access
+    if (user?.status === 'active' || user?.role === 'admin') {
+      return res.json({
+        isSubscribed: true,
+        previewAllowed: false, // Not applicable
+        previewExpired: false,
+        remainingMinutes: null,
+        remainingActions: null
+      });
+    }
+
+    let previewState = await storage.getUserPreviewState(userId);
+    
+    // Initialize preview state if not exists
+    if (!previewState) {
+      previewState = await storage.upsertUserPreviewState(userId, {
+        userId,
+        previewStartedAt: new Date(),
+        actionsUsed: 0,
+        previewExpired: false
+      });
+    }
+
+    const now = new Date();
+    const startTime = previewState.previewStartedAt || now;
+    const elapsedMinutes = (now.getTime() - new Date(startTime).getTime()) / (1000 * 60);
+    const remainingMinutes = Math.max(0, PREVIEW_TIME_LIMIT_MINUTES - elapsedMinutes);
+    const remainingActions = Math.max(0, PREVIEW_ACTION_LIMIT - (previewState.actionsUsed || 0));
+
+    const isExpiredByTime = remainingMinutes <= 0;
+    const isExpiredByActions = remainingActions <= 0;
+    const previewExpired = isExpiredByTime || isExpiredByActions || previewState.previewExpired;
+
+    // Update expired flag if needed
+    if (previewExpired && !previewState.previewExpired) {
+      await storage.upsertUserPreviewState(userId, { previewExpired: true });
+    }
+
+    res.json({
+      isSubscribed: false,
+      previewAllowed: !previewExpired,
+      previewExpired,
+      remainingMinutes: Math.round(remainingMinutes),
+      remainingActions,
+      actionsUsed: previewState.actionsUsed || 0,
+      previewStartedAt: previewState.previewStartedAt
+    });
+  });
+
+  app.post("/api/preview/consume", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    const user = await authStorage.getUser(userId);
+    
+    // Subscribers don't consume preview actions
+    if (user?.status === 'active' || user?.role === 'admin') {
+      return res.json({ consumed: false, reason: 'subscribed' });
+    }
+
+    const previewState = await storage.incrementPreviewActions(userId);
+    const remainingActions = Math.max(0, PREVIEW_ACTION_LIMIT - (previewState.actionsUsed || 0));
+    
+    res.json({
+      consumed: true,
+      actionsUsed: previewState.actionsUsed,
+      remainingActions,
+      previewExpired: remainingActions <= 0 || previewState.previewExpired
+    });
+  });
+
   // --- Prescription Favorites (User personalized copies) ---
   app.get("/api/prescription-favorites", isAuthenticated, checkNotBlocked, async (req, res) => {
     const items = await storage.getPrescriptionFavorites(getUserId(req));

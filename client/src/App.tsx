@@ -16,7 +16,7 @@ import { FloatingCalculator } from "@/components/FloatingCalculator";
 import { EmergencyButton } from "@/components/EmergencyButton";
 import { CreatorFooter } from "@/components/CreatorFooter";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { PreviewBanner } from "@/components/PreviewGate";
+import { PreviewBanner, PreviewProvider, PreviewExpiredOverlay } from "@/components/PreviewGate";
 import { OneTimeMessageOverlay } from "@/components/OneTimeMessageOverlay";
 
 // Page Imports
@@ -52,6 +52,8 @@ import Exams from "@/pages/Exams";
 import Chat from "@/pages/Chat";
 import Notifications from "@/pages/Notifications";
 import About from "@/pages/About";
+import BillingSuccess from "@/pages/BillingSuccess";
+import BillingCancel from "@/pages/BillingCancel";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -68,6 +70,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       <EmergencyButton />
       <MobileNav />
       <OneTimeMessageOverlay />
+      <PreviewExpiredOverlay />
     </div>
   );
 }
@@ -227,6 +230,9 @@ function Router() {
         <ProtectedRoute component={About} />
       </Route>
 
+      <Route path="/billing/success" component={BillingSuccess} />
+      <Route path="/billing/cancel" component={BillingCancel} />
+
       <Route component={NotFound} />
     </Switch>
   );
@@ -237,8 +243,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <Router />
-          <Toaster />
+          <PreviewProvider>
+            <Router />
+            <Toaster />
+          </PreviewProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

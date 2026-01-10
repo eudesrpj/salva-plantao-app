@@ -164,3 +164,43 @@ export function formatDateForAsaas(date: Date): string {
 export function isAsaasConfigured(): boolean {
   return !!ASAAS_API_KEY;
 }
+
+interface AsaasPaymentLinkResponse {
+  id: string;
+  url: string;
+  name: string;
+  value: number;
+  active: boolean;
+}
+
+export async function createPaymentLink(data: {
+  name: string;
+  description?: string;
+  value: number;
+  billingType: 'UNDEFINED' | 'PIX' | 'CREDIT_CARD' | 'BOLETO';
+  chargeType: 'DETACHED' | 'RECURRENT' | 'INSTALLMENT';
+  dueDateLimitDays?: number;
+  subscriptionCycle?: 'MONTHLY' | 'WEEKLY' | 'BIWEEKLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
+  maxInstallmentCount?: number;
+  notificationEnabled?: boolean;
+  callback?: {
+    successUrl: string;
+    autoRedirect?: boolean;
+  };
+  externalReference?: string;
+}): Promise<AsaasPaymentLinkResponse> {
+  return asaasRequest<AsaasPaymentLinkResponse>('/paymentLinks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getPaymentLink(linkId: string): Promise<AsaasPaymentLinkResponse> {
+  return asaasRequest<AsaasPaymentLinkResponse>(`/paymentLinks/${linkId}`);
+}
+
+export function getAsaasBaseUrl(): string {
+  return process.env.ASAAS_SANDBOX === 'true' 
+    ? 'https://sandbox.asaas.com'
+    : 'https://www.asaas.com';
+}

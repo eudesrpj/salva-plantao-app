@@ -1379,3 +1379,16 @@ export const userOneTimeMessages = pgTable("user_one_time_messages", {
 export const insertUserOneTimeMessagesSchema = createInsertSchema(userOneTimeMessages).omit({ updatedAt: true });
 export type UserOneTimeMessages = typeof userOneTimeMessages.$inferSelect;
 export type InsertUserOneTimeMessages = z.infer<typeof insertUserOneTimeMessagesSchema>;
+
+// User Preview State (for trial/demo mode)
+export const userPreviewState = pgTable("user_preview_state", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  previewStartedAt: timestamp("preview_started_at"),
+  actionsUsed: integer("actions_used").default(0),
+  previewExpired: boolean("preview_expired").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserPreviewStateSchema = createInsertSchema(userPreviewState).omit({ updatedAt: true });
+export type UserPreviewState = typeof userPreviewState.$inferSelect;
+export type InsertUserPreviewState = z.infer<typeof insertUserPreviewStateSchema>;
