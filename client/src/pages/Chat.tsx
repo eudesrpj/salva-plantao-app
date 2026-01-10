@@ -92,7 +92,7 @@ export default function Chat() {
   });
 
   const { data: searchResults = [] } = useQuery<any[]>({
-    queryKey: ["/api/chat/users/search", searchQuery],
+    queryKey: ["/api/chat/search-users", { q: searchQuery }],
     enabled: showSearch && searchQuery.length >= 2,
   });
 
@@ -167,7 +167,7 @@ export default function Chat() {
 
   const startDmMutation = useMutation({
     mutationFn: async (contactId: string) => {
-      return await apiRequest("POST", "/api/chat/dm", { contactId });
+      return await apiRequest("POST", "/api/chat/start-dm", { contactId });
     },
     onSuccess: (data: any) => {
       setShowSearch(false);

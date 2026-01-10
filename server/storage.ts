@@ -12,8 +12,8 @@ import {
   quickAccessConfig, insertQuickAccessConfigSchema, donationCauses, insertDonationCauseSchema,
   donations, insertDonationSchema, donationReceipts, insertDonationReceiptSchema,
   doseRules, formulations, emergencyPanelItems, insertEmergencyPanelItemSchema,
-  chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages,
-  type ChatRoom, type ChatMessage, type ChatContact,
+  chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages, chatUserBans, chatBannedWords,
+  type ChatRoom, type ChatMessage, type ChatContact, type ChatUserBan, type InsertChatUserBan, type ChatBannedWord, type InsertChatBannedWord,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -74,7 +74,7 @@ import {
   type EmergencyPanelItem, type InsertEmergencyPanelItem
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, ilike, sql, isNull, lt, gte, inArray, ne } from "drizzle-orm";
+import { eq, desc, and, or, ilike, sql, isNull, lt, gte, gt, inArray, ne } from "drizzle-orm";
 import { users } from "@shared/models/auth";
 
 // Helper function to normalize text (remove accents, lowercase, trim)
@@ -2643,6 +2643,77 @@ export class DatabaseStorage implements IStorage {
     const now = new Date();
     const result = await db.delete(chatMessages).where(lt(chatMessages.expiresAt, now)).returning();
     return result.length;
+  }
+
+  // Chat moderation methods
+  async getActiveChatBan(userId: string): Promise<ChatUserBan | null> {
+    const now = new Date();
+    const [ban] = await db.select().from(chatUserBans)
+      .where(and(
+        eq(chatUserBans.userId, userId),
+        or(
+          eq(chatUserBans.isPermanent, true),
+          gt(chatUserBans.expiresAt, now)
+        )
+      ))
+      .limit(1);
+    return ban || null;
+  }
+
+  async getAllChatBans(): Promise<any[]> {
+    return await db.select({
+      id: chatUserBans.id,
+      userId: chatUserBans.userId,
+      reason: chatUserBans.reason,
+      bannedBy: chatUserBans.bannedBy,
+      isPermanent: chatUserBans.isPermanent,
+      expiresAt: chatUserBans.expiresAt,
+      createdAt: chatUserBans.createdAt,
+      userFirstName: users.firstName,
+      userLastName: users.lastName,
+      userEmail: users.email,
+    })
+    .from(chatUserBans)
+    .leftJoin(users, eq(chatUserBans.userId, users.id))
+    .orderBy(desc(chatUserBans.createdAt));
+  }
+
+  async createChatBan(data: InsertChatUserBan): Promise<ChatUserBan> {
+    const [ban] = await db.insert(chatUserBans).values(data).returning();
+    return ban;
+  }
+
+  async deleteChatBan(id: number): Promise<void> {
+    await db.delete(chatUserBans).where(eq(chatUserBans.id, id));
+  }
+
+  async getChatBannedWords(): Promise<ChatBannedWord[]> {
+    return await db.select().from(chatBannedWords).orderBy(chatBannedWords.word);
+  }
+
+  async createChatBannedWord(data: InsertChatBannedWord): Promise<ChatBannedWord> {
+    const [word] = await db.insert(chatBannedWords).values(data).returning();
+    return word;
+  }
+
+  async deleteChatBannedWord(id: number): Promise<void> {
+    await db.delete(chatBannedWords).where(eq(chatBannedWords.id, id));
+  }
+
+  async getBlockedMessagesLog(): Promise<any[]> {
+    return await db.select({
+      id: chatBlockedMessages.id,
+      userId: chatBlockedMessages.userId,
+      reason: chatBlockedMessages.reason,
+      createdAt: chatBlockedMessages.createdAt,
+      userFirstName: users.firstName,
+      userLastName: users.lastName,
+      userEmail: users.email,
+    })
+    .from(chatBlockedMessages)
+    .leftJoin(users, eq(chatBlockedMessages.userId, users.id))
+    .orderBy(desc(chatBlockedMessages.createdAt))
+    .limit(100);
   }
 }
 

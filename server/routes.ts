@@ -10,7 +10,7 @@ import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAiRoutes } from "./ai/routes";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { notifyUser, notifyAllAdmins, broadcastToRoom } from "./websocket";
-import { chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages } from "@shared/schema";
+import { chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages, chatUserBans, chatBannedWords } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -3381,11 +3381,17 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
   // --- Doctor Chat Routes ---
   
-  // Accept chat terms
+  // Accept chat terms and join state group
   app.post("/api/chat/accept-terms", isAuthenticated, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { uf } = req.body;
+    if (!uf || uf.length !== 2) return res.status(400).json({ message: "UF é obrigatória" });
+    
+    await authStorage.updateUserUf(userId, uf.toUpperCase());
     await authStorage.updateUserChatTerms(userId);
+    await storage.getOrCreateStateGroup(uf.toUpperCase(), userId);
+    
     res.json({ success: true });
   });
 
@@ -3441,6 +3447,25 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     
     if (!body || body.trim().length === 0) {
       return res.status(400).json({ message: "Mensagem vazia" });
+    }
+    
+    // Check if user is banned
+    const ban = await storage.getActiveChatBan(userId);
+    if (ban) {
+      const msg = ban.isPermanent 
+        ? "Você foi banido permanentemente do chat." 
+        : `Você está bloqueado até ${new Date(ban.expiresAt!).toLocaleDateString("pt-BR")}.`;
+      return res.status(403).json({ message: msg });
+    }
+    
+    // Check for banned words
+    const bannedWords = await storage.getChatBannedWords();
+    const lowerBody = body.toLowerCase();
+    for (const bw of bannedWords) {
+      if (lowerBody.includes(bw.word.toLowerCase())) {
+        await storage.logBlockedMessage(userId, `Palavra bloqueada: ${bw.word}`);
+        return res.status(400).json({ message: `Mensagem contém palavra bloqueada: "${bw.word}"` });
+      }
     }
     
     const isMember = await storage.isRoomMember(roomId, userId);
@@ -3513,6 +3538,81 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   app.post("/api/chat/cleanup-expired", isAuthenticated, checkAdmin, async (req, res) => {
     const deleted = await storage.deleteExpiredMessages();
     res.json({ deleted });
+  });
+
+  // --- Chat Admin Moderation Routes ---
+  
+  // Get all chat bans
+  app.get("/api/admin/chat/bans", isAuthenticated, checkAdmin, async (req, res) => {
+    const bans = await storage.getAllChatBans();
+    res.json(bans);
+  });
+
+  // Ban a user from chat
+  app.post("/api/admin/chat/bans", isAuthenticated, checkAdmin, async (req, res) => {
+    const adminId = getUserId(req);
+    if (!adminId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { userId, reason, isPermanent, durationDays } = req.body;
+    if (!userId || !reason) {
+      return res.status(400).json({ message: "Usuário e motivo são obrigatórios" });
+    }
+    
+    let expiresAt = null;
+    if (!isPermanent && durationDays) {
+      expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + Number(durationDays));
+    }
+    
+    const ban = await storage.createChatBan({
+      userId,
+      reason,
+      bannedBy: adminId,
+      isPermanent: !!isPermanent,
+      expiresAt,
+    });
+    res.status(201).json(ban);
+  });
+
+  // Remove a ban
+  app.delete("/api/admin/chat/bans/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteChatBan(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Get all banned words
+  app.get("/api/admin/chat/banned-words", isAuthenticated, checkAdmin, async (req, res) => {
+    const words = await storage.getChatBannedWords();
+    res.json(words);
+  });
+
+  // Add a banned word
+  app.post("/api/admin/chat/banned-words", isAuthenticated, checkAdmin, async (req, res) => {
+    const adminId = getUserId(req);
+    if (!adminId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { word } = req.body;
+    if (!word || word.trim().length === 0) {
+      return res.status(400).json({ message: "Palavra é obrigatória" });
+    }
+    
+    const bannedWord = await storage.createChatBannedWord({
+      word: word.trim().toLowerCase(),
+      createdBy: adminId,
+    });
+    res.status(201).json(bannedWord);
+  });
+
+  // Remove a banned word
+  app.delete("/api/admin/chat/banned-words/:id", isAuthenticated, checkAdmin, async (req, res) => {
+    await storage.deleteChatBannedWord(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  // Get blocked messages log
+  app.get("/api/admin/chat/blocked-messages", isAuthenticated, checkAdmin, async (req, res) => {
+    const messages = await storage.getBlockedMessagesLog();
+    res.json(messages);
   });
 
   // --- Seed Data ---

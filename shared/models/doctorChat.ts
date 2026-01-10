@@ -53,9 +53,33 @@ export const chatBlockedMessages = pgTable("chat_blocked_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Chat user bans (permanent or temporary)
+export const chatUserBans = pgTable("chat_user_bans", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  reason: text("reason").notNull(),
+  bannedBy: varchar("banned_by").references(() => users.id, { onDelete: "set null" }),
+  isPermanent: boolean("is_permanent").default(false),
+  expiresAt: timestamp("expires_at"), // null if permanent
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_chat_user_bans_user").on(table.userId),
+  index("idx_chat_user_bans_expires").on(table.expiresAt),
+]);
+
+// Banned words list
+export const chatBannedWords = pgTable("chat_banned_words", {
+  id: serial("id").primaryKey(),
+  word: text("word").notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertChatRoomSchema = createInsertSchema(chatRooms).omit({ id: true, createdAt: true });
 export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, createdAt: true });
 export const insertChatContactSchema = createInsertSchema(chatContacts).omit({ id: true, createdAt: true });
+export const insertChatUserBanSchema = createInsertSchema(chatUserBans).omit({ id: true, createdAt: true });
+export const insertChatBannedWordSchema = createInsertSchema(chatBannedWords).omit({ id: true, createdAt: true });
 
 export type ChatRoom = typeof chatRooms.$inferSelect;
 export type InsertChatRoom = z.infer<typeof insertChatRoomSchema>;
@@ -64,3 +88,7 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatContact = typeof chatContacts.$inferSelect;
 export type InsertChatContact = z.infer<typeof insertChatContactSchema>;
+export type ChatUserBan = typeof chatUserBans.$inferSelect;
+export type InsertChatUserBan = z.infer<typeof insertChatUserBanSchema>;
+export type ChatBannedWord = typeof chatBannedWords.$inferSelect;
+export type InsertChatBannedWord = z.infer<typeof insertChatBannedWordSchema>;

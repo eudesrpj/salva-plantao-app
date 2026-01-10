@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart } from "lucide-react";
+import { CheckCircle, Ban, ShieldAlert, Save, Users, Settings, FileText, CreditCard, BarChart3, Bot, Plus, Trash2, Pencil, Pill, AlertTriangle, Sparkles, Loader2, Ticket, Calculator, Copy, Upload, Syringe, CheckSquare, Power, PowerOff, Download, Layout, Zap, Heart, MessageCircle, Clock } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader } from "@/components/ui/loading-spinner";
@@ -77,6 +77,9 @@ export default function Admin() {
           <TabsTrigger value="emergency" className="gap-1">
             <Zap className="h-4 w-4" /> Emergência
           </TabsTrigger>
+          <TabsTrigger value="chat" className="gap-1">
+            <ShieldAlert className="h-4 w-4" /> Chat
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -129,6 +132,10 @@ export default function Admin() {
 
         <TabsContent value="emergency">
           <EmergencyPanelTab />
+        </TabsContent>
+
+        <TabsContent value="chat">
+          <ChatModerationTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -6626,6 +6633,326 @@ function EmergencyPanelTab() {
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ChatModerationTab() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [banUserId, setBanUserId] = useState("");
+  const [banReason, setBanReason] = useState("");
+  const [banPermanent, setBanPermanent] = useState(false);
+  const [banDays, setBanDays] = useState("7");
+  const [newWord, setNewWord] = useState("");
+
+  const { data: users = [] } = useQuery<User[]>({
+    queryKey: ["/api/admin/users"],
+  });
+
+  const { data: bans = [], isLoading: bansLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/chat/bans"],
+  });
+
+  const { data: bannedWords = [], isLoading: wordsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/chat/banned-words"],
+  });
+
+  const { data: blockedMessages = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/chat/blocked-messages"],
+  });
+
+  const createBanMutation = useMutation({
+    mutationFn: async (data: { userId: string; reason: string; isPermanent: boolean; durationDays?: number }) => {
+      const res = await fetch("/api/admin/chat/bans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/chat/bans"] });
+      setBanUserId("");
+      setBanReason("");
+      setBanPermanent(false);
+      setBanDays("7");
+      toast({ title: "Usuário banido do chat" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  const removeBanMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/admin/chat/bans/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Falha ao remover ban");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/chat/bans"] });
+      toast({ title: "Ban removido" });
+    },
+  });
+
+  const addWordMutation = useMutation({
+    mutationFn: async (word: string) => {
+      const res = await fetch("/api/admin/chat/banned-words", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ word }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/chat/banned-words"] });
+      setNewWord("");
+      toast({ title: "Palavra adicionada" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  const removeWordMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/admin/chat/banned-words/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Falha ao remover palavra");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/chat/banned-words"] });
+      toast({ title: "Palavra removida" });
+    },
+  });
+
+  const handleBan = () => {
+    if (!banUserId || !banReason.trim()) {
+      toast({ title: "Preencha usuário e motivo", variant: "destructive" });
+      return;
+    }
+    createBanMutation.mutate({
+      userId: banUserId,
+      reason: banReason.trim(),
+      isPermanent: banPermanent,
+      durationDays: banPermanent ? undefined : Number(banDays),
+    });
+  };
+
+  const handleAddWord = () => {
+    if (!newWord.trim()) return;
+    addWordMutation.mutate(newWord.trim());
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ban className="h-5 w-5" />
+            Banir Usuário do Chat
+          </CardTitle>
+          <CardDescription>Bloquear usuário permanentemente ou por tempo determinado</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Usuário</label>
+              <Select value={banUserId} onValueChange={setBanUserId}>
+                <SelectTrigger data-testid="select-ban-user">
+                  <SelectValue placeholder="Selecione um usuário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.firstName} {u.lastName} ({u.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Motivo</label>
+              <Input
+                value={banReason}
+                onChange={(e) => setBanReason(e.target.value)}
+                placeholder="Motivo do banimento"
+                data-testid="input-ban-reason"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="permanent"
+                checked={banPermanent}
+                onCheckedChange={(c) => setBanPermanent(!!c)}
+                data-testid="checkbox-permanent"
+              />
+              <label htmlFor="permanent" className="text-sm">Banimento permanente</label>
+            </div>
+            {!banPermanent && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm">Duração:</label>
+                <Select value={banDays} onValueChange={setBanDays}>
+                  <SelectTrigger className="w-32" data-testid="select-ban-days">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 dia</SelectItem>
+                    <SelectItem value="3">3 dias</SelectItem>
+                    <SelectItem value="7">7 dias</SelectItem>
+                    <SelectItem value="14">14 dias</SelectItem>
+                    <SelectItem value="30">30 dias</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <Button onClick={handleBan} disabled={createBanMutation.isPending} data-testid="button-ban-user">
+            {createBanMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+            Banir Usuário
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Usuários Banidos
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {bansLoading ? (
+            <p className="text-muted-foreground">Carregando...</p>
+          ) : bans.length === 0 ? (
+            <p className="text-muted-foreground">Nenhum usuário banido.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Usuário</TableHead>
+                  <TableHead>Motivo</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Expira em</TableHead>
+                  <TableHead>Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bans.map((ban) => (
+                  <TableRow key={ban.id} data-testid={`row-ban-${ban.id}`}>
+                    <TableCell>
+                      {ban.userFirstName} {ban.userLastName}
+                      <span className="text-xs text-muted-foreground block">{ban.userEmail}</span>
+                    </TableCell>
+                    <TableCell>{ban.reason}</TableCell>
+                    <TableCell>
+                      <Badge variant={ban.isPermanent ? "destructive" : "secondary"}>
+                        {ban.isPermanent ? "Permanente" : "Temporário"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {ban.isPermanent ? "—" : ban.expiresAt ? new Date(ban.expiresAt).toLocaleDateString("pt-BR") : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => removeBanMutation.mutate(ban.id)}
+                        data-testid={`button-unban-${ban.id}`}
+                      >
+                        Remover ban
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Palavras Bloqueadas
+          </CardTitle>
+          <CardDescription>Mensagens contendo essas palavras serão bloqueadas automaticamente</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              value={newWord}
+              onChange={(e) => setNewWord(e.target.value)}
+              placeholder="Nova palavra a bloquear"
+              className="max-w-xs"
+              data-testid="input-new-word"
+              onKeyDown={(e) => e.key === "Enter" && handleAddWord()}
+            />
+            <Button onClick={handleAddWord} disabled={addWordMutation.isPending} data-testid="button-add-word">
+              <Plus className="h-4 w-4 mr-1" /> Adicionar
+            </Button>
+          </div>
+          {wordsLoading ? (
+            <p className="text-muted-foreground">Carregando...</p>
+          ) : bannedWords.length === 0 ? (
+            <p className="text-muted-foreground">Nenhuma palavra bloqueada.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {bannedWords.map((w) => (
+                <Badge key={w.id} variant="secondary" className="flex items-center gap-1" data-testid={`badge-word-${w.id}`}>
+                  {w.word}
+                  <button
+                    onClick={() => removeWordMutation.mutate(w.id)}
+                    className="ml-1 hover:text-destructive"
+                    data-testid={`button-remove-word-${w.id}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="h-5 w-5" />
+            Log de Mensagens Bloqueadas
+          </CardTitle>
+          <CardDescription>Últimas 100 mensagens bloqueadas automaticamente</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {blockedMessages.length === 0 ? (
+            <p className="text-muted-foreground">Nenhuma mensagem bloqueada ainda.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Usuário</TableHead>
+                  <TableHead>Motivo</TableHead>
+                  <TableHead>Data</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {blockedMessages.map((msg) => (
+                  <TableRow key={msg.id} data-testid={`row-blocked-${msg.id}`}>
+                    <TableCell>
+                      {msg.userFirstName} {msg.userLastName}
+                      <span className="text-xs text-muted-foreground block">{msg.userEmail}</span>
+                    </TableCell>
+                    <TableCell>{msg.reason}</TableCell>
+                    <TableCell>{new Date(msg.createdAt).toLocaleString("pt-BR")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
