@@ -4279,6 +4279,58 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(items);
   });
 
+  // --- One-Time Messages (payment/donation confirmations) ---
+  app.get("/api/one-time-messages", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const record = await storage.getUserOneTimeMessages(userId);
+    
+    // Check payment welcome
+    let paymentShouldShow = false;
+    if (!record?.paymentWelcomeShown) {
+      paymentShouldShow = await storage.hasConfirmedPayment(userId);
+    }
+    
+    // Check donation thanks
+    let donationShouldShow = false;
+    let socialCauseName: string | undefined;
+    if (!record?.donationThanksShown) {
+      const lastDonation = await storage.getLastUnackedDonation(userId, record?.lastDonationAckedId);
+      if (lastDonation) {
+        donationShouldShow = true;
+        socialCauseName = lastDonation.causeName;
+      }
+    }
+    
+    res.json({
+      payment: { shouldShow: paymentShouldShow },
+      donation: { shouldShow: donationShouldShow, socialCauseName }
+    });
+  });
+
+  app.post("/api/one-time-messages/ack", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    
+    const { type } = req.body;
+    if (!type || !["payment", "donation"].includes(type)) {
+      return res.status(400).json({ message: "Invalid type. Use 'payment' or 'donation'." });
+    }
+    
+    if (type === "payment") {
+      await storage.upsertUserOneTimeMessages(userId, { paymentWelcomeShown: true });
+    } else if (type === "donation") {
+      const lastDonation = await storage.getLastUnackedDonation(userId, null);
+      await storage.upsertUserOneTimeMessages(userId, { 
+        donationThanksShown: true,
+        lastDonationAckedId: lastDonation?.donation.id || null
+      });
+    }
+    
+    res.json({ success: true });
+  });
+
   // --- Seed Data ---
   await seedDatabase();
 
