@@ -2715,6 +2715,78 @@ export class DatabaseStorage implements IStorage {
     .orderBy(desc(chatBlockedMessages.createdAt))
     .limit(100);
   }
+
+  async changeUserUf(userId: string, newUf: string, isAdminChange: boolean = false): Promise<{ success: boolean; error?: string }> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      return { success: false, error: "Usuário não encontrado" };
+    }
+    
+    const oldUf = user.uf;
+    if (oldUf === newUf) {
+      return { success: false, error: "O usuário já está neste estado" };
+    }
+    
+    if (!isAdminChange && user.lastUfChangeAt) {
+      const daysSinceChange = Math.floor((Date.now() - new Date(user.lastUfChangeAt).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSinceChange < 30) {
+        const daysRemaining = 30 - daysSinceChange;
+        return { success: false, error: `Você só pode mudar de estado novamente em ${daysRemaining} dias` };
+      }
+    }
+    
+    await db.update(users).set({
+      uf: newUf,
+      lastUfChangeAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId));
+    
+    if (oldUf) {
+      const [oldRoom] = await db.select().from(chatRooms)
+        .where(and(eq(chatRooms.type, 'group'), eq(chatRooms.stateUf, oldUf)));
+      if (oldRoom) {
+        await db.delete(chatRoomMembers)
+          .where(and(eq(chatRoomMembers.roomId, oldRoom.id), eq(chatRoomMembers.userId, userId)));
+      }
+    }
+    
+    await this.getOrCreateStateGroup(newUf, userId);
+    
+    return { success: true };
+  }
+
+  async canUserChangeUf(userId: string): Promise<{ canChange: boolean; daysRemaining?: number }> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      return { canChange: false };
+    }
+    
+    if (!user.lastUfChangeAt) {
+      return { canChange: true };
+    }
+    
+    const daysSinceChange = Math.floor((Date.now() - new Date(user.lastUfChangeAt).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceChange >= 30) {
+      return { canChange: true };
+    }
+    
+    return { canChange: false, daysRemaining: 30 - daysSinceChange };
+  }
+
+  async getChatUsersWithUf(): Promise<any[]> {
+    return await db.select({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+      uf: users.uf,
+      lastUfChangeAt: users.lastUfChangeAt,
+      chatTermsAcceptedAt: users.chatTermsAcceptedAt,
+    })
+    .from(users)
+    .where(sql`${users.chatTermsAcceptedAt} IS NOT NULL`)
+    .orderBy(users.firstName);
+  }
 }
 
 export const storage = new DatabaseStorage();

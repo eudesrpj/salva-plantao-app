@@ -28,6 +28,7 @@ export const users = pgTable("users", {
   whatsapp: varchar("whatsapp", { length: 20 }), // WhatsApp phone number
   subscriptionExpiresAt: timestamp("subscription_expires_at"), // Subscription expiration date
   uf: varchar("uf", { length: 2 }), // State (UF) for chat groups
+  lastUfChangeAt: timestamp("last_uf_change_at"), // Last UF change timestamp (for monthly limit)
   chatTermsAcceptedAt: timestamp("chat_terms_accepted_at"), // Last chat terms acceptance
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
