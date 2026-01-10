@@ -73,7 +73,7 @@ export default function Chat() {
   const [pendingMessageConfirmed, setPendingMessageConfirmed] = useState(false);
 
   const { data: user } = useQuery<UserProfile>({
-    queryKey: ["/api/user"],
+    queryKey: ["/api/auth/user"],
   });
 
   const { data: rooms = [], refetch: refetchRooms } = useQuery<ChatRoom[]>({
@@ -141,7 +141,7 @@ export default function Chat() {
       return await apiRequest("POST", "/api/chat/accept-terms", { uf: selectedUf });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       setShowTerms(false);
       toast({ title: "Termos aceitos", description: "Você agora pode usar o chat." });
     },
