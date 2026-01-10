@@ -5390,11 +5390,87 @@ function PrescriptionModelsTab() {
   );
 }
 
+interface DashboardWidget {
+  id: string;
+  type: string;
+  refId?: string;
+  label: string;
+  icon: string;
+  route?: string;
+  isActive: boolean;
+}
+
+interface QuickAccessItem {
+  id: string;
+  type: string;
+  refId?: string;
+  label: string;
+  icon: string;
+  route?: string;
+  color?: string;
+  isActive: boolean;
+}
+
+const DASHBOARD_TYPES = [
+  { value: "protocol", label: "Protocolo" },
+  { value: "checklist", label: "Checklist" },
+  { value: "prescription", label: "Prescrição" },
+  { value: "calculator", label: "Calculadora" },
+  { value: "exams", label: "Exames" },
+  { value: "route", label: "Rota Interna" },
+];
+
+const QUICK_ACCESS_TYPES = [
+  { value: "route", label: "Rota Interna" },
+  { value: "protocol", label: "Protocolo" },
+  { value: "prescription", label: "Prescrição" },
+  { value: "calculator", label: "Calculadora" },
+  { value: "exams", label: "Exames" },
+  { value: "external", label: "Link Externo" },
+];
+
+const ICON_OPTIONS = [
+  { value: "FileText", label: "Documento" },
+  { value: "Pill", label: "Medicamento" },
+  { value: "Calculator", label: "Calculadora" },
+  { value: "CheckSquare", label: "Checklist" },
+  { value: "Stethoscope", label: "Estetoscópio" },
+  { value: "Activity", label: "Atividade" },
+  { value: "Heart", label: "Coração" },
+  { value: "Zap", label: "Raio" },
+  { value: "Settings", label: "Configurações" },
+  { value: "Users", label: "Usuários" },
+];
+
+const ROUTES_OPTIONS = [
+  { value: "/prescriptions", label: "Prescrições" },
+  { value: "/protocols", label: "Protocolos" },
+  { value: "/checklists", label: "Condutas" },
+  { value: "/drug-interactions", label: "Interações" },
+  { value: "/exams", label: "Exames" },
+  { value: "/shifts", label: "Plantões" },
+  { value: "/finance", label: "Financeiro" },
+  { value: "/ai-webview", label: "Assistente IA" },
+  { value: "/library", label: "Biblioteca" },
+  { value: "/notes", label: "Anotações" },
+  { value: "/profile", label: "Meu Perfil" },
+  { value: "/memorize", label: "Memorização" },
+];
+
 function DashboardConfigTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [dashboardModalOpen, setDashboardModalOpen] = useState(false);
+  const [quickAccessModalOpen, setQuickAccessModalOpen] = useState(false);
+  const [editingDashboardItem, setEditingDashboardItem] = useState<DashboardWidget | null>(null);
+  const [editingQuickAccessItem, setEditingQuickAccessItem] = useState<QuickAccessItem | null>(null);
+  const [dashboardDraggedIndex, setDashboardDraggedIndex] = useState<number | null>(null);
+  const [quickAccessDraggedIndex, setQuickAccessDraggedIndex] = useState<number | null>(null);
 
-  const { data: dashboardItems, isLoading: dashboardLoading } = useQuery<any[]>({
+  const [dashboardItems, setDashboardItems] = useState<DashboardWidget[]>([]);
+  const [quickAccessItems, setQuickAccessItems] = useState<QuickAccessItem[]>([]);
+
+  const { data: dashboardData, isLoading: dashboardLoading } = useQuery<DashboardWidget[]>({
     queryKey: ["/api/admin/dashboard-config"],
     queryFn: async () => {
       const res = await fetch("/api/admin/dashboard-config", { credentials: "include" });
@@ -5402,7 +5478,7 @@ function DashboardConfigTab() {
     },
   });
 
-  const { data: quickAccessItems, isLoading: qaLoading } = useQuery<any[]>({
+  const { data: quickAccessData, isLoading: qaLoading } = useQuery<QuickAccessItem[]>({
     queryKey: ["/api/admin/quick-access-config"],
     queryFn: async () => {
       const res = await fetch("/api/admin/quick-access-config", { credentials: "include" });
@@ -5410,209 +5486,570 @@ function DashboardConfigTab() {
     },
   });
 
-  const dashboardMutation = useMutation({
-    mutationFn: async (data: { itemType: string; itemId: string; label: string; order: number; isActive: boolean }) => {
-      const res = await apiRequest("POST", "/api/admin/dashboard-config", data);
+  const { data: protocols } = useQuery<any[]>({
+    queryKey: ["/api/protocols/search"],
+    queryFn: async () => {
+      const res = await fetch("/api/protocols/search?q=", { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const { data: checklists } = useQuery<any[]>({
+    queryKey: ["/api/checklists"],
+  });
+
+  useEffect(() => {
+    if (dashboardData) setDashboardItems(dashboardData);
+  }, [dashboardData]);
+
+  useEffect(() => {
+    if (quickAccessData) setQuickAccessItems(quickAccessData);
+  }, [quickAccessData]);
+
+  const saveDashboardMutation = useMutation({
+    mutationFn: async (widgets: DashboardWidget[]) => {
+      const res = await apiRequest("POST", "/api/admin/dashboard-config", { widgets });
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/admin/dashboard-config"] });
-      toast({ title: "Item do dashboard salvo!" });
+      toast({ title: "Dashboard salvo!" });
     },
     onError: () => toast({ title: "Erro ao salvar", variant: "destructive" }),
   });
 
-  const quickAccessMutation = useMutation({
-    mutationFn: async (data: { itemType: string; itemId: string; label: string; icon: string; order: number; isActive: boolean }) => {
-      const res = await apiRequest("POST", "/api/admin/quick-access-config", data);
+  const saveQuickAccessMutation = useMutation({
+    mutationFn: async (items: QuickAccessItem[]) => {
+      const res = await apiRequest("POST", "/api/admin/quick-access-config", { items });
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/admin/quick-access-config"] });
-      toast({ title: "Item de acesso rápido salvo!" });
+      toast({ title: "Acesso rápido salvo!" });
     },
     onError: () => toast({ title: "Erro ao salvar", variant: "destructive" }),
   });
 
-  const deleteDashboardItem = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/admin/dashboard-config/${id}`);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/dashboard-config"] });
-      toast({ title: "Item removido!" });
-    },
-  });
+  const handleDashboardDragStart = (index: number) => setDashboardDraggedIndex(index);
+  const handleDashboardDragOver = (e: React.DragEvent) => e.preventDefault();
+  const handleDropDashboard = (targetIndex: number) => {
+    if (dashboardDraggedIndex === null || dashboardDraggedIndex === targetIndex) {
+      setDashboardDraggedIndex(null);
+      return;
+    }
+    const newItems = [...dashboardItems];
+    const [removed] = newItems.splice(dashboardDraggedIndex, 1);
+    newItems.splice(targetIndex, 0, removed);
+    setDashboardItems(newItems);
+    saveDashboardMutation.mutate(newItems);
+    setDashboardDraggedIndex(null);
+  };
 
-  const deleteQuickAccessItem = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/admin/quick-access-config/${id}`);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/quick-access-config"] });
-      toast({ title: "Item removido!" });
-    },
-  });
+  const handleQuickAccessDragStart = (index: number) => setQuickAccessDraggedIndex(index);
+  const handleQuickAccessDragOver = (e: React.DragEvent) => e.preventDefault();
+  const handleDropQuickAccess = (targetIndex: number) => {
+    if (quickAccessDraggedIndex === null || quickAccessDraggedIndex === targetIndex) {
+      setQuickAccessDraggedIndex(null);
+      return;
+    }
+    const newItems = [...quickAccessItems];
+    const [removed] = newItems.splice(quickAccessDraggedIndex, 1);
+    newItems.splice(targetIndex, 0, removed);
+    setQuickAccessItems(newItems);
+    saveQuickAccessMutation.mutate(newItems);
+    setQuickAccessDraggedIndex(null);
+  };
 
-  const [newDashboardItem, setNewDashboardItem] = useState({ itemType: "protocol", itemId: "", label: "", order: 1, isActive: true });
-  const [newQuickAccessItem, setNewQuickAccessItem] = useState({ itemType: "route", itemId: "", label: "", icon: "FileText", order: 1, isActive: true });
+  const toggleDashboardItem = (id: string) => {
+    const newItems = dashboardItems.map(item => 
+      item.id === id ? { ...item, isActive: !item.isActive } : item
+    );
+    setDashboardItems(newItems);
+    saveDashboardMutation.mutate(newItems);
+  };
+
+  const toggleQuickAccessItem = (id: string) => {
+    const newItems = quickAccessItems.map(item => 
+      item.id === id ? { ...item, isActive: !item.isActive } : item
+    );
+    setQuickAccessItems(newItems);
+    saveQuickAccessMutation.mutate(newItems);
+  };
+
+  const removeDashboardItem = (id: string) => {
+    const newItems = dashboardItems.filter(item => item.id !== id);
+    setDashboardItems(newItems);
+    saveDashboardMutation.mutate(newItems);
+    toast({ title: "Item removido!" });
+  };
+
+  const removeQuickAccessItem = (id: string) => {
+    const newItems = quickAccessItems.filter(item => item.id !== id);
+    setQuickAccessItems(newItems);
+    saveQuickAccessMutation.mutate(newItems);
+    toast({ title: "Item removido!" });
+  };
+
+  const addOrUpdateDashboardItem = (item: DashboardWidget) => {
+    let newItems: DashboardWidget[];
+    if (editingDashboardItem) {
+      newItems = dashboardItems.map(i => i.id === item.id ? item : i);
+    } else {
+      newItems = [...dashboardItems, { ...item, id: crypto.randomUUID() }];
+    }
+    setDashboardItems(newItems);
+    saveDashboardMutation.mutate(newItems);
+    setDashboardModalOpen(false);
+    setEditingDashboardItem(null);
+    toast({ title: editingDashboardItem ? "Item atualizado!" : "Item adicionado!" });
+  };
+
+  const addOrUpdateQuickAccessItem = (item: QuickAccessItem) => {
+    let newItems: QuickAccessItem[];
+    if (editingQuickAccessItem) {
+      newItems = quickAccessItems.map(i => i.id === item.id ? item : i);
+    } else {
+      newItems = [...quickAccessItems, { ...item, id: crypto.randomUUID() }];
+    }
+    setQuickAccessItems(newItems);
+    saveQuickAccessMutation.mutate(newItems);
+    setQuickAccessModalOpen(false);
+    setEditingQuickAccessItem(null);
+    toast({ title: editingQuickAccessItem ? "Item atualizado!" : "Item adicionado!" });
+  };
 
   if (dashboardLoading || qaLoading) return <PageLoader text="Carregando configurações..." />;
 
   return (
     <div className="space-y-6">
-      {/* Dashboard Config */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Layout className="h-5 w-5" /> Itens do Dashboard
             </CardTitle>
-            <CardDescription>Configure quais itens aparecem no dashboard do usuário.</CardDescription>
+            <CardDescription>Arraste os cards para reordenar. Clique no toggle para ativar/desativar.</CardDescription>
           </div>
+          <Dialog open={dashboardModalOpen} onOpenChange={(open) => { setDashboardModalOpen(open); if (!open) setEditingDashboardItem(null); }}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-dashboard-item">
+                <Plus className="h-4 w-4 mr-1" /> Adicionar
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingDashboardItem ? "Editar Item" : "Adicionar ao Dashboard"}</DialogTitle>
+                <DialogDescription>Configure o item que aparecerá no dashboard do usuário.</DialogDescription>
+              </DialogHeader>
+              <DashboardItemForm
+                item={editingDashboardItem}
+                onSave={addOrUpdateDashboardItem}
+                protocols={protocols || []}
+                checklists={checklists || []}
+              />
+            </DialogContent>
+          </Dialog>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Tipo</label>
-              <Select value={newDashboardItem.itemType} onValueChange={(v) => setNewDashboardItem({...newDashboardItem, itemType: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="protocol">Protocolo</SelectItem>
-                  <SelectItem value="checklist">Checklist</SelectItem>
-                  <SelectItem value="prescription">Prescrição</SelectItem>
-                  <SelectItem value="calculator">Calculadora</SelectItem>
-                </SelectContent>
-              </Select>
+        <CardContent>
+          {dashboardItems.length === 0 ? (
+            <div className="text-center text-muted-foreground py-12 border rounded-lg border-dashed">
+              Nenhum item configurado. Clique em "Adicionar" para começar.
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">ID do Item</label>
-              <Input value={newDashboardItem.itemId} onChange={(e) => setNewDashboardItem({...newDashboardItem, itemId: e.target.value})} placeholder="ex: 1" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Rótulo</label>
-              <Input value={newDashboardItem.label} onChange={(e) => setNewDashboardItem({...newDashboardItem, label: e.target.value})} placeholder="Nome exibido" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Ordem</label>
-              <Input type="number" value={newDashboardItem.order} onChange={(e) => setNewDashboardItem({...newDashboardItem, order: parseInt(e.target.value) || 1})} />
-            </div>
-            <Button onClick={() => dashboardMutation.mutate(newDashboardItem)} disabled={!newDashboardItem.label} data-testid="button-add-dashboard-item">
-              <Plus className="h-4 w-4 mr-1" /> Adicionar
-            </Button>
-          </div>
-          <div className="border rounded-md">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Rótulo</TableHead>
-                  <TableHead>Ordem</TableHead>
-                  <TableHead>Ativo</TableHead>
-                  <TableHead className="w-[60px]">Ação</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dashboardItems?.map(item => (
-                  <TableRow key={item.id}>
-                    <TableCell><Badge variant="outline">{item.itemType}</Badge></TableCell>
-                    <TableCell>{item.itemId}</TableCell>
-                    <TableCell>{item.label}</TableCell>
-                    <TableCell>{item.order}</TableCell>
-                    <TableCell>{item.isActive ? <Badge>Sim</Badge> : <Badge variant="secondary">Não</Badge>}</TableCell>
-                    <TableCell>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteDashboardItem.mutate(item.id)}>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {dashboardItems.map((item, index) => (
+                <div
+                  key={item.id}
+                  draggable
+                  onDragStart={() => handleDashboardDragStart(index)}
+                  onDragOver={handleDashboardDragOver}
+                  onDrop={() => handleDropDashboard(index)}
+                  className={`border rounded-lg p-4 cursor-move transition-all ${
+                    item.isActive ? "bg-background" : "bg-muted/50 opacity-60"
+                  } ${dashboardDraggedIndex === index ? "ring-2 ring-primary" : ""}`}
+                  data-testid={`dashboard-card-${item.id}`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">
+                        <FileText className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{item.label}</p>
+                        <Badge variant="outline" className="text-xs">{DASHBOARD_TYPES.find(t => t.value === item.type)?.label || item.type}</Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => toggleDashboardItem(item.id)}
+                        className={item.isActive ? "text-emerald-600" : "text-muted-foreground"}
+                        data-testid={`toggle-dashboard-${item.id}`}
+                      >
+                        {item.isActive ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => { setEditingDashboardItem(item); setDashboardModalOpen(true); }}
+                        data-testid={`edit-dashboard-${item.id}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => removeDashboardItem(item.id)}
+                        data-testid={`delete-dashboard-${item.id}`}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {(!dashboardItems || dashboardItems.length === 0) && (
-                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum item configurado.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Quick Access Config */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5" /> Acesso Rápido
-          </CardTitle>
-          <CardDescription>Configure os atalhos do menu de acesso rápido.</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" /> Acesso Rápido
+            </CardTitle>
+            <CardDescription>Configure os atalhos do menu de acesso rápido do usuário.</CardDescription>
+          </div>
+          <Dialog open={quickAccessModalOpen} onOpenChange={(open) => { setQuickAccessModalOpen(open); if (!open) setEditingQuickAccessItem(null); }}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-qa-item">
+                <Plus className="h-4 w-4 mr-1" /> Adicionar
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingQuickAccessItem ? "Editar Atalho" : "Adicionar Atalho"}</DialogTitle>
+                <DialogDescription>Configure o atalho de acesso rápido.</DialogDescription>
+              </DialogHeader>
+              <QuickAccessItemForm
+                item={editingQuickAccessItem}
+                onSave={addOrUpdateQuickAccessItem}
+                protocols={protocols || []}
+              />
+            </DialogContent>
+          </Dialog>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-2 items-end">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Tipo</label>
-              <Select value={newQuickAccessItem.itemType} onValueChange={(v) => setNewQuickAccessItem({...newQuickAccessItem, itemType: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="route">Rota</SelectItem>
-                  <SelectItem value="action">Ação</SelectItem>
-                  <SelectItem value="external">Link Externo</SelectItem>
-                </SelectContent>
-              </Select>
+        <CardContent>
+          {quickAccessItems.length === 0 ? (
+            <div className="text-center text-muted-foreground py-12 border rounded-lg border-dashed">
+              Nenhum atalho configurado. Clique em "Adicionar" para começar.
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">ID/Rota</label>
-              <Input value={newQuickAccessItem.itemId} onChange={(e) => setNewQuickAccessItem({...newQuickAccessItem, itemId: e.target.value})} placeholder="/prescricoes" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Rótulo</label>
-              <Input value={newQuickAccessItem.label} onChange={(e) => setNewQuickAccessItem({...newQuickAccessItem, label: e.target.value})} placeholder="Nome" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Ícone</label>
-              <Input value={newQuickAccessItem.icon} onChange={(e) => setNewQuickAccessItem({...newQuickAccessItem, icon: e.target.value})} placeholder="FileText" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Ordem</label>
-              <Input type="number" value={newQuickAccessItem.order} onChange={(e) => setNewQuickAccessItem({...newQuickAccessItem, order: parseInt(e.target.value) || 1})} />
-            </div>
-            <Button onClick={() => quickAccessMutation.mutate(newQuickAccessItem)} disabled={!newQuickAccessItem.label} data-testid="button-add-qa-item">
-              <Plus className="h-4 w-4 mr-1" /> Adicionar
-            </Button>
-          </div>
-          <div className="border rounded-md">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>ID/Rota</TableHead>
-                  <TableHead>Rótulo</TableHead>
-                  <TableHead>Ícone</TableHead>
-                  <TableHead>Ordem</TableHead>
-                  <TableHead className="w-[60px]">Ação</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {quickAccessItems?.map(item => (
-                  <TableRow key={item.id}>
-                    <TableCell><Badge variant="outline">{item.itemType}</Badge></TableCell>
-                    <TableCell>{item.itemId}</TableCell>
-                    <TableCell>{item.label}</TableCell>
-                    <TableCell>{item.icon}</TableCell>
-                    <TableCell>{item.order}</TableCell>
-                    <TableCell>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteQuickAccessItem.mutate(item.id)}>
-                        <Trash2 className="h-4 w-4" />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {quickAccessItems.map((item, index) => (
+                <div
+                  key={item.id}
+                  draggable
+                  onDragStart={() => handleQuickAccessDragStart(index)}
+                  onDragOver={handleQuickAccessDragOver}
+                  onDrop={() => handleDropQuickAccess(index)}
+                  className={`border rounded-lg p-3 cursor-move transition-all ${
+                    item.isActive ? "bg-background" : "bg-muted/50 opacity-60"
+                  } ${quickAccessDraggedIndex === index ? "ring-2 ring-primary" : ""}`}
+                  data-testid={`qa-card-${item.id}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`h-8 w-8 rounded flex-shrink-0 flex items-center justify-center ${item.color || "bg-blue-500"} text-white`}>
+                        <Zap className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{item.label}</p>
+                        <p className="text-xs text-muted-foreground truncate">{item.route || item.refId}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => toggleQuickAccessItem(item.id)}
+                        className={item.isActive ? "text-emerald-600" : "text-muted-foreground"}
+                        data-testid={`toggle-qa-${item.id}`}
+                      >
+                        {item.isActive ? <Power className="h-3 w-3" /> : <PowerOff className="h-3 w-3" />}
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {(!quickAccessItems || quickAccessItems.length === 0) && (
-                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum item configurado.</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => { setEditingQuickAccessItem(item); setQuickAccessModalOpen(true); }}
+                        data-testid={`edit-qa-${item.id}`}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => removeQuickAccessItem(item.id)}
+                        data-testid={`delete-qa-${item.id}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function DashboardItemForm({ item, onSave, protocols, checklists }: { item: DashboardWidget | null; onSave: (item: DashboardWidget) => void; protocols: any[]; checklists: any[] }) {
+  const [type, setType] = useState(item?.type || "route");
+  const [refId, setRefId] = useState(item?.refId || "");
+  const [label, setLabel] = useState(item?.label || "");
+  const [icon, setIcon] = useState(item?.icon || "FileText");
+  const [route, setRoute] = useState(item?.route || "");
+
+  useEffect(() => {
+    if (item) {
+      setType(item.type);
+      setRefId(item.refId || "");
+      setLabel(item.label);
+      setIcon(item.icon);
+      setRoute(item.route || "");
+    }
+  }, [item]);
+
+  const handleSave = () => {
+    if (!label) return;
+    onSave({
+      id: item?.id || "",
+      type,
+      refId: type === "route" ? undefined : refId,
+      label,
+      icon,
+      route: type === "route" ? route : undefined,
+      isActive: item?.isActive ?? true,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Tipo</label>
+        <Select value={type} onValueChange={setType}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {DASHBOARD_TYPES.map(t => (
+              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {type === "route" ? (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Rota</label>
+          <Select value={route} onValueChange={(v) => { setRoute(v); if (!label) setLabel(ROUTES_OPTIONS.find(r => r.value === v)?.label || ""); }}>
+            <SelectTrigger><SelectValue placeholder="Selecione uma rota" /></SelectTrigger>
+            <SelectContent>
+              {ROUTES_OPTIONS.map(r => (
+                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : type === "protocol" ? (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Protocolo</label>
+          <Select value={refId} onValueChange={(v) => { setRefId(v); const p = protocols.find(p => p.id.toString() === v); if (p && !label) setLabel(p.title); }}>
+            <SelectTrigger><SelectValue placeholder="Selecione um protocolo" /></SelectTrigger>
+            <SelectContent>
+              {protocols.map(p => (
+                <SelectItem key={p.id} value={p.id.toString()}>{p.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : type === "checklist" ? (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Checklist</label>
+          <Select value={refId} onValueChange={(v) => { setRefId(v); const c = checklists.find(c => c.id.toString() === v); if (c && !label) setLabel(c.title); }}>
+            <SelectTrigger><SelectValue placeholder="Selecione um checklist" /></SelectTrigger>
+            <SelectContent>
+              {checklists.map(c => (
+                <SelectItem key={c.id} value={c.id.toString()}>{c.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Referência (ID ou Rota)</label>
+          <Input value={refId} onChange={(e) => setRefId(e.target.value)} placeholder="ID ou caminho" />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Rótulo</label>
+        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nome exibido" />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Ícone</label>
+        <Select value={icon} onValueChange={setIcon}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {ICON_OPTIONS.map(i => (
+              <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Button onClick={handleSave} disabled={!label} className="w-full" data-testid="button-save-dashboard-item">
+        <Save className="h-4 w-4 mr-1" /> Salvar
+      </Button>
+    </div>
+  );
+}
+
+function QuickAccessItemForm({ item, onSave, protocols }: { item: QuickAccessItem | null; onSave: (item: QuickAccessItem) => void; protocols: any[] }) {
+  const [type, setType] = useState(item?.type || "route");
+  const [refId, setRefId] = useState(item?.refId || "");
+  const [label, setLabel] = useState(item?.label || "");
+  const [icon, setIcon] = useState(item?.icon || "FileText");
+  const [route, setRoute] = useState(item?.route || "");
+  const [color, setColor] = useState(item?.color || "bg-blue-500");
+
+  useEffect(() => {
+    if (item) {
+      setType(item.type);
+      setRefId(item.refId || "");
+      setLabel(item.label);
+      setIcon(item.icon);
+      setRoute(item.route || "");
+      setColor(item.color || "bg-blue-500");
+    }
+  }, [item]);
+
+  const handleSave = () => {
+    if (!label) return;
+    onSave({
+      id: item?.id || "",
+      type,
+      refId: type === "route" || type === "external" ? undefined : refId,
+      label,
+      icon,
+      route: type === "route" ? route : (type === "external" ? refId : undefined),
+      color,
+      isActive: item?.isActive ?? true,
+    });
+  };
+
+  const COLOR_OPTIONS = [
+    { value: "bg-blue-500", label: "Azul" },
+    { value: "bg-emerald-500", label: "Verde" },
+    { value: "bg-pink-500", label: "Rosa" },
+    { value: "bg-orange-500", label: "Laranja" },
+    { value: "bg-purple-500", label: "Roxo" },
+    { value: "bg-indigo-500", label: "Índigo" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Tipo</label>
+        <Select value={type} onValueChange={setType}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {QUICK_ACCESS_TYPES.map(t => (
+              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {type === "route" ? (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Rota</label>
+          <Select value={route} onValueChange={(v) => { setRoute(v); if (!label) setLabel(ROUTES_OPTIONS.find(r => r.value === v)?.label || ""); }}>
+            <SelectTrigger><SelectValue placeholder="Selecione uma rota" /></SelectTrigger>
+            <SelectContent>
+              {ROUTES_OPTIONS.map(r => (
+                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : type === "external" ? (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">URL</label>
+          <Input value={refId} onChange={(e) => setRefId(e.target.value)} placeholder="https://..." />
+        </div>
+      ) : type === "protocol" ? (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Protocolo</label>
+          <Select value={refId} onValueChange={(v) => { setRefId(v); const p = protocols.find(p => p.id.toString() === v); if (p && !label) setLabel(p.title); }}>
+            <SelectTrigger><SelectValue placeholder="Selecione um protocolo" /></SelectTrigger>
+            <SelectContent>
+              {protocols.map(p => (
+                <SelectItem key={p.id} value={p.id.toString()}>{p.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Referência</label>
+          <Input value={refId} onChange={(e) => setRefId(e.target.value)} placeholder="ID ou caminho" />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Rótulo</label>
+        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nome exibido" />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Ícone</label>
+        <Select value={icon} onValueChange={setIcon}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {ICON_OPTIONS.map(i => (
+              <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Cor</label>
+        <Select value={color} onValueChange={setColor}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {COLOR_OPTIONS.map(c => (
+              <SelectItem key={c.value} value={c.value}>
+                <div className="flex items-center gap-2">
+                  <div className={`h-4 w-4 rounded ${c.value}`} />
+                  {c.label}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Button onClick={handleSave} disabled={!label} className="w-full" data-testid="button-save-qa-item">
+        <Save className="h-4 w-4 mr-1" /> Salvar
+      </Button>
     </div>
   );
 }
