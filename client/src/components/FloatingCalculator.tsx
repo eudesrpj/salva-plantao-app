@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Calculator, X, GripVertical, AlertTriangle, Copy, Check, Info, Baby, Syringe, User, Equal, Delete, Droplets } from "lucide-react";
+import { Calculator, X, GripVertical, AlertTriangle, Copy, Check, Info, Baby, Syringe, User, Equal, Delete, Droplets, Beaker, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,6 +80,15 @@ export function FloatingCalculator() {
   const [calcPrevValue, setCalcPrevValue] = useState<number | null>(null);
   const [calcOperator, setCalcOperator] = useState<string | null>(null);
   const [calcWaitingForOperand, setCalcWaitingForOperand] = useState(false);
+  
+  const [elecNa, setElecNa] = useState("");
+  const [elecK, setElecK] = useState("");
+  const [elecCl, setElecCl] = useState("");
+  const [elecHco3, setElecHco3] = useState("");
+  const [elecGlucose, setElecGlucose] = useState("");
+  const [elecUrea, setElecUrea] = useState("");
+  const [elecCreatinine, setElecCreatinine] = useState("");
+  const [elecCopied, setElecCopied] = useState(false);
   
   const [dropsPerMl, setDropsPerMl] = useState<number>(() => {
     if (typeof localStorage !== 'undefined') {
@@ -482,6 +491,103 @@ export function FloatingCalculator() {
     return true;
   };
 
+  const electrolyteCalculation = useMemo(() => {
+    const na = parseFloat(elecNa);
+    const k = parseFloat(elecK);
+    const cl = parseFloat(elecCl);
+    const hco3 = parseFloat(elecHco3);
+    const glucose = parseFloat(elecGlucose);
+    const urea = parseFloat(elecUrea);
+    
+    const results: {
+      correctedNa: number | null;
+      anionGap: number | null;
+      osmolality: number | null;
+      naStatus: string | null;
+      kStatus: string | null;
+      agStatus: string | null;
+      osmStatus: string | null;
+      warnings: string[];
+    } = {
+      correctedNa: null,
+      anionGap: null,
+      osmolality: null,
+      naStatus: null,
+      kStatus: null,
+      agStatus: null,
+      osmStatus: null,
+      warnings: [],
+    };
+
+    if (!isNaN(na) && na > 0) {
+      if (na < 100 || na > 180) results.warnings.push("Na fora do range esperado (100-180)");
+      if (na < 135) results.naStatus = "Hiponatremia";
+      else if (na > 145) results.naStatus = "Hipernatremia";
+      else results.naStatus = "Normal";
+    }
+
+    if (!isNaN(k) && k > 0) {
+      if (k < 1 || k > 10) results.warnings.push("K fora do range esperado (1-10)");
+      if (k < 3.5) results.kStatus = "Hipocalemia";
+      else if (k > 5.5) results.kStatus = "Hipercalemia";
+      else results.kStatus = "Normal";
+    }
+
+    if (!isNaN(na) && !isNaN(glucose) && glucose > 100) {
+      results.correctedNa = na + (1.6 * (glucose - 100) / 100);
+    }
+
+    if (!isNaN(na) && !isNaN(cl) && !isNaN(hco3)) {
+      results.anionGap = na - (cl + hco3);
+      if (results.anionGap > 12) results.agStatus = "Anion gap elevado";
+      else if (results.anionGap >= 8) results.agStatus = "Normal";
+      else results.agStatus = "Baixo";
+    }
+
+    if (!isNaN(na) && !isNaN(glucose) && !isNaN(urea)) {
+      const bun = urea / 2.14;
+      results.osmolality = (2 * na) + (glucose / 18) + (bun / 2.8);
+      if (results.osmolality < 275) results.osmStatus = "Hipoosmolalidade";
+      else if (results.osmolality > 295) results.osmStatus = "Hiperosmolalidade";
+      else results.osmStatus = "Normal";
+    }
+
+    return results;
+  }, [elecNa, elecK, elecCl, elecHco3, elecGlucose, elecUrea]);
+
+  const clearElectrolytes = () => {
+    setElecNa("");
+    setElecK("");
+    setElecCl("");
+    setElecHco3("");
+    setElecGlucose("");
+    setElecUrea("");
+    setElecCreatinine("");
+  };
+
+  const copyElectrolyteResults = () => {
+    const r = electrolyteCalculation;
+    let text = "=== Eletrólitos ===\n";
+    if (elecNa) text += `Na: ${elecNa} mEq/L`;
+    if (r.naStatus) text += ` (${r.naStatus})`;
+    text += "\n";
+    if (elecK) text += `K: ${elecK} mEq/L`;
+    if (r.kStatus) text += ` (${r.kStatus})`;
+    text += "\n";
+    if (elecCl) text += `Cl: ${elecCl} mEq/L\n`;
+    if (elecHco3) text += `HCO3: ${elecHco3} mEq/L\n`;
+    if (elecGlucose) text += `Glicose: ${elecGlucose} mg/dL\n`;
+    if (elecUrea) text += `Ureia: ${elecUrea} mg/dL\n`;
+    if (elecCreatinine) text += `Creatinina: ${elecCreatinine} mg/dL\n`;
+    text += "\n=== Resultados ===\n";
+    if (r.correctedNa !== null) text += `Na corrigido: ${r.correctedNa.toFixed(1)} mEq/L\n`;
+    if (r.anionGap !== null) text += `Anion Gap: ${r.anionGap.toFixed(1)} (${r.agStatus})\n`;
+    if (r.osmolality !== null) text += `Osmolalidade: ${r.osmolality.toFixed(0)} mOsm/kg (${r.osmStatus})\n`;
+    navigator.clipboard.writeText(text);
+    setElecCopied(true);
+    setTimeout(() => setElecCopied(false), 2000);
+  };
+
   const formatAge = (months: number): string => {
     if (months < 12) return `${months} meses`;
     const years = Math.floor(months / 12);
@@ -586,7 +692,7 @@ export function FloatingCalculator() {
             </div>
 
             <Tabs defaultValue={lastTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="grid w-full grid-cols-5 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-none border-b border-slate-200 dark:border-slate-700">
+              <TabsList className="grid w-full grid-cols-6 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-none border-b border-slate-200 dark:border-slate-700">
                 <TabsTrigger value="pediatria" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
                   <Baby className="h-3 w-3" />
                   Pedi
@@ -602,6 +708,10 @@ export function FloatingCalculator() {
                 <TabsTrigger value="hidratacao" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs" data-testid="tab-hydration">
                   <Droplets className="h-3 w-3" />
                   Hidra
+                </TabsTrigger>
+                <TabsTrigger value="eletrolitos" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs" data-testid="tab-electrolytes">
+                  <Beaker className="h-3 w-3" />
+                  Eletro
                 </TabsTrigger>
                 <TabsTrigger value="comum" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm rounded-lg py-2 gap-1 text-xs">
                   <Calculator className="h-3 w-3" />
@@ -871,6 +981,165 @@ export function FloatingCalculator() {
 
                 <TabsContent value="hidratacao" className="space-y-3 mt-0">
                   <HydrationCalculator weight={weight} />
+                </TabsContent>
+
+                <TabsContent value="eletrolitos" className="space-y-3 mt-0">
+                  <div className="space-y-3">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-1">
+                        <Beaker className="h-3 w-3" />
+                        Entradas
+                      </h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">Na (mEq/L) *</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={elecNa}
+                            onChange={(e) => setElecNa(e.target.value)}
+                            className="h-8 text-sm"
+                            placeholder="135-145"
+                            data-testid="input-elec-na"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">K (mEq/L)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={elecK}
+                            onChange={(e) => setElecK(e.target.value)}
+                            className="h-8 text-sm"
+                            placeholder="3.5-5.5"
+                            data-testid="input-elec-k"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Cl (mEq/L)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={elecCl}
+                            onChange={(e) => setElecCl(e.target.value)}
+                            className="h-8 text-sm"
+                            placeholder="98-106"
+                            data-testid="input-elec-cl"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">HCO3 (mEq/L)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={elecHco3}
+                            onChange={(e) => setElecHco3(e.target.value)}
+                            className="h-8 text-sm"
+                            placeholder="22-26"
+                            data-testid="input-elec-hco3"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Glicose (mg/dL)</Label>
+                          <Input
+                            type="number"
+                            step="1"
+                            value={elecGlucose}
+                            onChange={(e) => setElecGlucose(e.target.value)}
+                            className="h-8 text-sm"
+                            placeholder="70-100"
+                            data-testid="input-elec-glucose"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Ureia (mg/dL)</Label>
+                          <Input
+                            type="number"
+                            step="1"
+                            value={elecUrea}
+                            onChange={(e) => setElecUrea(e.target.value)}
+                            className="h-8 text-sm"
+                            placeholder="15-40"
+                            data-testid="input-elec-urea"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {(electrolyteCalculation.naStatus || electrolyteCalculation.kStatus || electrolyteCalculation.correctedNa || electrolyteCalculation.anionGap || electrolyteCalculation.osmolality) && (
+                      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 rounded-lg p-3">
+                        <h4 className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2">Resultados</h4>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          {electrolyteCalculation.naStatus && (
+                            <div className="bg-white dark:bg-slate-800 rounded p-2">
+                              <p className="text-xs text-slate-500">Na</p>
+                              <p className={cn("font-semibold", electrolyteCalculation.naStatus !== "Normal" ? "text-red-600" : "text-green-600")}>
+                                {electrolyteCalculation.naStatus}
+                              </p>
+                            </div>
+                          )}
+                          {electrolyteCalculation.kStatus && (
+                            <div className="bg-white dark:bg-slate-800 rounded p-2">
+                              <p className="text-xs text-slate-500">K</p>
+                              <p className={cn("font-semibold", electrolyteCalculation.kStatus !== "Normal" ? "text-red-600" : "text-green-600")}>
+                                {electrolyteCalculation.kStatus}
+                              </p>
+                            </div>
+                          )}
+                          {electrolyteCalculation.correctedNa !== null && (
+                            <div className="bg-white dark:bg-slate-800 rounded p-2">
+                              <p className="text-xs text-slate-500">Na corrigido</p>
+                              <p className="font-bold text-blue-600">{electrolyteCalculation.correctedNa.toFixed(1)}</p>
+                            </div>
+                          )}
+                          {electrolyteCalculation.anionGap !== null && (
+                            <div className="bg-white dark:bg-slate-800 rounded p-2">
+                              <p className="text-xs text-slate-500">Anion Gap</p>
+                              <p className={cn("font-bold", electrolyteCalculation.agStatus === "Anion gap elevado" ? "text-red-600" : "text-green-600")}>
+                                {electrolyteCalculation.anionGap.toFixed(1)}
+                              </p>
+                            </div>
+                          )}
+                          {electrolyteCalculation.osmolality !== null && (
+                            <div className="bg-white dark:bg-slate-800 rounded p-2 col-span-2">
+                              <p className="text-xs text-slate-500">Osmolalidade Calc.</p>
+                              <p className={cn("font-bold", electrolyteCalculation.osmStatus !== "Normal" ? "text-amber-600" : "text-green-600")}>
+                                {electrolyteCalculation.osmolality.toFixed(0)} mOsm/kg ({electrolyteCalculation.osmStatus})
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {electrolyteCalculation.warnings.length > 0 && (
+                      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
+                        {electrolyteCalculation.warnings.map((w, i) => (
+                          <div key={i} className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-xs">
+                            <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                            <span>{w}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="flex-1 gap-1" onClick={clearElectrolytes} data-testid="button-clear-elec">
+                        <Trash2 className="h-3 w-3" /> Limpar
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1 gap-1" onClick={copyElectrolyteResults} data-testid="button-copy-elec">
+                        {elecCopied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                        {elecCopied ? "Copiado!" : "Copiar"}
+                      </Button>
+                    </div>
+
+                    <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded p-2">
+                      <p className="font-medium mb-1">Fórmulas:</p>
+                      <p>Na corr = Na + 1.6×(Gli-100)/100</p>
+                      <p>AG = Na - (Cl + HCO3)</p>
+                      <p>Osm = 2×Na + Gli/18 + Ureia/6</p>
+                    </div>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="comum" className="mt-0">

@@ -1,0 +1,142 @@
+Quero atualizar o app para incorporar a Calculadora de Eletrólitos dentro da Calculadora Flutuante Rápida que já existe, adicionando uma nova aba chamada “Eletrólitos”.
+A atualização deve ficar limpa, estável e sem regressões.
+
+Regras anti-bug
+
+Não reescreva o app inteiro. Alterações mínimas e isoladas.
+
+Não mexa em autenticação, rotas, tema, layout global sem necessidade.
+
+Sem novas dependências (a menos que seja inevitável; justificar).
+
+Reutilize componentes e services existentes (mesma arquitetura/padrão do projeto).
+
+A calculadora flutuante deve continuar arrastável/fechável e funcionar no mobile.
+
+Se existir calculadora de eletrólitos em outra tela, não duplicar lógica: extrair para um módulo/shared e reaproveitar.
+
+Objetivo
+
+Na Calculadora Flutuante Rápida, adicionar uma aba:
+
+Aba atual (manter tudo como está)
+
+Nova aba: “Eletrólitos”
+
+A aba “Eletrólitos” precisa:
+
+Ter UI clara, campos bem organizados, validação simples, e resultado legível
+
+Funcionar offline (sem depender de API externa)
+
+Ser determinística (mesmo input = mesmo output)
+
+Não travar e não estourar layout em telas pequenas
+
+Requisitos funcionais da Aba “Eletrólitos”
+1) Campos obrigatórios (mínimo viável)
+
+Peso (kg) — número
+
+Sódio (Na) (mEq/L) — número
+
+Potássio (K) (mEq/L) — número
+
+Cloro (Cl) (mEq/L) — número (opcional, mas recomendado)
+
+Glicose (mg/dL) — número (opcional)
+
+Ureia (mg/dL) — número (opcional)
+
+Creatinina (mg/dL) — número (opcional)
+
+2) Cálculos (mínimo obrigatório)
+
+Sódio corrigido pela glicose (se glicose preenchida)
+
+Anion gap (se Na, Cl e HCO3 existirem; se não existir HCO3 no app, criar campo HCO3 (mEq/L) na aba)
+
+Osmolalidade plasmática calculada (se Na, glicose e ureia existirem; se ureia vier como ureia, converter conforme padrão do app)
+
+Classificação simples com alertas:
+
+Hiponatremia / normo / hipernatremia
+
+Hipocalemia / normo / hipercalemia
+
+Anion gap alto (quando aplicável)
+
+Osmolalidade alta/baixa (quando aplicável)
+
+3) UX / UI
+
+Layout em “cards” ou blocos com título:
+
+“Entradas”
+
+“Resultados”
+
+“Alertas”
+
+Botões:
+
+“Limpar”
+
+“Copiar resultados” (se já existir infra de copy; senão, implementar simples)
+
+Mostrar mensagens de validação:
+
+Ex: “preencha peso e Na” / “valores inválidos”
+
+Não permitir Na/K negativos ou absurdos:
+
+Validar ranges razoáveis e mostrar aviso (não bloquear se o usuário insistir, mas avisar)
+
+Integração (ponto crítico)
+
+Localize o componente atual da Calculadora Flutuante Rápida (tabs ou botões).
+
+Adicione a nova aba “Eletrólitos” mantendo o padrão existente.
+
+Se já existir uma calculadora de eletrólitos em outra parte:
+
+Extraia a lógica para utils/electrolytes.ts (ou pasta equivalente)
+
+Reaproveite no flutuante
+
+Mantenha estado isolado por aba (para não bagunçar campos de outras abas):
+
+Ao trocar de aba, não resetar tudo automaticamente
+
+Mas o botão “Limpar” reseta apenas a aba atual
+
+Entrega e verificação (obrigatório)
+
+Antes de finalizar, fazer checklist:
+
+ A calculadora flutuante abre/fecha normal e não vira fullscreen no mobile
+
+ A nova aba aparece e troca sem erros
+
+ Inputs funcionam com teclado numérico no celular
+
+ Resultados atualizam em tempo real ou via botão “Calcular”
+
+ Sem erros no console
+
+ Não quebrou as abas antigas
+
+Final da entrega
+
+Liste arquivos alterados/criados
+
+Explique como testar em 5 minutos (passo a passo)
+
+Se criou utils/módulos, explique onde ficam e como reutilizar
+
+Importante: não inventar feature extra agora. Só incorporar eletrólitos como aba nova, limpo e estável.
+
+Para não dar ruim: detalhe que você tem que decidir no código
+
+Se o app usa ureia (mg/dL) ou BUN, siga o padrão que já existe no app.
+Se só tiver ureia, documente no resultado qual fórmula foi usada.
