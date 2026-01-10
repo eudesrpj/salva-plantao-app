@@ -8,12 +8,13 @@ import characterImage from "@assets/Gemini_Generated_Image_otqqaqotqqaqotqq_1767
 
 interface OneTimeMessagesResponse {
   payment: { shouldShow: boolean };
-  donation: { shouldShow: boolean; socialCauseName?: string };
+  donation: { shouldShow: boolean; socialCauseName?: string; donationId?: number };
 }
 
 export function OneTimeMessageOverlay() {
   const [dismissedPayment, setDismissedPayment] = useState(false);
   const [dismissedDonation, setDismissedDonation] = useState(false);
+  const [lastSeenDonationId, setLastSeenDonationId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery<OneTimeMessagesResponse>({
     queryKey: ["/api/one-time-messages"],
@@ -21,9 +22,17 @@ export function OneTimeMessageOverlay() {
     refetchOnWindowFocus: false,
   });
 
+  // Reset dismissed state when a new donation arrives
+  useEffect(() => {
+    if (data?.donation.donationId && data.donation.donationId !== lastSeenDonationId) {
+      setDismissedDonation(false);
+      setLastSeenDonationId(data.donation.donationId);
+    }
+  }, [data?.donation.donationId, lastSeenDonationId]);
+
   const ackMutation = useMutation({
-    mutationFn: async (type: "payment" | "donation") => {
-      await apiRequest("POST", "/api/one-time-messages/ack", { type });
+    mutationFn: async ({ type, donationId }: { type: "payment" | "donation"; donationId?: number }) => {
+      await apiRequest("POST", "/api/one-time-messages/ack", { type, donationId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/one-time-messages"] });
@@ -32,12 +41,12 @@ export function OneTimeMessageOverlay() {
 
   const handleDismissPayment = () => {
     setDismissedPayment(true);
-    ackMutation.mutate("payment");
+    ackMutation.mutate({ type: "payment" });
   };
 
   const handleDismissDonation = () => {
     setDismissedDonation(true);
-    ackMutation.mutate("donation");
+    ackMutation.mutate({ type: "donation", donationId: data?.donation.donationId });
   };
 
   if (isLoading) return null;

@@ -106,6 +106,13 @@ Key database entities include: prescriptions, protocols, checklists, shifts, not
   - Activity tracking middleware on high-traffic routes (prescriptions, protocols, checklists)
   - Quality flags: isGoodUser, isRiskUser (admin-configurable per user)
   - Known limitation: User list loads via authStorage.getAllUsers() (O(n)); acceptable for current scale (50-500 users per state), future enhancement would add user_admin_cache table for SQL-level filtering
+- **One-Time Floating Messages**:
+  - Database table: user_one_time_messages (paymentWelcomeShown, lastDonationAckedId)
+  - Payment welcome message: Shows once after first confirmed payment with character mascot
+  - Donation thanks message: Shows once per donation with cause name, supports sequential donations
+  - Endpoints: GET /api/one-time-messages, POST /api/one-time-messages/ack
+  - Component: OneTimeMessageOverlay with fade-in animation, close button
+  - Reads existing payments/donations tables without modifying Asaas integration
 
 ### Authentication & Authorization
 - **Auth Provider**: Replit Auth (OIDC)

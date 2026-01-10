@@ -12,6 +12,7 @@ import { EmergencyButton } from "@/components/EmergencyButton";
 import { CreatorFooter } from "@/components/CreatorFooter";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { PreviewBanner } from "@/components/PreviewGate";
+import { OneTimeMessageOverlay } from "@/components/OneTimeMessageOverlay";
 
 // Page Imports
 import Landing from "@/pages/Landing";
@@ -60,6 +61,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       <FloatingCalculator />
       <EmergencyButton />
       <MobileNav />
+      <OneTimeMessageOverlay />
     </div>
   );
 }

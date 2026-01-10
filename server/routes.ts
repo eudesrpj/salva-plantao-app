@@ -4292,20 +4292,20 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       paymentShouldShow = await storage.hasConfirmedPayment(userId);
     }
     
-    // Check donation thanks
+    // Check donation thanks - always check for new donations after lastDonationAckedId
     let donationShouldShow = false;
     let socialCauseName: string | undefined;
-    if (!record?.donationThanksShown) {
-      const lastDonation = await storage.getLastUnackedDonation(userId, record?.lastDonationAckedId);
-      if (lastDonation) {
-        donationShouldShow = true;
-        socialCauseName = lastDonation.causeName;
-      }
+    let donationId: number | undefined;
+    const lastDonation = await storage.getLastUnackedDonation(userId, record?.lastDonationAckedId);
+    if (lastDonation) {
+      donationShouldShow = true;
+      socialCauseName = lastDonation.causeName;
+      donationId = lastDonation.donation.id;
     }
     
     res.json({
       payment: { shouldShow: paymentShouldShow },
-      donation: { shouldShow: donationShouldShow, socialCauseName }
+      donation: { shouldShow: donationShouldShow, socialCauseName, donationId }
     });
   });
 
@@ -4313,7 +4313,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
-    const { type } = req.body;
+    const { type, donationId } = req.body;
     if (!type || !["payment", "donation"].includes(type)) {
       return res.status(400).json({ message: "Invalid type. Use 'payment' or 'donation'." });
     }
@@ -4321,11 +4321,10 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     if (type === "payment") {
       await storage.upsertUserOneTimeMessages(userId, { paymentWelcomeShown: true });
     } else if (type === "donation") {
-      const lastDonation = await storage.getLastUnackedDonation(userId, null);
-      await storage.upsertUserOneTimeMessages(userId, { 
-        donationThanksShown: true,
-        lastDonationAckedId: lastDonation?.donation.id || null
-      });
+      // Use the donationId passed from frontend to ensure we ack the correct donation
+      if (donationId) {
+        await storage.upsertUserOneTimeMessages(userId, { lastDonationAckedId: donationId });
+      }
     }
     
     res.json({ success: true });
