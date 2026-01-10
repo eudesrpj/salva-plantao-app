@@ -22,7 +22,7 @@ export function EditableFinancialGoal({ totalAccumulated }: EditableFinancialGoa
   const [inputError, setInputError] = useState("");
 
   const { data: goalsData } = useQuery<FinancialGoal[]>({
-    queryKey: ["/api/goals"],
+    queryKey: ["/api/financial-goals"],
   });
 
   const goals = goalsData ?? [];
@@ -30,10 +30,10 @@ export function EditableFinancialGoal({ totalAccumulated }: EditableFinancialGoa
 
   const createGoal = useMutation({
     mutationFn: async (data: { title: string; targetValue: string }) => {
-      return apiRequest("POST", "/api/goals", data);
+      return apiRequest("POST", "/api/financial-goals", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/financial-goals"] });
       setIsEditDialogOpen(false);
       toast({ title: "Meta criada com sucesso!" });
     },
@@ -41,10 +41,10 @@ export function EditableFinancialGoal({ totalAccumulated }: EditableFinancialGoa
 
   const updateGoal = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: { targetValue: string } }) => {
-      return apiRequest("PATCH", `/api/goals/${id}`, data);
+      return apiRequest("PUT", `/api/financial-goals/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/financial-goals"] });
       setIsEditDialogOpen(false);
       toast({ title: "Meta atualizada!" });
     },
@@ -52,10 +52,10 @@ export function EditableFinancialGoal({ totalAccumulated }: EditableFinancialGoa
 
   const deleteGoal = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/goals/${id}`);
+      return apiRequest("DELETE", `/api/financial-goals/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/goals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/financial-goals"] });
       toast({ title: "Meta removida!" });
     },
     onError: () => {
