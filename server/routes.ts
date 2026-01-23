@@ -19,6 +19,8 @@ import { notifyUser, notifyAllAdmins, broadcastToRoom } from "./websocket";
 import { chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages, chatUserBans, chatBannedWords } from "@shared/schema";
 import { registerAuthRoutes as registerNewAuthRoutes } from "./auth/authRoutes";
 import { registerBillingRoutes } from "./auth/billingRoutes";
+import { registerNewFeaturesRoutes } from "./routes/newFeaturesRoutes";
+import { registerUserProfileRoutes } from "./routes/userProfileRoutes";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -31,6 +33,8 @@ export async function registerRoutes(
   registerChatRoutes(app);
   registerImageRoutes(app);
   registerAiRoutes(app);
+  registerNewFeaturesRoutes(app);
+  registerUserProfileRoutes(app);
   
   // Seed default plans on startup
   await storage.upsertPlans().catch(err => console.error('Failed to seed plans:', err));
@@ -2308,16 +2312,8 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(204).send();
   });
 
-  // --- User Preferences ---
-  app.get("/api/user-preferences", isAuthenticated, async (req, res) => {
-    const prefs = await storage.getUserPreferences(getUserId(req));
-    res.json(prefs || { theme: "system", colorScheme: "blue", fontSize: "medium", compactMode: false });
-  });
-
-  app.put("/api/user-preferences", isAuthenticated, async (req, res) => {
-    const prefs = await storage.upsertUserPreferences(getUserId(req), req.body);
-    res.json(prefs);
-  });
+  // --- User Preferences (now handled in newFeaturesRoutes.ts) ---
+  // Removed old endpoints - using new ones from newFeaturesRoutes.ts
 
   // --- Drug Interactions (Admin configurable) ---
   app.get("/api/drug-interactions", isAuthenticated, checkNotBlocked, async (req, res) => {

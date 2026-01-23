@@ -1,7 +1,7 @@
 import { 
   prescriptions, checklists, shifts, notes, tasks, libraryCategories, libraryItems, shiftChecklists, handovers, goals,
   protocols, flashcards, favorites, adminSettings, doctorProfiles, interconsultMessages, usageStats,
-  pathologies, pathologyMedications, patientHistory, calculatorSettings, medications, userPreferences,
+  pathologies, pathologyMedications, patientHistory, calculatorSettings, medications,
   drugInteractions, medicationContraindications, prescriptionFavorites, promoCoupons, couponUsages,
   evolutionModels, physicalExamTemplates, signsSymptoms, semiologicalSigns,
   medicalCertificates, attendanceDeclarations, medicalReferrals, referralDestinations, referralReasons,
@@ -13,7 +13,13 @@ import {
   donations, insertDonationSchema, donationReceipts, insertDonationReceiptSchema,
   doseRules, formulations, emergencyPanelItems, insertEmergencyPanelItemSchema,
   chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages, chatUserBans, chatBannedWords,
+  userMedications, insertUserMedicationSchema, userPreferences, insertUserPreferencesSchema,
+  adminFeatureFlags, insertAdminFeatureFlagSchema, adminQuickAccessConfig, insertAdminQuickAccessConfigSchema,
+  messageOfDayMessages, insertMessageOfDayMessageSchema,
   type ChatRoom, type ChatMessage, type ChatContact, type ChatUserBan, type InsertChatUserBan, type ChatBannedWord, type InsertChatBannedWord,
+  type UserMedication, type InsertUserMedication, type UserPreferences, type InsertUserPreferences,
+  type AdminFeatureFlag, type InsertAdminFeatureFlag, type AdminQuickAccessConfig, type InsertAdminQuickAccessConfig,
+  type MessageOfDayMessage, type InsertMessageOfDayMessage,
   type Prescription, type InsertPrescription, type UpdatePrescriptionRequest,
   type Checklist, type InsertChecklist, type UpdateChecklistRequest,
   type Shift, type InsertShift, type UpdateShiftRequest,
@@ -36,7 +42,6 @@ import {
   type PatientHistory, type InsertPatientHistory,
   type CalculatorSetting, type InsertCalculatorSetting, type UpdateCalculatorSettingRequest,
   type Medication, type InsertMedication,
-  type UserPreferences, type InsertUserPreferences,
   type DrugInteraction, type InsertDrugInteraction,
   type MedicationContraindication, type InsertMedicationContraindication,
   type PrescriptionFavorite, type InsertPrescriptionFavorite,
@@ -263,9 +268,7 @@ export interface IStorage {
   updateMedication(id: number, item: Partial<InsertMedication>): Promise<Medication>;
   deleteMedication(id: number): Promise<void>;
 
-  // User Preferences
-  getUserPreferences(userId: string): Promise<UserPreferences | undefined>;
-  upsertUserPreferences(userId: string, prefs: Partial<InsertUserPreferences>): Promise<UserPreferences>;
+  // Removed old User Preferences interface - replaced with new ones below
 
   // Drug Interactions
   getDrugInteractions(): Promise<DrugInteraction[]>;
@@ -505,6 +508,44 @@ export interface IStorage {
   getUserPreviewState(userId: string): Promise<UserPreviewState | undefined>;
   upsertUserPreviewState(userId: string, data: Partial<InsertUserPreviewState>): Promise<UserPreviewState>;
   incrementPreviewActions(userId: string): Promise<UserPreviewState>;
+
+  // ===== NEW FEATURES =====
+
+  // User Medications (Custom medications created by users)
+  getUserMedications(userId: string): Promise<UserMedication[]>;
+  getUserMedication(id: number): Promise<UserMedication | undefined>;
+  createUserMedication(item: InsertUserMedication): Promise<UserMedication>;
+  updateUserMedication(id: number, item: Partial<InsertUserMedication>): Promise<UserMedication>;
+  deleteUserMedication(id: number, userId: string): Promise<void>; // Ensure user owns it
+  searchUserMedications(userId: string, query: string): Promise<UserMedication[]>;
+
+  // User Preferences (Message of the Day, theme, notifications)
+  getUserPreferences(userId: string): Promise<UserPreferences | undefined>;
+  createUserPreferences(userId: string, item: InsertUserPreferences): Promise<UserPreferences>;
+  updateUserPreferences(userId: string, item: Partial<InsertUserPreferences>): Promise<UserPreferences>;
+
+  // Admin Feature Flags (Global feature toggles)
+  getAdminFeatureFlags(): Promise<AdminFeatureFlag[]>;
+  getAdminFeatureFlag(key: string): Promise<AdminFeatureFlag | undefined>;
+  createAdminFeatureFlag(item: InsertAdminFeatureFlag): Promise<AdminFeatureFlag>;
+  updateAdminFeatureFlag(key: string, item: Partial<InsertAdminFeatureFlag>): Promise<AdminFeatureFlag>;
+  isFeatureEnabled(key: string): Promise<boolean>;
+
+  // Admin Quick Access Config (Control which items appear in UI)
+  getAdminQuickAccessConfigs(tab?: string): Promise<AdminQuickAccessConfig[]>;
+  getAdminQuickAccessConfig(id: number): Promise<AdminQuickAccessConfig | undefined>;
+  createAdminQuickAccessConfig(item: InsertAdminQuickAccessConfig): Promise<AdminQuickAccessConfig>;
+  updateAdminQuickAccessConfig(id: number, item: Partial<InsertAdminQuickAccessConfig>): Promise<AdminQuickAccessConfig>;
+  deleteAdminQuickAccessConfig(id: number): Promise<void>;
+  reorderAdminQuickAccessConfigs(tab: string, items: { id: number; displayOrder: number }[]): Promise<void>;
+
+  // Message of the Day (Daily messages for users)
+  getMessageOfDayMessages(type?: string, source?: string): Promise<MessageOfDayMessage[]>;
+  getMessageOfDayMessage(id: number): Promise<MessageOfDayMessage | undefined>;
+  createMessageOfDayMessage(item: InsertMessageOfDayMessage, createdBy?: string): Promise<MessageOfDayMessage>;
+  updateMessageOfDayMessage(id: number, item: Partial<InsertMessageOfDayMessage>): Promise<MessageOfDayMessage>;
+  deleteMessageOfDayMessage(id: number): Promise<void>;
+  getRandomMessageOfDay(type: string): Promise<MessageOfDayMessage | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1382,26 +1423,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User Preferences
-  async getUserPreferences(userId: string): Promise<UserPreferences | undefined> {
-    const [item] = await db.select().from(userPreferences).where(eq(userPreferences.userId, userId));
-    return item;
-  }
-
-  async upsertUserPreferences(userId: string, prefs: Partial<InsertUserPreferences>): Promise<UserPreferences> {
-    const existing = await this.getUserPreferences(userId);
-    if (existing) {
-      const [item] = await db.update(userPreferences)
-        .set({ ...prefs, updatedAt: new Date() })
-        .where(eq(userPreferences.userId, userId))
-        .returning();
-      return item;
-    } else {
-      const [item] = await db.insert(userPreferences)
-        .values({ userId, ...prefs })
-        .returning();
-      return item;
-    }
-  }
+  // Removed old getUserPreferences and upsertUserPreferences methods - replaced with new ones below
 
   // Drug Interactions
   async getDrugInteractions(): Promise<DrugInteraction[]> {
@@ -3480,6 +3502,167 @@ export class DatabaseStorage implements IStorage {
     for (const plan of plans) {
       await this.upsertBillingPlan(plan);
     }
+  }
+
+  // ===== NEW FEATURES: USER MEDICATIONS, PREFERENCES, ADMIN FLAGS =====
+
+  // User Medications
+  async getUserMedications(userId: string): Promise<UserMedication[]> {
+    return await db.select().from(userMedications)
+      .where(eq(userMedications.userId, userId))
+      .orderBy(desc(userMedications.createdAt));
+  }
+
+  async getUserMedication(id: number): Promise<UserMedication | undefined> {
+    const [item] = await db.select().from(userMedications).where(eq(userMedications.id, id));
+    return item;
+  }
+
+  async createUserMedication(item: InsertUserMedication): Promise<UserMedication> {
+    const [created] = await db.insert(userMedications).values(item).returning();
+    return created;
+  }
+
+  async updateUserMedication(id: number, item: Partial<InsertUserMedication>): Promise<UserMedication> {
+    const [updated] = await db.update(userMedications).set({ ...item, updatedAt: new Date() }).where(eq(userMedications.id, id)).returning();
+    return updated;
+  }
+
+  async deleteUserMedication(id: number, userId: string): Promise<void> {
+    const med = await this.getUserMedication(id);
+    if (!med || med.userId !== userId) {
+      throw new Error("Medication not found or unauthorized");
+    }
+    await db.delete(userMedications).where(eq(userMedications.id, id));
+  }
+
+  async searchUserMedications(userId: string, query: string): Promise<UserMedication[]> {
+    const searchPattern = `%${query}%`;
+    return await db.select().from(userMedications)
+      .where(and(
+        eq(userMedications.userId, userId),
+        ilike(userMedications.name, searchPattern)
+      ))
+      .orderBy(desc(userMedications.createdAt));
+  }
+
+  // User Preferences
+  async getUserPreferences(userId: string): Promise<UserPreferences | undefined> {
+    const [prefs] = await db.select().from(userPreferences).where(eq(userPreferences.userId, userId));
+    return prefs;
+  }
+
+  async createUserPreferences(userId: string, item: InsertUserPreferences): Promise<UserPreferences> {
+    const [created] = await db.insert(userPreferences).values({ ...item, userId }).returning();
+    return created;
+  }
+
+  async updateUserPreferences(userId: string, item: Partial<InsertUserPreferences>): Promise<UserPreferences> {
+    const existing = await this.getUserPreferences(userId);
+    if (!existing) {
+      return this.createUserPreferences(userId, item as InsertUserPreferences);
+    }
+    const [updated] = await db.update(userPreferences).set({ ...item, updatedAt: new Date() }).where(eq(userPreferences.userId, userId)).returning();
+    return updated;
+  }
+
+  // Admin Feature Flags
+  async getAdminFeatureFlags(): Promise<AdminFeatureFlag[]> {
+    return await db.select().from(adminFeatureFlags).orderBy(adminFeatureFlags.key);
+  }
+
+  async getAdminFeatureFlag(key: string): Promise<AdminFeatureFlag | undefined> {
+    const [flag] = await db.select().from(adminFeatureFlags).where(eq(adminFeatureFlags.key, key));
+    return flag;
+  }
+
+  async createAdminFeatureFlag(item: InsertAdminFeatureFlag): Promise<AdminFeatureFlag> {
+    const [created] = await db.insert(adminFeatureFlags).values(item).returning();
+    return created;
+  }
+
+  async updateAdminFeatureFlag(key: string, item: Partial<InsertAdminFeatureFlag>): Promise<AdminFeatureFlag> {
+    const [updated] = await db.update(adminFeatureFlags).set({ ...item, updatedAt: new Date() }).where(eq(adminFeatureFlags.key, key)).returning();
+    return updated;
+  }
+
+  async isFeatureEnabled(key: string): Promise<boolean> {
+    const flag = await this.getAdminFeatureFlag(key);
+    return flag?.enabled ?? true; // Default to enabled if not found
+  }
+
+  // Admin Quick Access Config
+  async getAdminQuickAccessConfigs(tab?: string): Promise<AdminQuickAccessConfig[]> {
+    if (tab) {
+      return await db.select().from(adminQuickAccessConfig).where(eq(adminQuickAccessConfig.tab, tab)).orderBy(adminQuickAccessConfig.displayOrder);
+    }
+    return await db.select().from(adminQuickAccessConfig).orderBy(adminQuickAccessConfig.displayOrder);
+  }
+
+  async getAdminQuickAccessConfig(id: number): Promise<AdminQuickAccessConfig | undefined> {
+    const [config] = await db.select().from(adminQuickAccessConfig).where(eq(adminQuickAccessConfig.id, id));
+    return config;
+  }
+
+  async createAdminQuickAccessConfig(item: InsertAdminQuickAccessConfig): Promise<AdminQuickAccessConfig> {
+    const [created] = await db.insert(adminQuickAccessConfig).values(item).returning();
+    return created;
+  }
+
+  async updateAdminQuickAccessConfig(id: number, item: Partial<InsertAdminQuickAccessConfig>): Promise<AdminQuickAccessConfig> {
+    const [updated] = await db.update(adminQuickAccessConfig).set({ ...item, updatedAt: new Date() }).where(eq(adminQuickAccessConfig.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAdminQuickAccessConfig(id: number): Promise<void> {
+    await db.delete(adminQuickAccessConfig).where(eq(adminQuickAccessConfig.id, id));
+  }
+
+  async reorderAdminQuickAccessConfigs(tab: string, items: { id: number; displayOrder: number }[]): Promise<void> {
+    for (const item of items) {
+      await db.update(adminQuickAccessConfig).set({ displayOrder: item.displayOrder }).where(eq(adminQuickAccessConfig.id, item.id));
+    }
+  }
+
+  // Message of the Day
+  async getMessageOfDayMessages(type?: string, source?: string): Promise<MessageOfDayMessage[]> {
+    const conditions = [eq(messageOfDayMessages.isActive, true)];
+    if (type) {
+      conditions.push(eq(messageOfDayMessages.type, type));
+    }
+    if (source) {
+      conditions.push(eq(messageOfDayMessages.source, source));
+    }
+    return await db.select().from(messageOfDayMessages)
+      .where(and(...conditions))
+      .orderBy(desc(messageOfDayMessages.createdAt));
+  }
+
+  async getMessageOfDayMessage(id: number): Promise<MessageOfDayMessage | undefined> {
+    const [msg] = await db.select().from(messageOfDayMessages).where(eq(messageOfDayMessages.id, id));
+    return msg;
+  }
+
+  async createMessageOfDayMessage(item: InsertMessageOfDayMessage, createdBy?: string): Promise<MessageOfDayMessage> {
+    const [created] = await db.insert(messageOfDayMessages).values({ ...item, createdBy: createdBy || null }).returning();
+    return created;
+  }
+
+  async updateMessageOfDayMessage(id: number, item: Partial<InsertMessageOfDayMessage>): Promise<MessageOfDayMessage> {
+    const [updated] = await db.update(messageOfDayMessages).set({ ...item, updatedAt: new Date() }).where(eq(messageOfDayMessages.id, id)).returning();
+    return updated;
+  }
+
+  async deleteMessageOfDayMessage(id: number): Promise<void> {
+    await db.delete(messageOfDayMessages).where(eq(messageOfDayMessages.id, id));
+  }
+
+  async getRandomMessageOfDay(type: string): Promise<MessageOfDayMessage | undefined> {
+    // Get random active message of given type
+    const messages = await this.getMessageOfDayMessages(type);
+    if (messages.length === 0) return undefined;
+    const randomIndex = Math.floor(Math.random() * messages.length);
+    return messages[randomIndex];
   }
 }
 

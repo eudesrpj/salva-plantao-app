@@ -20,6 +20,7 @@ export const users = pgTable("users", {
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
+  displayName: varchar("display_name"), // Preferred name shown in profile (e.g., "Dr. Silva")
   profileImageUrl: varchar("profile_image_url"),
   role: text("role").default("user"), // user, admin
   status: text("status").default("pending"), // pending, active, blocked

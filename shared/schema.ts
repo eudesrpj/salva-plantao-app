@@ -960,19 +960,7 @@ export type CreateAiPromptRequest = InsertAiPrompt;
 export type UpdateAiPromptRequest = Partial<InsertAiPrompt>;
 
 // User Preferences (Theme and customization)
-export const userPreferences = pgTable("user_preferences", {
-  id: serial("id").primaryKey(),
-  userId: text("user_id").notNull().unique().references(() => users.id),
-  theme: text("theme").default("system"), // light, dark, system
-  colorScheme: text("color_scheme").default("blue"), // blue, green, purple, orange, rose
-  fontSize: text("font_size").default("medium"), // small, medium, large
-  compactMode: boolean("compact_mode").default(false),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertUserPreferencesSchema = createInsertSchema(userPreferences).omit({ id: true, updatedAt: true });
-export type UserPreferences = typeof userPreferences.$inferSelect;
-export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;
+// Removed old userPreferences table - replaced with new one below for Message of the Day
 
 // Monthly Expenses (Gastos Mensais)
 export const monthlyExpenses = pgTable("monthly_expenses", {
@@ -1398,3 +1386,94 @@ export const userPreviewState = pgTable("user_preview_state", {
 export const insertUserPreviewStateSchema = createInsertSchema(userPreviewState).omit({ updatedAt: true });
 export type UserPreviewState = typeof userPreviewState.$inferSelect;
 export type InsertUserPreviewState = z.infer<typeof insertUserPreviewStateSchema>;
+
+// ============ NEW FEATURES: User Medications, Message of the Day, Feature Flags ============
+
+// User Custom Medications (separate from global admin medications library)
+export const userMedications = pgTable("user_medications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(), // E.g. "Meu Remédio Customizado"
+  presentation: text("presentation"), // Comprimido, Gotas, etc.
+  dose: text("dose"),
+  interval: text("interval"), // 6/6h, 8/8h
+  route: text("route"), // VO, IV, IM
+  observations: text("observations"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserMedicationSchema = createInsertSchema(userMedications).omit({ id: true, createdAt: true, updatedAt: true });
+export type UserMedication = typeof userMedications.$inferSelect;
+export type InsertUserMedication = z.infer<typeof insertUserMedicationSchema>;
+
+// User Preferences (Message of the Day, theme, notifications, etc.)
+export const userPreferences = pgTable("user_preferences", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  // Message of the Day preferences
+  messageOfDayEnabled: boolean("message_of_day_enabled").default(true),
+  messageOfDayVerses: boolean("message_of_day_verses").default(true),
+  messageOfDayMotivation: boolean("message_of_day_motivation").default(true),
+  messageOfDayTips: boolean("message_of_day_tips").default(true),
+  messageOfDayWeather: boolean("message_of_day_weather").default(false), // Disabled by default (no API yet)
+  // UI Preferences
+  theme: text("theme").default("light"), // light, dark, auto
+  language: text("language").default("pt-BR"),
+  // Last shown message date for daily message logic
+  lastMessageOfDayDate: text("last_message_of_day_date"), // YYYY-MM-DD
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserPreferencesSchema = createInsertSchema(userPreferences).omit({ userId: true, updatedAt: true });
+export type UserPreferences = typeof userPreferences.$inferSelect;
+export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;
+
+// Admin Feature Flags (control which features are enabled globally)
+export const adminFeatureFlags = pgTable("admin_feature_flags", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(), // "chat_enabled", "irpf_calculator_enabled", "tasks_enabled", "message_of_day_enabled"
+  name: text("name").notNull(), // "Chat", "IRPF Calculator", etc.
+  description: text("description"),
+  enabled: boolean("enabled").default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: text("updated_by").references(() => users.id),
+});
+
+export const insertAdminFeatureFlagSchema = createInsertSchema(adminFeatureFlags).omit({ id: true, updatedAt: true, updatedBy: true });
+export type AdminFeatureFlag = typeof adminFeatureFlags.$inferSelect;
+export type InsertAdminFeatureFlag = z.infer<typeof insertAdminFeatureFlagSchema>;
+
+// Admin Quick Access Config (control which items appear in quick access sections per tab)
+export const adminQuickAccessConfig = pgTable("admin_quick_access_config", {
+  id: serial("id").primaryKey(),
+  tab: text("tab").notNull(), // "atendimento", "ferramentas", "financeiro", "perfil"
+  itemKey: text("item_key").notNull(), // "prescricoes", "exames", "chat", "irpf_calculator", etc.
+  itemName: text("item_name").notNull(),
+  itemIcon: text("item_icon").default("square"), // Lucide icon name
+  displayOrder: integer("display_order").default(0),
+  enabled: boolean("enabled").default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: text("updated_by").references(() => users.id),
+}, (table) => [
+  unique("admin_quick_access_config_tab_item_key").on(table.tab, table.itemKey),
+]);
+
+export const insertAdminQuickAccessConfigSchema = createInsertSchema(adminQuickAccessConfig).omit({ id: true, updatedAt: true, updatedBy: true });
+export type AdminQuickAccessConfig = typeof adminQuickAccessConfig.$inferSelect;
+export type InsertAdminQuickAccessConfig = z.infer<typeof insertAdminQuickAccessConfigSchema>;
+
+// Message of the Day Messages (admin can create custom messages)
+export const messageOfDayMessages = pgTable("message_of_day_messages", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull(), // "verse", "motivation", "tip", "weather"
+  content: text("content").notNull(),
+  source: text("source").default("default"), // "default", "admin_custom"
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdBy: text("created_by").references(() => users.id), // admin who created it
+});
+
+export const insertMessageOfDayMessageSchema = createInsertSchema(messageOfDayMessages).omit({ id: true, createdAt: true, updatedAt: true, createdBy: true });
+export type MessageOfDayMessage = typeof messageOfDayMessages.$inferSelect;
+export type InsertMessageOfDayMessage = z.infer<typeof insertMessageOfDayMessageSchema>;

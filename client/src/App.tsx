@@ -56,6 +56,12 @@ import BillingSuccess from "@/pages/BillingSuccess";
 import BillingCancel from "@/pages/BillingCancel";
 import Login from "@/pages/Login";
 import MagicLink from "@/pages/MagicLink";
+// New hub pages
+import AtendimentoHub from "@/pages/AtendimentoHub";
+import FerramentasHub from "@/pages/FerramentasHub";
+import FinanceiroHub from "@/pages/FinanceiroHub";
+import PerfilHub from "@/pages/PerfilHub";
+import { BottomNav } from "@/components/BottomNav";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -71,6 +77,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       <FloatingCalculator />
       <EmergencyButton />
       <MobileNav />
+      <BottomNav />
       <OneTimeMessageOverlay />
       <PreviewExpiredOverlay />
     </div>
@@ -125,7 +132,25 @@ function Router() {
       <Route path="/">
         <ProtectedRoute component={Dashboard} />
       </Route>
-      
+
+      {/* New Hub Routes */}
+      <Route path="/atendimento">
+        <ProtectedRoute component={AtendimentoHub} />
+      </Route>
+
+      <Route path="/ferramentas">
+        <ProtectedRoute component={FerramentasHub} />
+      </Route>
+
+      <Route path="/financeiro">
+        <ProtectedRoute component={FinanceiroHub} />
+      </Route>
+
+      <Route path="/perfil">
+        <ProtectedRoute component={PerfilHub} />
+      </Route>
+
+      {/* Existing routes */}
       <Route path="/prescriptions">
         <ProtectedRoute component={Prescriptions} />
       </Route>
