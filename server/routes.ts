@@ -10,25 +10,21 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { insertMonthlyExpenseSchema, insertFinancialGoalSchema } from "@shared/schema";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { setupAuthMiddleware, registerIndependentAuthRoutes, authenticate } from "./auth/independentAuth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAiRoutes } from "./ai/routes";
-import { authStorage } from "./replit_integrations/auth/storage";
-import { notifyUser, notifyAllAdmins, broadcastToRoom } from "./websocket";
-import { chatRooms, chatRoomMembers, chatMessages, chatContacts, chatBlockedMessages, chatUserBans, chatBannedWords } from "@shared/schema";
-import { registerAuthRoutes as registerNewAuthRoutes } from "./auth/authRoutes";
 import { registerBillingRoutes } from "./auth/billingRoutes";
 import { registerNewFeaturesRoutes } from "./routes/newFeaturesRoutes";
 import { registerUserProfileRoutes } from "./routes/userProfileRoutes";
+import { notifyUser, notifyAllAdmins, broadcastToRoom } from "./websocket";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  await setupAuth(app);
-  registerAuthRoutes(app);
-  registerNewAuthRoutes(app);
+  setupAuthMiddleware(app);
+  registerIndependentAuthRoutes(app);
   registerBillingRoutes(app);
   registerChatRoutes(app);
   registerImageRoutes(app);
@@ -40,7 +36,7 @@ export async function registerRoutes(
   await storage.upsertPlans().catch(err => console.error('Failed to seed plans:', err));
   await storage.seedBillingPlans().catch(err => console.error('Failed to seed billing plans:', err));
 
-  const getUserId = (req: any) => req.user?.claims?.sub;
+  const getUserId = (req: any) => req.userId;
   
   // Track user activity (lastSeen, sessions) - called on authenticated routes
   const trackUserActivity = async (req: any, res: any, next: any) => {
@@ -65,7 +61,7 @@ export async function registerRoutes(
   const checkAdmin = async (req: any, res: any, next: any) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     if (user?.role !== "admin") return res.status(403).json({ message: "Forbidden: Admin only" });
     next();
   };
@@ -73,7 +69,7 @@ export async function registerRoutes(
   const checkActive = async (req: any, res: any, next: any) => {
      const userId = getUserId(req);
      if (!userId) return res.status(401).json({ message: "Unauthorized" });
-     const user = await authStorage.getUser(userId);
+     const user = await storage.getUser(userId);
      
      // Admin always has access
      if (user?.role === "admin") {
@@ -109,7 +105,7 @@ export async function registerRoutes(
   const checkNotBlocked = async (req: any, res: any, next: any) => {
      const userId = getUserId(req);
      if (!userId) return res.status(401).json({ message: "Unauthorized" });
-     const user = await authStorage.getUser(userId);
+     const user = await storage.getUser(userId);
      if (user?.status === "blocked" && user?.role !== "admin") {
         return res.status(403).json({ message: "Account blocked" });
      }
@@ -117,37 +113,37 @@ export async function registerRoutes(
   };
 
   // --- Admin Routes ---
-  app.get("/api/admin/users", isAuthenticated, checkAdmin, async (req, res) => {
-    const users = await authStorage.getAllUsers();
+  app.get("/api/admin/users", authenticate, checkAdmin, async (req, res) => {
+    const users = await storage.getAllUsers();
     res.json(users);
   });
 
-  app.patch("/api/admin/users/:id/status", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/status", authenticate, checkAdmin, async (req, res) => {
     const { status } = req.body;
-    const user = await authStorage.updateUserStatus(req.params.id, status);
+    const user = await storage.updateUserStatus(req.params.id, status);
     res.json(user);
   });
 
-  app.patch("/api/admin/users/:id/role", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/role", authenticate, checkAdmin, async (req, res) => {
     const { role } = req.body;
-    const user = await authStorage.updateUserRole(req.params.id, role);
+    const user = await storage.updateUserRole(req.params.id, role);
     res.json(user);
   });
 
   // Activate user with subscription (sets status to active and subscription expiration)
-  app.patch("/api/admin/users/:id/activate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/activate", authenticate, checkAdmin, async (req, res) => {
     const { days = 30 } = req.body; // Default 30 days
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + days);
-    const user = await authStorage.activateUserWithSubscription(req.params.id, expiresAt);
+    const user = await storage.activateUserWithSubscription(req.params.id, expiresAt);
     res.json(user);
   });
 
   // --- Enhanced User Management ---
   // Get detailed user info (profile, usage stats, coupons, billing)
-  app.get("/api/admin/users/:id/details", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/users/:id/details", authenticate, checkAdmin, async (req, res) => {
     const userId = req.params.id;
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
     
     const [adminProfile, usageStats, couponUsage, billingStatus] = await Promise.all([
@@ -167,7 +163,7 @@ export async function registerRoutes(
   });
 
   // Update user admin profile (tags, flags, notes)
-  app.patch("/api/admin/users/:id/profile", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/profile", authenticate, checkAdmin, async (req, res) => {
     const { tags, isGoodUser, isRiskUser, adminNotes, isBlocked } = req.body;
     const profile = await storage.upsertUserAdminProfile({
       userId: req.params.id,
@@ -181,7 +177,7 @@ export async function registerRoutes(
   });
 
   // Add coupon usage for a user
-  app.post("/api/admin/users/:id/coupon", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/users/:id/coupon", authenticate, checkAdmin, async (req, res) => {
     const { couponCode, campaign } = req.body;
     if (!couponCode) return res.status(400).json({ message: "couponCode required" });
     const usage = await storage.createUserCouponUsage({
@@ -193,13 +189,13 @@ export async function registerRoutes(
   });
 
   // Get all unique coupon codes for dropdown
-  app.get("/api/admin/coupons", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/coupons", authenticate, checkAdmin, async (req, res) => {
     const codes = await storage.getAllCouponCodes();
     res.json(codes);
   });
 
   // Update user billing status (read-only cache from ASAAS)
-  app.patch("/api/admin/users/:id/billing", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/users/:id/billing", authenticate, checkAdmin, async (req, res) => {
     const { asaasCustomerId, asaasSubscriptionId, planName, nextDueDate, lastPaymentDate, status, overdueDays } = req.body;
     const billing = await storage.upsertUserBillingStatus({
       userId: req.params.id,
@@ -215,12 +211,12 @@ export async function registerRoutes(
   });
 
   // Get all users with enhanced details for list view (optimized with bulk queries and pagination)
-  app.get("/api/admin/users-enhanced", isAuthenticated, checkAdmin, trackUserActivity, async (req, res) => {
+  app.get("/api/admin/users-enhanced", authenticate, checkAdmin, trackUserActivity, async (req, res) => {
     const { search, status, role, tag, hasQualityFlag, sortBy, sortOrder, page, limit } = req.query;
     const pageNum = parseInt(page as string) || 1;
     const limitNum = Math.min(parseInt(limit as string) || 50, 200); // Max 200 per page
     
-    const allUsers = await authStorage.getAllUsers();
+    const allUsers = await storage.getAllUsers();
     
     // Apply basic filters first to reduce the dataset before fetching auxiliary data
     let filtered = allUsers;
@@ -312,17 +308,17 @@ export async function registerRoutes(
   });
 
   // --- Admin Settings ---
-  app.get(api.adminSettings.list.path, isAuthenticated, checkAdmin, async (req, res) => {
+  app.get(api.adminSettings.list.path, authenticate, checkAdmin, async (req, res) => {
     const items = await storage.getAllAdminSettings();
     res.json(items);
   });
 
-  app.get("/api/admin/settings/:key", isAuthenticated, async (req, res) => {
+  app.get("/api/admin/settings/:key", authenticate, async (req, res) => {
     const item = await storage.getAdminSetting(req.params.key);
     res.json(item || null);
   });
 
-  app.post(api.adminSettings.set.path, isAuthenticated, checkAdmin, async (req, res) => {
+  app.post(api.adminSettings.set.path, authenticate, checkAdmin, async (req, res) => {
     const { key, value } = req.body;
     const item = await storage.setAdminSetting(key, value);
     res.json(item);
@@ -343,7 +339,7 @@ export async function registerRoutes(
   });
 
   // --- Admin AI Content Generation ---
-  app.post("/api/admin/ai/generate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/ai/generate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { contentType, context, title } = req.body;
       
@@ -414,7 +410,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
   // --- Admin Bulk Import ---
   // Bulk import pathologies
-  app.post("/api/admin/import/pathologies", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/import/pathologies", authenticate, checkAdmin, async (req, res) => {
     try {
       const { data, upsert = false, format = "csv" } = req.body;
       
@@ -493,7 +489,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Bulk import protocols
-  app.post("/api/admin/import/protocols", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/import/protocols", authenticate, checkAdmin, async (req, res) => {
     try {
       const { data, upsert = false, format = "csv" } = req.body;
       
@@ -576,7 +572,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Bulk import checklists (Admin - official)
-  app.post("/api/admin/import/checklists", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/import/checklists", authenticate, checkAdmin, async (req, res) => {
     try {
       const { data, upsert = false, format = "csv" } = req.body;
       
@@ -664,7 +660,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Calculator Allowed Meds (Admin)
-  app.get("/api/calculator-allowed-meds", isAuthenticated, async (req, res) => {
+  app.get("/api/calculator-allowed-meds", authenticate, async (req, res) => {
     try {
       const patientType = req.query.patientType as string | undefined;
       const meds = await storage.getCalculatorAllowedMeds(patientType);
@@ -674,7 +670,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/calculator-allowed-meds", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/calculator-allowed-meds", authenticate, checkAdmin, async (req, res) => {
     try {
       const med = await storage.createCalculatorAllowedMed(req.body);
       res.json(med);
@@ -683,7 +679,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/calculator-allowed-meds/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/calculator-allowed-meds/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       await storage.deleteCalculatorAllowedMed(parseInt(req.params.id));
       res.json({ success: true });
@@ -693,7 +689,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Dashboard Config
-  app.get("/api/dashboard-config", isAuthenticated, async (req, res) => {
+  app.get("/api/dashboard-config", authenticate, async (req, res) => {
     try {
       const scope = req.query.scope as string || "user_default";
       const config = await storage.getDashboardConfig(scope);
@@ -703,7 +699,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.get("/api/admin/dashboard-config", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/dashboard-config", authenticate, checkAdmin, async (req, res) => {
     try {
       const config = await storage.getDashboardConfig("user_default");
       res.json(config?.widgets || []);
@@ -712,7 +708,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/dashboard-config", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/dashboard-config", authenticate, checkAdmin, async (req, res) => {
     try {
       const config = await storage.upsertDashboardConfig({ scope: "user_default", widgets: req.body.widgets || req.body });
       res.json(config);
@@ -722,7 +718,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Quick Access Config
-  app.get("/api/quick-access-config", isAuthenticated, async (req, res) => {
+  app.get("/api/quick-access-config", authenticate, async (req, res) => {
     try {
       const patientType = req.query.patientType as string | undefined;
       const configs = await storage.getQuickAccessConfigs(patientType);
@@ -732,7 +728,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.get("/api/admin/quick-access-config", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/quick-access-config", authenticate, checkAdmin, async (req, res) => {
     try {
       const configs = await storage.getQuickAccessConfigs();
       const config = configs.find(c => c.patientType === "ambos") || configs[0];
@@ -742,7 +738,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/quick-access-config", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/quick-access-config", authenticate, checkAdmin, async (req, res) => {
     try {
       const config = await storage.upsertQuickAccessConfig({ patientType: "ambos", items: req.body.items || req.body, isActive: true });
       res.json(config);
@@ -752,7 +748,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Donation Causes
-  app.get("/api/donation-causes", isAuthenticated, async (req, res) => {
+  app.get("/api/donation-causes", authenticate, async (req, res) => {
     try {
       const activeOnly = req.query.activeOnly === "true";
       const causes = await storage.getDonationCauses(activeOnly);
@@ -762,7 +758,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.get("/api/donation-causes/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/donation-causes/:id", authenticate, async (req, res) => {
     try {
       const cause = await storage.getDonationCause(parseInt(req.params.id));
       if (!cause) return res.status(404).json({ message: "Causa não encontrada" });
@@ -772,7 +768,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/donation-causes", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/donation-causes", authenticate, checkAdmin, async (req, res) => {
     try {
       const cause = await storage.createDonationCause(req.body);
       res.json(cause);
@@ -781,7 +777,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/donation-causes/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/donation-causes/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const cause = await storage.updateDonationCause(parseInt(req.params.id), req.body);
       res.json(cause);
@@ -790,7 +786,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/donation-causes/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/donation-causes/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       await storage.deleteDonationCause(parseInt(req.params.id));
       res.json({ success: true });
@@ -800,7 +796,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Emergency Panel Items
-  app.get("/api/emergency-panel-items", isAuthenticated, async (req, res) => {
+  app.get("/api/emergency-panel-items", authenticate, async (req, res) => {
     try {
       const items = await storage.getEmergencyPanelItems();
       res.json(items);
@@ -809,7 +805,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.get("/api/emergency-panel-items/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/emergency-panel-items/:id", authenticate, async (req, res) => {
     try {
       const item = await storage.getEmergencyPanelItem(parseInt(req.params.id));
       if (!item) return res.status(404).json({ message: "Item não encontrado" });
@@ -819,7 +815,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/emergency-panel-items", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/emergency-panel-items", authenticate, checkAdmin, async (req, res) => {
     try {
       const item = await storage.createEmergencyPanelItem(req.body);
       res.json(item);
@@ -828,7 +824,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/emergency-panel-items/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/emergency-panel-items/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const item = await storage.updateEmergencyPanelItem(parseInt(req.params.id), req.body);
       res.json(item);
@@ -837,7 +833,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/emergency-panel-items/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/emergency-panel-items/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       await storage.deleteEmergencyPanelItem(parseInt(req.params.id));
       res.json({ success: true });
@@ -846,7 +842,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/emergency-panel-items/reorder", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/emergency-panel-items/reorder", authenticate, checkAdmin, async (req, res) => {
     try {
       const { items } = req.body;
       if (!Array.isArray(items)) return res.status(400).json({ message: "items deve ser um array" });
@@ -858,7 +854,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Donations
-  app.get("/api/donations", isAuthenticated, async (req, res) => {
+  app.get("/api/donations", authenticate, async (req, res) => {
     try {
       const user = req.user as any;
       const isAdmin = user?.role === "admin";
@@ -869,7 +865,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.get("/api/donations/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/donations/:id", authenticate, async (req, res) => {
     try {
       const donation = await storage.getDonation(parseInt(req.params.id));
       if (!donation) return res.status(404).json({ message: "Doação não encontrada" });
@@ -879,7 +875,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/donations", isAuthenticated, async (req, res) => {
+  app.post("/api/donations", authenticate, async (req, res) => {
     try {
       const user = req.user as any;
       const donation = await storage.createDonation({ ...req.body, userId: user.id });
@@ -889,7 +885,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/donations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/donations/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const donation = await storage.updateDonation(parseInt(req.params.id), req.body);
       res.json(donation);
@@ -899,7 +895,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Donation Receipts
-  app.get("/api/donations/:id/receipts", isAuthenticated, async (req, res) => {
+  app.get("/api/donations/:id/receipts", authenticate, async (req, res) => {
     try {
       const receipts = await storage.getDonationReceipts(parseInt(req.params.id));
       res.json(receipts);
@@ -908,7 +904,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/donations/:id/receipts", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/donations/:id/receipts", authenticate, checkAdmin, async (req, res) => {
     try {
       const receipt = await storage.createDonationReceipt({ ...req.body, donationId: parseInt(req.params.id) });
       res.json(receipt);
@@ -918,7 +914,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Batch Operations (Admin only)
-  app.post("/api/admin/batch/medications/activate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/medications/activate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -931,7 +927,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/medications/deactivate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/medications/deactivate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -944,7 +940,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/medications/delete", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/medications/delete", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -957,7 +953,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/pathologies/activate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/pathologies/activate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -970,7 +966,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/pathologies/deactivate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/pathologies/deactivate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -983,7 +979,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/pathologies/delete", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/pathologies/delete", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -996,7 +992,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/protocols/activate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/protocols/activate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -1009,7 +1005,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/protocols/deactivate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/protocols/deactivate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -1022,7 +1018,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/protocols/delete", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/protocols/delete", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -1035,7 +1031,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/checklists/activate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/checklists/activate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -1048,7 +1044,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/checklists/deactivate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/checklists/deactivate", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -1061,7 +1057,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/batch/checklists/delete", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/checklists/delete", authenticate, checkAdmin, async (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -1075,7 +1071,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Export selected items
-  app.post("/api/admin/batch/export", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/batch/export", authenticate, checkAdmin, async (req, res) => {
     try {
       const { entityType, ids, format = "json" } = req.body;
       if (!entityType || !Array.isArray(ids) || ids.length === 0) {
@@ -1120,7 +1116,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // User bulk import checklists (personal)
-  app.post("/api/user/import/checklists", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/user/import/checklists", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const userId = getUserId(req);
       const { data, upsert = false, format = "csv" } = req.body;
@@ -1221,7 +1217,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Checklist user copy endpoints
-  app.post("/api/checklists/:id/copy", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/checklists/:id/copy", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const userId = getUserId(req);
       const sourceId = Number(req.params.id);
@@ -1239,14 +1235,14 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.get("/api/checklists/:id/user-copy", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/checklists/:id/user-copy", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const sourceId = Number(req.params.id);
     const copy = await storage.getUserChecklistCopy(userId, sourceId);
     res.json(copy || null);
   });
 
-  app.delete("/api/checklists/:id/user-copy", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/checklists/:id/user-copy", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const sourceId = Number(req.params.id);
     await storage.deleteUserChecklistCopy(userId, sourceId);
@@ -1254,31 +1250,31 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Prescriptions ---
-  app.get(api.prescriptions.list.path, isAuthenticated, checkNotBlocked, trackUserActivity, async (req, res) => {
+  app.get(api.prescriptions.list.path, authenticate, checkNotBlocked, trackUserActivity, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getPrescriptions(getUserId(req), ageGroup);
     res.json(items);
   });
 
-  app.get("/api/prescriptions/search", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/prescriptions/search", authenticate, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchPrescriptions(query, getUserId(req));
     res.json(items);
   });
 
-  app.get(api.prescriptions.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.prescriptions.get.path, authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getPrescription(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     res.json(item);
   });
 
-  app.post(api.prescriptions.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.prescriptions.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.prescriptions.create.input.parse(req.body);
       const userId = getUserId(req);
       
       if (input.isPublic || input.isLocked) {
-         const user = await authStorage.getUser(userId);
+         const user = await storage.getUser(userId);
          if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create official prescriptions" });
       }
 
@@ -1290,7 +1286,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put(api.prescriptions.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put(api.prescriptions.update.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.prescriptions.update.input.parse(req.body);
       const item = await storage.updatePrescription(Number(req.params.id), input);
@@ -1301,12 +1297,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete(api.prescriptions.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete(api.prescriptions.delete.path, authenticate, checkNotBlocked, async (req, res) => {
     await storage.deletePrescription(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.post("/api/prescriptions/bulk-import", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/prescriptions/bulk-import", authenticate, checkAdmin, async (req, res) => {
     try {
       const { prescriptions: prescList, mode = "create" } = req.body;
       const userId = getUserId(req);
@@ -1363,7 +1359,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Prescription Suggestions (Internal AI - no external API) ---
-  app.get("/api/prescriptions/suggestions", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/prescriptions/suggestions", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const diagnosis = req.query.diagnosis as string | undefined;
       const ageGroup = req.query.ageGroup as string | undefined;
@@ -1383,31 +1379,31 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Protocols ---
-  app.get(api.protocols.list.path, isAuthenticated, checkNotBlocked, trackUserActivity, async (req, res) => {
+  app.get(api.protocols.list.path, authenticate, checkNotBlocked, trackUserActivity, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getProtocols(getUserId(req), ageGroup);
     res.json(items);
   });
 
-  app.get("/api/protocols/search", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/protocols/search", authenticate, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchProtocols(query, getUserId(req));
     res.json(items);
   });
 
-  app.get(api.protocols.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.protocols.get.path, authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getProtocol(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     res.json(item);
   });
 
-  app.post(api.protocols.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.protocols.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.protocols.create.input.parse(req.body);
       const userId = getUserId(req);
       
       if (input.isPublic || input.isLocked) {
-         const user = await authStorage.getUser(userId);
+         const user = await storage.getUser(userId);
          if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create official protocols" });
       }
 
@@ -1419,7 +1415,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put(api.protocols.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put(api.protocols.update.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.protocols.update.input.parse(req.body);
       const item = await storage.updateProtocol(Number(req.params.id), input);
@@ -1430,37 +1426,37 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete(api.protocols.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete(api.protocols.delete.path, authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteProtocol(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Checklists ---
-  app.get(api.checklists.list.path, isAuthenticated, checkNotBlocked, trackUserActivity, async (req, res) => {
+  app.get(api.checklists.list.path, authenticate, checkNotBlocked, trackUserActivity, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getChecklists(getUserId(req), ageGroup);
     res.json(items);
   });
 
-  app.get("/api/checklists/search", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/checklists/search", authenticate, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchChecklists(query, getUserId(req));
     res.json(items);
   });
 
-  app.get(api.checklists.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.checklists.get.path, authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getChecklist(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     res.json(item);
   });
 
-  app.post(api.checklists.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.checklists.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.checklists.create.input.parse(req.body);
       const userId = getUserId(req);
 
       if (input.isPublic || input.isLocked) {
-         const user = await authStorage.getUser(userId);
+         const user = await storage.getUser(userId);
          if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create official checklists" });
       }
 
@@ -1472,7 +1468,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put(api.checklists.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put(api.checklists.update.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.checklists.update.input.parse(req.body);
       const item = await storage.updateChecklist(Number(req.params.id), input);
@@ -1483,30 +1479,30 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete(api.checklists.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete(api.checklists.delete.path, authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteChecklist(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Flashcards ---
-  app.get(api.flashcards.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.flashcards.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getFlashcards(getUserId(req));
     res.json(items);
   });
 
-  app.get(api.flashcards.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.flashcards.get.path, authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getFlashcard(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     res.json(item);
   });
 
-  app.post(api.flashcards.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.flashcards.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.flashcards.create.input.parse(req.body);
       const userId = getUserId(req);
       
       if (input.isPublic) {
-         const user = await authStorage.getUser(userId);
+         const user = await storage.getUser(userId);
          if (user?.role !== "admin") return res.status(403).json({ message: "Only admins can create public flashcards" });
       }
 
@@ -1518,7 +1514,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put(api.flashcards.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put(api.flashcards.update.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.flashcards.update.input.parse(req.body);
       const item = await storage.updateFlashcard(Number(req.params.id), input);
@@ -1529,18 +1525,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete(api.flashcards.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete(api.flashcards.delete.path, authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteFlashcard(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Favorites ---
-  app.get(api.favorites.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.favorites.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getFavorites(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.favorites.add.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.favorites.add.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.favorites.add.input.parse(req.body);
       const item = await storage.addFavorite({ ...input, userId: getUserId(req) });
@@ -1551,18 +1547,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/favorites/:itemType/:itemId", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/favorites/:itemType/:itemId", authenticate, checkNotBlocked, async (req, res) => {
     await storage.removeFavorite(getUserId(req), req.params.itemType, Number(req.params.itemId));
     res.status(204).send();
   });
 
   // --- Doctor Profile ---
-  app.get(api.doctorProfile.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.doctorProfile.get.path, authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getDoctorProfile(getUserId(req));
     res.json(item || null);
   });
 
-  app.post(api.doctorProfile.upsert.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.doctorProfile.upsert.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.doctorProfile.upsert.input.parse(req.body);
       const item = await storage.upsertDoctorProfile({ ...input, userId: getUserId(req) });
@@ -1574,20 +1570,20 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Interconsult Messages ---
-  app.get(api.interconsult.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.interconsult.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const channel = req.query.channel as string | undefined;
     const items = await storage.getInterconsultMessages(getUserId(req), channel);
     res.json(items);
   });
 
-  app.post(api.interconsult.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.interconsult.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.interconsult.create.input.parse(req.body);
       const senderId = getUserId(req);
       const item = await storage.createInterconsultMessage({ ...input, senderId });
       
       // Send real-time notification
-      const sender = await authStorage.getUser(senderId);
+      const sender = await storage.getUser(senderId);
       const senderName = sender?.firstName || sender?.email?.split("@")[0] || "Usuário";
       
       if (input.receiverId) {
@@ -1603,7 +1599,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
         });
       } else if (input.channel === "admin_support") {
         // Message to admin support - notify all admins
-        const allUsers = await authStorage.getAllUsers();
+        const allUsers = await storage.getAllUsers();
         const adminIds = allUsers.filter(u => u.role === "admin").map(u => u.id);
         notifyAllAdmins({
           type: "new_support_message",
@@ -1621,12 +1617,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Shifts ---
-  app.get(api.shifts.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.shifts.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getShifts(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.shifts.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.shifts.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.shifts.create.input.parse(req.body);
       const item = await storage.createShift({ ...input, userId: getUserId(req) });
@@ -1637,7 +1633,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put(api.shifts.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put(api.shifts.update.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.shifts.update.input.parse(req.body);
       const item = await storage.updateShift(Number(req.params.id), input);
@@ -1648,23 +1644,23 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete(api.shifts.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete(api.shifts.delete.path, authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteShift(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.get(api.shifts.stats.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.shifts.stats.path, authenticate, checkNotBlocked, async (req, res) => {
     const stats = await storage.getShiftStats(getUserId(req));
     res.json(stats);
   });
 
   // --- Monthly Expenses ---
-  app.get("/api/monthly-expenses", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/monthly-expenses", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getMonthlyExpenses(getUserId(req));
     res.json(items);
   });
 
-  app.post("/api/monthly-expenses", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/monthly-expenses", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = insertMonthlyExpenseSchema.parse({ ...req.body, userId: getUserId(req) });
       const item = await storage.createMonthlyExpense(input);
@@ -1676,7 +1672,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put("/api/monthly-expenses/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put("/api/monthly-expenses/:id", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const item = await storage.updateMonthlyExpense(Number(req.params.id), req.body);
       res.json(item);
@@ -1686,18 +1682,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/monthly-expenses/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/monthly-expenses/:id", authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteMonthlyExpense(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Financial Goals ---
-  app.get("/api/financial-goals", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/financial-goals", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getFinancialGoals(getUserId(req));
     res.json(items);
   });
 
-  app.post("/api/financial-goals", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/financial-goals", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = insertFinancialGoalSchema.parse({ ...req.body, userId: getUserId(req) });
       const item = await storage.createFinancialGoal(input);
@@ -1709,7 +1705,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put("/api/financial-goals/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put("/api/financial-goals/:id", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const item = await storage.updateFinancialGoal(Number(req.params.id), req.body);
       res.json(item);
@@ -1719,18 +1715,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/financial-goals/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/financial-goals/:id", authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteFinancialGoal(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Notes ---
-  app.get(api.notes.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.notes.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getNotes(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.notes.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.notes.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.notes.create.input.parse(req.body);
       const item = await storage.createNote({ ...input, userId: getUserId(req) });
@@ -1741,7 +1737,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put(api.notes.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put(api.notes.update.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.notes.update.input.parse(req.body);
       const item = await storage.updateNote(Number(req.params.id), input);
@@ -1752,18 +1748,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete(api.notes.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete(api.notes.delete.path, authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteNote(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Tasks ---
-  app.get(api.tasks.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.tasks.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getTasks(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.tasks.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.tasks.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.tasks.create.input.parse(req.body);
       const item = await storage.createTask({ ...input, userId: getUserId(req) });
@@ -1774,7 +1770,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put(api.tasks.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put(api.tasks.update.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.tasks.update.input.parse(req.body);
       const item = await storage.updateTask(Number(req.params.id), input);
@@ -1785,7 +1781,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post(api.tasks.toggle.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.tasks.toggle.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const item = await storage.toggleTask(Number(req.params.id));
       res.json(item);
@@ -1794,18 +1790,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete(api.tasks.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete(api.tasks.delete.path, authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteTask(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Library ---
-  app.get(api.library.categories.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.library.categories.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getLibraryCategories();
     res.json(items);
   });
 
-  app.post(api.library.categories.create.path, isAuthenticated, checkAdmin, async (req, res) => {
+  app.post(api.library.categories.create.path, authenticate, checkAdmin, async (req, res) => {
     try {
       const input = api.library.categories.create.input.parse(req.body);
       const item = await storage.createLibraryCategory(input);
@@ -1816,13 +1812,13 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.get(api.library.items.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.library.items.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const categoryId = Number(req.query.categoryId);
     const items = await storage.getLibraryItems(categoryId);
     res.json(items);
   });
 
-  app.post(api.library.items.create.path, isAuthenticated, checkAdmin, async (req, res) => {
+  app.post(api.library.items.create.path, authenticate, checkAdmin, async (req, res) => {
     try {
       const input = api.library.items.create.input.parse(req.body);
       const item = await storage.createLibraryItem(input);
@@ -1834,12 +1830,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Handovers ---
-  app.get(api.handovers.list.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.handovers.list.path, authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getHandovers(getUserId(req));
     res.json(items);
   });
 
-  app.post(api.handovers.create.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.handovers.create.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.handovers.create.input.parse(req.body);
       const item = await storage.createHandover({ ...input, userId: getUserId(req) });
@@ -1850,7 +1846,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.put(api.handovers.update.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put(api.handovers.update.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.handovers.update.input.parse(req.body);
       const item = await storage.updateHandover(Number(req.params.id), input);
@@ -1861,20 +1857,20 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete(api.handovers.delete.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete(api.handovers.delete.path, authenticate, checkNotBlocked, async (req, res) => {
     await storage.deleteHandover(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Goals ---
-  app.get(api.goals.get.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get(api.goals.get.path, authenticate, checkNotBlocked, async (req, res) => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const item = await storage.getGoal(getUserId(req), currentMonth);
     res.json(item || null);
   });
 
-  app.post(api.goals.set.path, isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post(api.goals.set.path, authenticate, checkNotBlocked, async (req, res) => {
     try {
       const input = api.goals.set.input.parse(req.body);
       const item = await storage.setGoal({ ...input, userId: getUserId(req) });
@@ -1886,7 +1882,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Pathologies ---
-  app.get("/api/pathologies", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/pathologies", authenticate, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const scope = req.query.scope as string | undefined;
     const userId = getUserId(req);
@@ -1900,24 +1896,24 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.get("/api/pathologies/my", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/pathologies/my", authenticate, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getUserPathologies(getUserId(req), ageGroup);
     res.json(items);
   });
 
-  app.get("/api/pathologies/search", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/pathologies/search", authenticate, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchPathologies(query, getUserId(req));
     res.json(items);
   });
 
-  app.get("/api/pathologies/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/pathologies/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const item = await storage.getPathology(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Not found" });
     
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const isOwner = item.userId === userId;
     const isAdminUser = user?.role === "admin";
     const isOfficialContent = item.isPublic === true;
@@ -1929,12 +1925,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(item);
   });
 
-  app.get("/api/pathologies/:id/medications", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/pathologies/:id/medications", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));
     if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
     
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const isOwner = pathology.userId === userId;
     const isAdminUser = user?.role === "admin";
     const isOfficialContent = pathology.isPublic === true;
@@ -1947,10 +1943,10 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(items);
   });
 
-  app.post("/api/pathologies", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/pathologies", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const { isPublic, isLocked, ...data } = req.body;
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const item = await storage.createPathology({
       ...data,
       isPublic: user?.role === "admin" ? isPublic : false,
@@ -1960,7 +1956,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(201).json(item);
   });
 
-  app.post("/api/pathologies/bulk", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/pathologies/bulk", authenticate, checkAdmin, async (req, res) => {
     const { pathologies: items } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Array de patologias vazio ou inválido" });
@@ -2004,7 +2000,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(201).json(results);
   });
 
-  app.post("/api/pathologies/:id/duplicate", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/pathologies/:id/duplicate", authenticate, checkAdmin, async (req, res) => {
     const { targetAgeGroup } = req.body;
     if (!targetAgeGroup || !['adulto', 'pediatrico'].includes(targetAgeGroup)) {
       return res.status(400).json({ message: "targetAgeGroup deve ser 'adulto' ou 'pediatrico'" });
@@ -2018,12 +2014,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(201).json(duplicated);
   });
 
-  app.put("/api/pathologies/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put("/api/pathologies/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));
     if (!pathology) return res.status(404).json({ message: "Not found" });
     
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const isOwner = pathology.userId === userId;
     const isAdminUser = user?.role === "admin";
     
@@ -2038,12 +2034,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(item);
   });
 
-  app.delete("/api/pathologies/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/pathologies/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));
     if (!pathology) return res.status(404).json({ message: "Not found" });
     
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const isOwner = pathology.userId === userId;
     const isAdminUser = user?.role === "admin";
     
@@ -2058,12 +2054,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(204).send();
   });
 
-  app.post("/api/pathologies/:id/medications", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/pathologies/:id/medications", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const pathology = await storage.getPathology(Number(req.params.id));
     if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
     
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const isOwner = pathology.userId === userId;
     const isAdminUser = user?.role === "admin";
     
@@ -2081,7 +2077,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(201).json(item);
   });
 
-  app.put("/api/pathology-medications/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put("/api/pathology-medications/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const medication = await storage.getPathologyMedicationById(Number(req.params.id));
     if (!medication) return res.status(404).json({ message: "Medicação não encontrada" });
@@ -2089,7 +2085,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     const pathology = await storage.getPathology(medication.pathologyId);
     if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
     
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const isOwner = pathology.userId === userId;
     const isAdminUser = user?.role === "admin";
     
@@ -2104,7 +2100,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(item);
   });
 
-  app.delete("/api/pathology-medications/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/pathology-medications/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const medication = await storage.getPathologyMedicationById(Number(req.params.id));
     if (!medication) return res.status(404).json({ message: "Medicação não encontrada" });
@@ -2112,7 +2108,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     const pathology = await storage.getPathology(medication.pathologyId);
     if (!pathology) return res.status(404).json({ message: "Patologia não encontrada" });
     
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const isOwner = pathology.userId === userId;
     const isAdminUser = user?.role === "admin";
     
@@ -2128,39 +2124,39 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Medications Library ---
-  app.get("/api/medications", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medications", authenticate, checkNotBlocked, async (req, res) => {
     const ageGroup = req.query.ageGroup as string | undefined;
     const items = await storage.getMedications(ageGroup);
     res.json(items);
   });
 
-  app.get("/api/medications/search", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medications/search", authenticate, checkNotBlocked, async (req, res) => {
     const query = req.query.q as string || "";
     const items = await storage.searchMedications(query);
     res.json(items);
   });
 
-  app.get("/api/medications/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medications/:id", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getMedication(Number(req.params.id));
     res.json(item);
   });
 
-  app.post("/api/medications", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/medications", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.createMedication(req.body);
     res.status(201).json(item);
   });
 
-  app.put("/api/medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.put("/api/medications/:id", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.updateMedication(Number(req.params.id), req.body);
     res.json(item);
   });
 
-  app.delete("/api/medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/medications/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteMedication(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.post("/api/medications/bulk-import", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/medications/bulk-import", authenticate, checkAdmin, async (req, res) => {
     try {
       const { medications, mode = "upsert" } = req.body;
       
@@ -2221,93 +2217,93 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Patient History ---
-  app.get("/api/patient-history", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/patient-history", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getPatientHistory(getUserId(req));
     res.json(items);
   });
 
-  app.get("/api/patient-history/search", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/patient-history/search", authenticate, checkNotBlocked, async (req, res) => {
     const patientName = req.query.name as string || "";
     const items = await storage.searchPatientHistory(getUserId(req), patientName);
     res.json(items);
   });
 
-  app.post("/api/patient-history", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/patient-history", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.createPatientHistory({ ...req.body, userId: getUserId(req) });
     res.status(201).json(item);
   });
 
-  app.delete("/api/patient-history/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/patient-history/:id", authenticate, checkNotBlocked, async (req, res) => {
     await storage.deletePatientHistory(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Calculator Settings ---
-  app.get("/api/calculator-settings", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/calculator-settings", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getCalculatorSettings();
     res.json(items);
   });
 
-  app.post("/api/calculator-settings", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/calculator-settings", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.createCalculatorSetting(req.body);
     res.status(201).json(item);
   });
 
-  app.put("/api/calculator-settings/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.put("/api/calculator-settings/:id", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.updateCalculatorSetting(Number(req.params.id), req.body);
     res.json(item);
   });
 
-  app.delete("/api/calculator-settings/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/calculator-settings/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteCalculatorSetting(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Dose Rules (Admin configurable) ---
-  app.get("/api/dose-rules", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/dose-rules", authenticate, checkNotBlocked, async (req, res) => {
     const context = req.query.context as string | undefined;
     const items = await storage.getDoseRules(context);
     res.json(items);
   });
 
-  app.get("/api/dose-rules/medication/:name", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/dose-rules/medication/:name", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getDoseRulesByMedication(req.params.name);
     res.json(items);
   });
 
-  app.post("/api/dose-rules", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/dose-rules", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.createDoseRule(req.body);
     res.status(201).json(item);
   });
 
-  app.put("/api/dose-rules/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.put("/api/dose-rules/:id", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.updateDoseRule(Number(req.params.id), req.body);
     res.json(item);
   });
 
-  app.delete("/api/dose-rules/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/dose-rules/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteDoseRule(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Formulations (Admin configurable) ---
-  app.get("/api/formulations", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/formulations", authenticate, checkNotBlocked, async (req, res) => {
     const medicationName = req.query.medication as string | undefined;
     const items = await storage.getFormulations(medicationName);
     res.json(items);
   });
 
-  app.post("/api/formulations", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/formulations", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.createFormulation(req.body);
     res.status(201).json(item);
   });
 
-  app.put("/api/formulations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.put("/api/formulations/:id", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.updateFormulation(Number(req.params.id), req.body);
     res.json(item);
   });
 
-  app.delete("/api/formulations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/formulations/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteFormulation(Number(req.params.id));
     res.status(204).send();
   });
@@ -2316,12 +2312,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   // Removed old endpoints - using new ones from newFeaturesRoutes.ts
 
   // --- Drug Interactions (Admin configurable) ---
-  app.get("/api/drug-interactions", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/drug-interactions", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getDrugInteractions();
     res.json(items);
   });
 
-  app.get("/api/drug-interactions/check", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/drug-interactions/check", authenticate, checkNotBlocked, async (req, res) => {
     const drug1 = req.query.drug1 as string;
     const drug2 = req.query.drug2 as string;
     if (!drug1 || !drug2) {
@@ -2331,77 +2327,77 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json({ hasInteraction: !!interaction, interaction: interaction || null });
   });
 
-  app.post("/api/drug-interactions", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/drug-interactions", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.createDrugInteraction(req.body);
     res.status(201).json(item);
   });
 
-  app.put("/api/drug-interactions/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.put("/api/drug-interactions/:id", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.updateDrugInteraction(Number(req.params.id), req.body);
     res.json(item);
   });
 
-  app.delete("/api/drug-interactions/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/drug-interactions/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteDrugInteraction(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Medication Contraindications (Admin configurable) ---
-  app.get("/api/medication-contraindications", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medication-contraindications", authenticate, checkNotBlocked, async (req, res) => {
     const medicationName = req.query.medication as string | undefined;
     const items = await storage.getMedicationContraindications(medicationName);
     res.json(items);
   });
 
-  app.post("/api/medication-contraindications", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/medication-contraindications", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.createMedicationContraindication(req.body);
     res.status(201).json(item);
   });
 
-  app.put("/api/medication-contraindications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.put("/api/medication-contraindications/:id", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.updateMedicationContraindication(Number(req.params.id), req.body);
     res.json(item);
   });
 
-  app.delete("/api/medication-contraindications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/medication-contraindications/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteMedicationContraindication(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Medication Dilutions (Admin configurable) ---
-  app.get("/api/medication-dilutions", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medication-dilutions", authenticate, checkNotBlocked, async (req, res) => {
     const medicationName = req.query.medication as string | undefined;
     const items = await storage.getMedicationDilutions(medicationName ? Number(medicationName) : undefined);
     res.json(items);
   });
 
-  app.get("/api/medication-dilutions/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medication-dilutions/:id", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getMedicationDilution(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Diluição não encontrada" });
     res.json(item);
   });
 
-  app.get("/api/medication-dilutions/by-name/:name", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medication-dilutions/by-name/:name", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getMedicationDilutionByName(req.params.name);
     res.json(item || null);
   });
 
-  app.post("/api/medication-dilutions", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/medication-dilutions", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.createMedicationDilution(req.body);
     res.status(201).json(item);
   });
 
-  app.put("/api/medication-dilutions/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.put("/api/medication-dilutions/:id", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.updateMedicationDilution(Number(req.params.id), req.body);
     res.json(item);
   });
 
-  app.delete("/api/medication-dilutions/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/medication-dilutions/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteMedicationDilution(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.post("/api/medication-dilutions/bulk-import", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/medication-dilutions/bulk-import", authenticate, checkAdmin, async (req, res) => {
     try {
       const { data } = req.body;
       if (!data || typeof data !== 'string') {
@@ -2450,21 +2446,21 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
   // --- Memorization System ---
   // Decks
-  app.get("/api/memorize/decks", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/memorize/decks", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const items = await storage.getMemorizeDecks(userId);
     res.json(items);
   });
 
-  app.get("/api/memorize/decks/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/memorize/decks/:id", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getMemorizeDeck(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Deck não encontrado" });
     res.json(item);
   });
 
-  app.post("/api/memorize/decks", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/memorize/decks", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const isAdmin = user?.role === "admin";
     const item = await storage.createMemorizeDeck({
       ...req.body,
@@ -2475,9 +2471,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(201).json(item);
   });
 
-  app.put("/api/memorize/decks/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put("/api/memorize/decks/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const deck = await storage.getMemorizeDeck(Number(req.params.id));
     if (!deck) return res.status(404).json({ message: "Deck não encontrado" });
     if (deck.isLocked && user?.role !== "admin") {
@@ -2490,9 +2486,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(item);
   });
 
-  app.delete("/api/memorize/decks/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/memorize/decks/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const deck = await storage.getMemorizeDeck(Number(req.params.id));
     if (!deck) return res.status(404).json({ message: "Deck não encontrado" });
     if (deck.isLocked && user?.role !== "admin") {
@@ -2506,20 +2502,20 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Cards
-  app.get("/api/memorize/decks/:deckId/cards", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/memorize/decks/:deckId/cards", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getMemorizeCards(Number(req.params.deckId));
     res.json(items);
   });
 
-  app.get("/api/memorize/cards/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/memorize/cards/:id", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getMemorizeCard(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Card não encontrado" });
     res.json(item);
   });
 
-  app.post("/api/memorize/decks/:deckId/cards", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/memorize/decks/:deckId/cards", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const deck = await storage.getMemorizeDeck(Number(req.params.deckId));
     if (!deck) return res.status(404).json({ message: "Deck não encontrado" });
     if (deck.isLocked && user?.role !== "admin") {
@@ -2532,9 +2528,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.status(201).json(item);
   });
 
-  app.post("/api/memorize/decks/:deckId/cards/bulk", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/memorize/decks/:deckId/cards/bulk", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const deckId = Number(req.params.deckId);
     const deck = await storage.getMemorizeDeck(deckId);
     if (!deck) return res.status(404).json({ message: "Deck não encontrado" });
@@ -2579,9 +2575,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json({ imported: created.length, errors });
   });
 
-  app.put("/api/memorize/cards/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put("/api/memorize/cards/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const card = await storage.getMemorizeCard(Number(req.params.id));
     if (!card) return res.status(404).json({ message: "Card não encontrado" });
     const deck = await storage.getMemorizeDeck(card.deckId);
@@ -2592,9 +2588,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json(item);
   });
 
-  app.delete("/api/memorize/cards/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/memorize/cards/:id", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const card = await storage.getMemorizeCard(Number(req.params.id));
     if (!card) return res.status(404).json({ message: "Card não encontrado" });
     const deck = await storage.getMemorizeDeck(card.deckId);
@@ -2606,13 +2602,13 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Study / Spaced Repetition
-  app.get("/api/memorize/decks/:deckId/study", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/memorize/decks/:deckId/study", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const cards = await storage.getCardsToReview(userId, Number(req.params.deckId));
     res.json(cards);
   });
 
-  app.post("/api/memorize/cards/:cardId/review", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/memorize/cards/:cardId/review", authenticate, checkNotBlocked, async (req, res) => {
     const userId = getUserId(req);
     const { quality } = req.body; // 0-5 SM-2 quality rating
 
@@ -2656,12 +2652,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Promo Coupons (Admin only) ---
-  app.get("/api/promo-coupons", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/promo-coupons", authenticate, checkAdmin, async (req, res) => {
     const items = await storage.getPromoCoupons();
     res.json(items);
   });
 
-  app.get("/api/promo-coupons/validate/:code", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/promo-coupons/validate/:code", authenticate, checkNotBlocked, async (req, res) => {
     const coupon = await storage.getPromoCouponByCode(req.params.code);
     if (!coupon) return res.status(404).json({ message: "Cupom não encontrado" });
     if (!coupon.isActive) return res.status(400).json({ message: "Cupom inativo" });
@@ -2679,22 +2675,22 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     });
   });
 
-  app.post("/api/promo-coupons", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/promo-coupons", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.createPromoCoupon(req.body);
     res.status(201).json(item);
   });
 
-  app.put("/api/promo-coupons/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.put("/api/promo-coupons/:id", authenticate, checkAdmin, async (req, res) => {
     const item = await storage.updatePromoCoupon(Number(req.params.id), req.body);
     res.json(item);
   });
 
-  app.delete("/api/promo-coupons/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/promo-coupons/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deletePromoCoupon(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.post("/api/promo-coupons/:id/use", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/promo-coupons/:id/use", authenticate, checkNotBlocked, async (req, res) => {
     const usage = await storage.useCoupon(Number(req.params.id), getUserId(req));
     res.status(201).json(usage);
   });
@@ -2731,9 +2727,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Get user subscription status
-  app.get("/api/subscription/status", isAuthenticated, async (req, res) => {
+  app.get("/api/subscription/status", authenticate, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const subscription = await storage.getActiveSubscription(userId);
     
     res.json({
@@ -2745,7 +2741,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Validate coupon for subscription
-  app.post("/api/subscription/validate-coupon", isAuthenticated, async (req, res) => {
+  app.post("/api/subscription/validate-coupon", authenticate, async (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ message: "Código do cupom é obrigatório" });
     
@@ -2770,10 +2766,10 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Create subscription with payment
-  app.post("/api/subscription/create", isAuthenticated, async (req, res) => {
+  app.post("/api/subscription/create", authenticate, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const user = await authStorage.getUser(userId);
+      const user = await storage.getUser(userId);
       if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
 
       const { paymentMethod, couponCode, name, cpfCnpj, phone, planSlug } = req.body;
@@ -2949,7 +2945,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
             status: 'active',
             lastPaymentStatus: 'paid'
           });
-          await authStorage.updateUserStatus(subscription.userId, 'active');
+          await storage.updateUserStatus(subscription.userId, 'active');
           notifyUser(subscription.userId, { 
             type: 'subscription_activated', 
             title: 'Assinatura Ativada',
@@ -2966,7 +2962,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Admin: Manual payment confirmation
-  app.post("/api/admin/subscription/confirm-payment/:paymentId", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/subscription/confirm-payment/:paymentId", authenticate, checkAdmin, async (req, res) => {
     try {
       const paymentId = Number(req.params.paymentId);
       const payment = await storage.getPayment(paymentId);
@@ -2984,7 +2980,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
             status: 'active',
             lastPaymentStatus: 'paid'
           });
-          await authStorage.updateUserStatus(subscription.userId, 'active');
+          await storage.updateUserStatus(subscription.userId, 'active');
           notifyUser(subscription.userId, { 
             type: 'subscription_activated', 
             title: 'Assinatura Ativada',
@@ -3000,19 +2996,19 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Admin: Get all subscriptions
-  app.get("/api/admin/subscriptions", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/subscriptions", authenticate, checkAdmin, async (req, res) => {
     const subs = await storage.getAllSubscriptions();
     res.json(subs);
   });
 
   // Admin: Get user payments
-  app.get("/api/admin/payments/:userId", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/payments/:userId", authenticate, checkAdmin, async (req, res) => {
     const payments = await storage.getUserPayments(req.params.userId);
     res.json(payments);
   });
 
   // --- Admin Asaas Integration ---
-  app.get("/api/admin/asaas/status", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/asaas/status", authenticate, checkAdmin, async (req, res) => {
     try {
       const asaasService = await import('./services/asaas');
       const isConfigured = asaasService.isAsaasConfigured();
@@ -3037,7 +3033,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.post("/api/admin/asaas/sync", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/asaas/sync", authenticate, checkAdmin, async (req, res) => {
     try {
       const asaasService = await import('./services/asaas');
       if (!asaasService.isAsaasConfigured()) {
@@ -3073,7 +3069,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
             // Also update user status if subscription is active
             if (status === 'active') {
-              await authStorage.updateUserStatus(userId, 'active');
+              await storage.updateUserStatus(userId, 'active');
             }
             updatedCount++;
           }
@@ -3099,16 +3095,16 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // User: Get my payments
-  app.get("/api/subscription/payments", isAuthenticated, async (req, res) => {
+  app.get("/api/subscription/payments", authenticate, async (req, res) => {
     const payments = await storage.getUserPayments(getUserId(req));
     res.json(payments);
   });
 
   // --- Billing Checkout (Redirect to Asaas) ---
-  app.post("/api/billing/checkout", isAuthenticated, async (req, res) => {
+  app.post("/api/billing/checkout", authenticate, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const user = await authStorage.getUser(userId);
+      const user = await storage.getUser(userId);
       if (!user) return res.status(401).json({ message: "Usuário não encontrado" });
 
       const { planSlug, couponCode } = req.body;
@@ -3175,9 +3171,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Billing status check
-  app.get("/api/billing/status", isAuthenticated, async (req, res) => {
+  app.get("/api/billing/status", authenticate, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     const subscription = await storage.getActiveSubscription(userId);
     const billingStatus = await storage.getUserBillingStatus(userId);
     
@@ -3234,9 +3230,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   const PREVIEW_TIME_LIMIT_MINUTES = 10;
   const PREVIEW_ACTION_LIMIT = 20;
 
-  app.get("/api/preview/status", isAuthenticated, async (req, res) => {
+  app.get("/api/preview/status", authenticate, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     
     // Subscribers and admins have full access
     if (user?.status === 'active' || user?.role === 'admin') {
@@ -3287,9 +3283,9 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     });
   });
 
-  app.post("/api/preview/consume", isAuthenticated, async (req, res) => {
+  app.post("/api/preview/consume", authenticate, async (req, res) => {
     const userId = getUserId(req);
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     
     // Subscribers don't consume preview actions
     if (user?.status === 'active' || user?.role === 'admin') {
@@ -3308,12 +3304,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Prescription Favorites (User personalized copies) ---
-  app.get("/api/prescription-favorites", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/prescription-favorites", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getPrescriptionFavorites(getUserId(req));
     res.json(items);
   });
 
-  app.get("/api/prescription-favorites/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/prescription-favorites/:id", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getPrescriptionFavorite(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Favorito não encontrado" });
     if (item.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3321,7 +3317,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Import a shared prescription by token (public endpoint for logged-in users)
-  app.get("/api/prescription-favorites/import/:token", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/prescription-favorites/import/:token", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getPrescriptionFavoriteByToken(req.params.token);
     if (!item) return res.status(404).json({ message: "Prescrição não encontrada ou token inválido" });
     // Return the prescription data for import (without user info)
@@ -3340,12 +3336,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     });
   });
 
-  app.post("/api/prescription-favorites", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/prescription-favorites", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.createPrescriptionFavorite({ ...req.body, userId: getUserId(req) });
     res.status(201).json(item);
   });
 
-  app.put("/api/prescription-favorites/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.put("/api/prescription-favorites/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getPrescriptionFavorite(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Favorito não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3354,7 +3350,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Generate export token for sharing
-  app.post("/api/prescription-favorites/:id/share", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/prescription-favorites/:id/share", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getPrescriptionFavorite(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Favorito não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3365,7 +3361,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json({ token: item.exportToken });
   });
 
-  app.delete("/api/prescription-favorites/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/prescription-favorites/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getPrescriptionFavorite(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Favorito não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3374,13 +3370,13 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Evolution Models ---
-  app.get("/api/evolution-models", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/evolution-models", authenticate, checkNotBlocked, async (req, res) => {
     const category = req.query.category as string | undefined;
     const items = await storage.getEvolutionModels(getUserId(req), category);
     res.json(items);
   });
 
-  app.post("/api/evolution-models", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/evolution-models", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const schema = z.object({
         title: z.string().min(1).max(255),
@@ -3396,7 +3392,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/evolution-models/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.patch("/api/evolution-models/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getEvolutionModel(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Modelo não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3414,7 +3410,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/evolution-models/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/evolution-models/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getEvolutionModel(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Modelo não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3423,12 +3419,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Physical Exam Templates ---
-  app.get("/api/physical-exam-templates", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/physical-exam-templates", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getPhysicalExamTemplates(getUserId(req));
     res.json(items);
   });
 
-  app.post("/api/physical-exam-templates", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/physical-exam-templates", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const schema = z.object({
         section: z.string().min(1).max(100),
@@ -3445,7 +3441,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/physical-exam-templates/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.patch("/api/physical-exam-templates/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getPhysicalExamTemplate(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Template não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3464,7 +3460,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/physical-exam-templates/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/physical-exam-templates/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getPhysicalExamTemplate(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Template não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3473,13 +3469,13 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Signs and Symptoms (Admin only for creation) ---
-  app.get("/api/signs-symptoms", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/signs-symptoms", authenticate, checkNotBlocked, async (req, res) => {
     const category = req.query.category as string | undefined;
     const items = await storage.getSignsSymptoms(getUserId(req), category);
     res.json(items);
   });
 
-  app.post("/api/admin/signs-symptoms", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/signs-symptoms", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         title: z.string().min(1).max(255),
@@ -3495,7 +3491,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/signs-symptoms/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/signs-symptoms/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         title: z.string().min(1).max(255).optional(),
@@ -3510,19 +3506,19 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/signs-symptoms/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/signs-symptoms/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteSignsSymptoms(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Semiological Signs (Admin only for creation) ---
-  app.get("/api/semiological-signs", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/semiological-signs", authenticate, checkNotBlocked, async (req, res) => {
     const category = req.query.category as string | undefined;
     const items = await storage.getSemiologicalSigns(getUserId(req), category);
     res.json(items);
   });
 
-  app.post("/api/admin/semiological-signs", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/semiological-signs", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         title: z.string().min(1).max(255),
@@ -3538,7 +3534,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/semiological-signs/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/semiological-signs/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         title: z.string().min(1).max(255).optional(),
@@ -3553,18 +3549,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/semiological-signs/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/semiological-signs/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteSemiologicalSigns(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Medical Certificates ---
-  app.get("/api/medical-certificates", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medical-certificates", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getMedicalCertificates(getUserId(req));
     res.json(items);
   });
 
-  app.post("/api/medical-certificates", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/medical-certificates", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const schema = z.object({
         patientName: z.string().min(1).max(255),
@@ -3581,7 +3577,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/medical-certificates/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/medical-certificates/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getMedicalCertificate(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Atestado não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3590,12 +3586,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Attendance Declarations ---
-  app.get("/api/attendance-declarations", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/attendance-declarations", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getAttendanceDeclarations(getUserId(req));
     res.json(items);
   });
 
-  app.post("/api/attendance-declarations", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/attendance-declarations", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const schema = z.object({
         patientName: z.string().min(1).max(255),
@@ -3614,7 +3610,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/attendance-declarations/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/attendance-declarations/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getAttendanceDeclaration(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Declaração não encontrada" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3623,12 +3619,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Medical Referrals ---
-  app.get("/api/medical-referrals", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/medical-referrals", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getMedicalReferrals(getUserId(req));
     res.json(items);
   });
 
-  app.post("/api/medical-referrals", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.post("/api/medical-referrals", authenticate, checkNotBlocked, async (req, res) => {
     try {
       const schema = z.object({
         patientName: z.string().min(1).max(255),
@@ -3651,7 +3647,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/medical-referrals/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.delete("/api/medical-referrals/:id", authenticate, checkNotBlocked, async (req, res) => {
     const existing = await storage.getMedicalReferral(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Encaminhamento não encontrado" });
     if (existing.userId !== getUserId(req)) return res.status(403).json({ message: "Não autorizado" });
@@ -3660,12 +3656,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Referral Destinations (Admin) ---
-  app.get("/api/referral-destinations", isAuthenticated, async (req, res) => {
+  app.get("/api/referral-destinations", authenticate, async (req, res) => {
     const items = await storage.getReferralDestinations();
     res.json(items);
   });
 
-  app.post("/api/admin/referral-destinations", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/referral-destinations", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         name: z.string().min(1).max(255),
@@ -3682,7 +3678,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/referral-destinations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/referral-destinations/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         name: z.string().min(1).max(255).optional(),
@@ -3699,18 +3695,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/referral-destinations/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/referral-destinations/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteReferralDestination(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Referral Reasons (Admin) ---
-  app.get("/api/referral-reasons", isAuthenticated, async (req, res) => {
+  app.get("/api/referral-reasons", authenticate, async (req, res) => {
     const items = await storage.getReferralReasons();
     res.json(items);
   });
 
-  app.post("/api/admin/referral-reasons", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/referral-reasons", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         description: z.string().min(1).max(255),
@@ -3725,7 +3721,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/referral-reasons/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/referral-reasons/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         description: z.string().min(1).max(255).optional(),
@@ -3740,30 +3736,30 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/referral-reasons/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/referral-reasons/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteReferralReason(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Prescription Models (Admin) ---
-  app.get("/api/prescription-models", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/prescription-models", authenticate, checkNotBlocked, async (req, res) => {
     const pathologyId = req.query.pathologyId ? Number(req.query.pathologyId) : undefined;
     const items = await storage.getPrescriptionModels(pathologyId);
     res.json(items);
   });
 
-  app.get("/api/prescription-models/:id", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/prescription-models/:id", authenticate, checkNotBlocked, async (req, res) => {
     const item = await storage.getPrescriptionModel(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Modelo não encontrado" });
     res.json(item);
   });
 
-  app.get("/api/prescription-models/:id/medications", isAuthenticated, checkNotBlocked, async (req, res) => {
+  app.get("/api/prescription-models/:id/medications", authenticate, checkNotBlocked, async (req, res) => {
     const items = await storage.getPrescriptionModelMedications(Number(req.params.id));
     res.json(items);
   });
 
-  app.post("/api/admin/prescription-models", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/prescription-models", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         pathologyId: z.number(),
@@ -3783,7 +3779,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/prescription-models/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/prescription-models/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         pathologyId: z.number().optional(),
@@ -3803,13 +3799,13 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/prescription-models/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/prescription-models/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deletePrescriptionModel(Number(req.params.id));
     res.status(204).send();
   });
 
   // --- Prescription Model Medications (Admin) ---
-  app.post("/api/admin/prescription-model-medications", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/prescription-model-medications", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         prescriptionModelId: z.number(),
@@ -3835,7 +3831,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.patch("/api/admin/prescription-model-medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/prescription-model-medications/:id", authenticate, checkAdmin, async (req, res) => {
     try {
       const schema = z.object({
         medication: z.string().min(1).max(255).optional(),
@@ -3859,7 +3855,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     }
   });
 
-  app.delete("/api/admin/prescription-model-medications/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/prescription-model-medications/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deletePrescriptionModelMedication(Number(req.params.id));
     res.status(204).send();
   });
@@ -3867,31 +3863,31 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   // --- Doctor Chat Routes ---
   
   // Accept chat terms and join state group
-  app.post("/api/chat/accept-terms", isAuthenticated, async (req, res) => {
+  app.post("/api/chat/accept-terms", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const { uf } = req.body;
     if (!uf || uf.length !== 2) return res.status(400).json({ message: "UF é obrigatória" });
     
-    await authStorage.updateUserUf(userId, uf.toUpperCase());
-    await authStorage.updateUserChatTerms(userId);
+    await storage.updateUserUf(userId, uf.toUpperCase());
+    await storage.updateUserChatTerms(userId);
     await storage.getOrCreateStateGroup(uf.toUpperCase(), userId);
     
     res.json({ success: true });
   });
 
   // Set user UF
-  app.post("/api/chat/set-uf", isAuthenticated, async (req, res) => {
+  app.post("/api/chat/set-uf", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const { uf } = req.body;
     if (!uf || uf.length !== 2) return res.status(400).json({ message: "UF inválida" });
-    await authStorage.updateUserUf(userId, uf.toUpperCase());
+    await storage.updateUserUf(userId, uf.toUpperCase());
     res.json({ success: true });
   });
 
   // Get user's rooms (groups + DMs)
-  app.get("/api/chat/rooms", isAuthenticated, async (req, res) => {
+  app.get("/api/chat/rooms", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const rooms = await storage.getChatRoomsForUser(userId);
@@ -3899,17 +3895,17 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Get or create state group
-  app.post("/api/chat/join-state-group", isAuthenticated, async (req, res) => {
+  app.post("/api/chat/join-state-group", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);
     if (!user?.uf) return res.status(400).json({ message: "UF não configurada" });
     const room = await storage.getOrCreateStateGroup(user.uf, userId);
     res.json(room);
   });
 
   // Get messages for a room (paginated)
-  app.get("/api/chat/rooms/:roomId/messages", isAuthenticated, async (req, res) => {
+  app.get("/api/chat/rooms/:roomId/messages", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const roomId = Number(req.params.roomId);
@@ -3924,7 +3920,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Send message
-  app.post("/api/chat/rooms/:roomId/messages", isAuthenticated, async (req, res) => {
+  app.post("/api/chat/rooms/:roomId/messages", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const roomId = Number(req.params.roomId);
@@ -3966,7 +3962,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       expiresAt,
     });
     
-    const sender = await authStorage.getUser(userId);
+    const sender = await storage.getUser(userId);
     broadcastToRoom(roomId, {
       type: "chat_message",
       roomId,
@@ -3981,7 +3977,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Log blocked message (no content saved)
-  app.post("/api/chat/log-blocked", isAuthenticated, async (req, res) => {
+  app.post("/api/chat/log-blocked", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const { reason } = req.body;
@@ -3990,7 +3986,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Search users for DM
-  app.get("/api/chat/search-users", isAuthenticated, async (req, res) => {
+  app.get("/api/chat/search-users", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const q = String(req.query.q || "").trim();
@@ -4000,7 +3996,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Get contacts
-  app.get("/api/chat/contacts", isAuthenticated, async (req, res) => {
+  app.get("/api/chat/contacts", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const contacts = await storage.getChatContacts(userId);
@@ -4008,7 +4004,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Add contact and create/get DM room
-  app.post("/api/chat/start-dm", isAuthenticated, async (req, res) => {
+  app.post("/api/chat/start-dm", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const { contactId } = req.body;
@@ -4020,7 +4016,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Cleanup expired messages (called by cron or manually)
-  app.post("/api/chat/cleanup-expired", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/chat/cleanup-expired", authenticate, checkAdmin, async (req, res) => {
     const deleted = await storage.deleteExpiredMessages();
     res.json({ deleted });
   });
@@ -4028,13 +4024,13 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   // --- Chat Admin Moderation Routes ---
   
   // Get all chat bans
-  app.get("/api/admin/chat/bans", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/chat/bans", authenticate, checkAdmin, async (req, res) => {
     const bans = await storage.getAllChatBans();
     res.json(bans);
   });
 
   // Ban a user from chat
-  app.post("/api/admin/chat/bans", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/chat/bans", authenticate, checkAdmin, async (req, res) => {
     const adminId = getUserId(req);
     if (!adminId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4060,19 +4056,19 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Remove a ban
-  app.delete("/api/admin/chat/bans/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/chat/bans/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteChatBan(Number(req.params.id));
     res.status(204).send();
   });
 
   // Get all banned words
-  app.get("/api/admin/chat/banned-words", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/chat/banned-words", authenticate, checkAdmin, async (req, res) => {
     const words = await storage.getChatBannedWords();
     res.json(words);
   });
 
   // Add a banned word
-  app.post("/api/admin/chat/banned-words", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/admin/chat/banned-words", authenticate, checkAdmin, async (req, res) => {
     const adminId = getUserId(req);
     if (!adminId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4089,25 +4085,25 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Remove a banned word
-  app.delete("/api/admin/chat/banned-words/:id", isAuthenticated, checkAdmin, async (req, res) => {
+  app.delete("/api/admin/chat/banned-words/:id", authenticate, checkAdmin, async (req, res) => {
     await storage.deleteChatBannedWord(Number(req.params.id));
     res.status(204).send();
   });
 
   // Get blocked messages log
-  app.get("/api/admin/chat/blocked-messages", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/chat/blocked-messages", authenticate, checkAdmin, async (req, res) => {
     const messages = await storage.getBlockedMessagesLog();
     res.json(messages);
   });
 
   // Get all chat users with UF info (admin)
-  app.get("/api/admin/chat/users", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/admin/chat/users", authenticate, checkAdmin, async (req, res) => {
     const usersWithUf = await storage.getChatUsersWithUf();
     res.json(usersWithUf);
   });
 
   // Admin change user UF
-  app.patch("/api/admin/chat/users/:userId/uf", isAuthenticated, checkAdmin, async (req, res) => {
+  app.patch("/api/admin/chat/users/:userId/uf", authenticate, checkAdmin, async (req, res) => {
     const { userId } = req.params;
     const { uf } = req.body;
     
@@ -4124,7 +4120,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // User change own UF (once per month)
-  app.post("/api/chat/change-uf", isAuthenticated, async (req, res) => {
+  app.post("/api/chat/change-uf", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4142,7 +4138,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Check if user can change UF
-  app.get("/api/chat/can-change-uf", isAuthenticated, async (req, res) => {
+  app.get("/api/chat/can-change-uf", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4170,7 +4166,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Subscribe to push notifications
-  app.post("/api/push/subscribe", isAuthenticated, async (req, res) => {
+  app.post("/api/push/subscribe", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4191,7 +4187,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Unsubscribe from push notifications
-  app.post("/api/push/unsubscribe", isAuthenticated, async (req, res) => {
+  app.post("/api/push/unsubscribe", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4205,7 +4201,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Get user's push subscriptions
-  app.get("/api/push/subscriptions", isAuthenticated, async (req, res) => {
+  app.get("/api/push/subscriptions", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4244,7 +4240,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Get user notification settings
-  app.get("/api/notifications/settings", isAuthenticated, async (req, res) => {
+  app.get("/api/notifications/settings", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4259,7 +4255,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Save user notification settings
-  app.post("/api/notifications/settings", isAuthenticated, async (req, res) => {
+  app.post("/api/notifications/settings", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4277,7 +4273,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // --- Sound Settings ---
-  app.get("/api/sound-settings", isAuthenticated, async (req, res) => {
+  app.get("/api/sound-settings", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4291,7 +4287,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     });
   });
 
-  app.patch("/api/sound-settings", isAuthenticated, async (req, res) => {
+  app.patch("/api/sound-settings", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4322,7 +4318,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Get notification inbox for user
-  app.get("/api/notifications/inbox", isAuthenticated, async (req, res) => {
+  app.get("/api/notifications/inbox", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4344,7 +4340,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Mark notification as read
-  app.post("/api/notifications/read", isAuthenticated, async (req, res) => {
+  app.post("/api/notifications/read", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4373,7 +4369,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   let lastGeneralSendTime: Date | null = null;
 
   // Admin send push notification (enhanced)
-  app.post("/api/push/admin/send", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/push/admin/send", authenticate, checkAdmin, async (req, res) => {
     if (!vapidPublicKey || !vapidPrivateKey) {
       return res.status(500).json({ message: "Push notifications not configured" });
     }
@@ -4568,7 +4564,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Admin test notification (sends to self)
-  app.post("/api/push/admin/test-self", isAuthenticated, checkAdmin, async (req, res) => {
+  app.post("/api/push/admin/test-self", authenticate, checkAdmin, async (req, res) => {
     if (!vapidPublicKey || !vapidPrivateKey) {
       return res.status(500).json({ message: "Push notifications not configured" });
     }
@@ -4608,21 +4604,21 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
   });
 
   // Admin get notification delivery history
-  app.get("/api/push/admin/deliveries", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/push/admin/deliveries", authenticate, checkAdmin, async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 50;
     const deliveries = await storage.getNotificationDeliveries(limit);
     res.json(deliveries);
   });
 
   // Admin get delivery items (detailed status per user)
-  app.get("/api/push/admin/deliveries/:id/items", isAuthenticated, checkAdmin, async (req, res) => {
+  app.get("/api/push/admin/deliveries/:id/items", authenticate, checkAdmin, async (req, res) => {
     const deliveryId = parseInt(req.params.id);
     const items = await storage.getDeliveryItems(deliveryId);
     res.json(items);
   });
 
   // --- One-Time Messages (payment/donation confirmations) ---
-  app.get("/api/one-time-messages", isAuthenticated, async (req, res) => {
+  app.get("/api/one-time-messages", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     
@@ -4651,7 +4647,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     });
   });
 
-  app.post("/api/one-time-messages/ack", isAuthenticated, async (req, res) => {
+  app.post("/api/one-time-messages/ack", authenticate, async (req, res) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
     

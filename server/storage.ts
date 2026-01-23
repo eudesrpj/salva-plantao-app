@@ -546,6 +546,24 @@ export interface IStorage {
   updateMessageOfDayMessage(id: number, item: Partial<InsertMessageOfDayMessage>): Promise<MessageOfDayMessage>;
   deleteMessageOfDayMessage(id: number): Promise<void>;
   getRandomMessageOfDay(type: string): Promise<MessageOfDayMessage | undefined>;
+
+  // Authentication (independent of Replit)
+  getUser(id: string): Promise<(typeof users.$inferSelect) | undefined>;
+  getUserByEmail(email: string): Promise<(typeof users.$inferSelect) | undefined>;
+  createUser(data: {
+    email: string;
+    passwordHash?: string;
+    firstName?: string;
+    lastName?: string;
+    profileImageUrl?: string | null;
+  }): Promise<typeof users.$inferSelect>;
+  updateUser(id: string, data: Partial<typeof users.$inferSelect>): Promise<typeof users.$inferSelect>;
+  getAllUsers(): Promise<(typeof users.$inferSelect)[]>;
+  updateUserStatus(id: string, status: "active" | "pending" | "blocked"): Promise<typeof users.$inferSelect>;
+  updateUserRole(id: string, role: string): Promise<typeof users.$inferSelect>;
+  activateUserWithSubscription(id: string, expiresAt: Date): Promise<typeof users.$inferSelect>;
+  updateUserUf(userId: string, uf: string): Promise<void>;
+  updateUserChatTerms(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3663,6 +3681,71 @@ export class DatabaseStorage implements IStorage {
     if (messages.length === 0) return undefined;
     const randomIndex = Math.floor(Math.random() * messages.length);
     return messages[randomIndex];
+  }
+
+  // ============== AUTHENTICATION METHODS ==============
+  
+  async getUser(id: string): Promise<(typeof users.$inferSelect) | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<(typeof users.$inferSelect) | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return user;
+  }
+
+  async createUser(data: {
+    email: string;
+    passwordHash?: string;
+    firstName?: string;
+    lastName?: string;
+    profileImageUrl?: string | null;
+  }): Promise<typeof users.$inferSelect> {
+    const [user] = await db.insert(users).values({
+      email: data.email,
+      passwordHash: data.passwordHash || null,
+      firstName: data.firstName || "",
+      lastName: data.lastName || "",
+      profileImageUrl: data.profileImageUrl || null,
+      role: "user", // Default role
+    }).returning();
+    return user;
+  }
+
+  async updateUser(id: string, data: Partial<typeof users.$inferSelect>): Promise<typeof users.$inferSelect> {
+    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return user;
+  }
+
+  async getAllUsers(): Promise<(typeof users.$inferSelect)[]> {
+    return db.select().from(users);
+  }
+
+  async updateUserStatus(id: string, status: "active" | "pending" | "blocked"): Promise<typeof users.$inferSelect> {
+    const [user] = await db.update(users).set({ status }).where(eq(users.id, id)).returning();
+    return user;
+  }
+
+  async updateUserRole(id: string, role: string): Promise<typeof users.$inferSelect> {
+    const [user] = await db.update(users).set({ role }).where(eq(users.id, id)).returning();
+    return user;
+  }
+
+  async activateUserWithSubscription(id: string, expiresAt: Date): Promise<typeof users.$inferSelect> {
+    const [user] = await db.update(users)
+      .set({ status: "active", subscriptionExpiresAt: expiresAt })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async updateUserUf(userId: string, uf: string): Promise<void> {
+    await db.update(users).set({ uf }).where(eq(users.id, userId));
+  }
+
+  async updateUserChatTerms(userId: string): Promise<void> {
+    await db.update(users).set({ acceptedChatTermsAt: new Date() }).where(eq(users.id, userId));
   }
 }
 
