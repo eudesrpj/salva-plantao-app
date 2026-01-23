@@ -1,6 +1,17 @@
-node_modules
-dist
+# deps / build
+node_modules/
+dist/
+
+# env (NUNCA subir)
+.env
+.env.*
+
+# OS / misc
 .DS_Store
-server/public
-vite.config.ts.*
 *.tar.gz
+
+# app generated
+server/public
+
+# configs temporários
+vite.config.ts.*
