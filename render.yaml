@@ -2,47 +2,30 @@ services:
   - type: web
     name: salva-plantao
     env: node
-    # Use Node.js 22 LTS for better performance and security
     nodeVersion: 22
     buildCommand: npm ci && npm run build
     startCommand: npm run start
     
-    # Environment variables
+    # Health check configuration
+    healthCheckPath: /health
+    healthCheckInterval: 60  # seconds
+    
+    # Environment variables (set these in Render Dashboard)
     envVars:
       - key: NODE_ENV
         value: production
       
-      # Database connection with automatic SSL via sslmode=require
+      # Database URL must be set in Render Dashboard
+      # Format: postgresql://user:password@db.supabase.co:6543/postgres?sslmode=require
       - key: DATABASE_URL
         fromDatabase:
           name: salva-plantao-db
           property: connectionString
-      
-      # Port (Render sets this automatically, but explicit is good)
-      - key: PORT
-        value: 10000
-      
-      # Skip TLS rejection (handled properly now)
-      # NODE_TLS_REJECT_UNAUTHORIZED should NOT be set
-      
-      # Database security options
-      - key: POSTGRES_ALLOW_SELF_SIGNED
-        value: false
-      
-      # Optional: Skip expensive startup tasks if needed
-      # - key: SKIP_STARTUP_TASKS
-      #   value: false
     
-    # Health check configuration
-    healthCheckPath: /health
-    
-    # Max instances (set according to your needs)
-    maxInstances: 3
-    
-    # Auto-deploy on git push
+    # Auto-deploy on push
     autoDeploy: true
     
-    # Build and deploy settings
+    # Build filter (only deploy on relevant changes)
     buildFilter:
       paths:
         - src/**
@@ -51,10 +34,10 @@ services:
         - shared/**
         - package.json
         - vite.config.ts
+        - script/**
 
 databases:
   - name: salva-plantao-db
     databaseName: salva_plantao
     user: postgres
-    # PostgreSQL version 15 (recommended)
-    postgresMajorVersion: 15
+    postgresVersion: 15

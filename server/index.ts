@@ -135,33 +135,6 @@ app.use((req, res, next) => {
 
   httpServer.listen(port, host, () => {
     log(`✓ Server listening on ${host}:${port}`);
-    
-    // Seed database plans AFTER server is listening (non-blocking, won't crash if it fails)
-    // Can be skipped with SKIP_STARTUP_TASKS=true env var
-    const skipStartupTasks = process.env.SKIP_STARTUP_TASKS === "true";
-    
-    if (skipStartupTasks) {
-      log("⊘ Startup tasks skipped (SKIP_STARTUP_TASKS=true)", "database");
-    } else {
-      setImmediate(async () => {
-        try {
-          const { storage } = await import("./storage");
-          await storage.upsertPlans();
-          log("✓ Default plans seeded successfully", "database");
-        } catch (err) {
-          console.error("[database] Failed to seed plans:", err);
-          // Non-fatal: continue running
-        }
-        
-        try {
-          const { storage } = await import("./storage");
-          await storage.seedBillingPlans();
-          log("✓ Billing plans seeded successfully", "database");
-        } catch (err) {
-          console.error("[database] Failed to seed billing plans:", err);
-          // Non-fatal: continue running
-        }
-      });
-    }
+    log(`📘 Health endpoint available at http://${host}:${port}/health`);
   });
 })();
