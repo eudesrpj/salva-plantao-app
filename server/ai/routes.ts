@@ -1,9 +1,9 @@
 import { Express } from "express";
 import { z } from "zod";
 import OpenAI from "openai";
-import { isAuthenticated } from "../replit_integrations/auth";
-import { authStorage } from "../replit_integrations/auth/storage";
+import { authenticate } from "../auth/independentAuth";  // Use independent auth instead of Replit
 import { aiStorage } from "./storage";
+import { storage } from "../storage";  // For checkAdmin fallback
 
 const AI_DISCLAIMER = "\n\n---\nConteudo gerado por IA. Revisar sempre com julgamento clinico.";
 
@@ -34,17 +34,17 @@ const createPromptSchema = z.object({
 });
 
 export function registerAiRoutes(app: Express) {
-  const getUserId = (req: any) => req.user?.claims?.sub;
+  const getUserId = (req: any) => req.userId;  // Changed from req.user?.claims?.sub to req.userId (independentAuth format)
 
   const checkAdmin = async (req: any, res: any, next: any) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
-    const user = await authStorage.getUser(userId);
+    const user = await storage.getUser(userId);  // Changed from authStorage to storage (independent implementation)
     if (user?.role !== "admin") return res.status(403).json({ message: "Forbidden: Admin only" });
     next();
   };
 
-  app.get("/api/ai/credentials", isAuthenticated, async (req: any, res) => {
+  app.get("/api/ai/credentials", authenticate, async (req: any, res) => {
     try {
       const userId = getUserId(req);
       const creds = await aiStorage.getMaskedCredentials(userId);

@@ -12,8 +12,9 @@ import { z } from "zod";
 import { insertMonthlyExpenseSchema, insertFinancialGoalSchema } from "@shared/schema";
 import { setupAuthMiddleware, registerIndependentAuthRoutes, authenticate } from "./auth/independentAuth";
 import { registerAuthRoutes } from "./auth/authRoutes";
-import { registerChatRoutes } from "./replit_integrations/chat";
-import { registerImageRoutes } from "./replit_integrations/image";
+// Replit integrations (optional, disabled for Render production)
+// import { registerChatRoutes } from "./replit_integrations/chat";
+// import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAiRoutes } from "./ai/routes";
 import { registerBillingRoutes } from "./auth/billingRoutes";
 import { registerNewFeaturesRoutes } from "./routes/newFeaturesRoutes";
@@ -29,8 +30,9 @@ export async function registerRoutes(
   registerIndependentAuthRoutes(app);
   registerAuthRoutes(app);
   registerBillingRoutes(app);
-  registerChatRoutes(app);
-  registerImageRoutes(app);
+  // Replit integrations disabled for Render production
+  // registerChatRoutes(app);
+  // registerImageRoutes(app);
   registerAiRoutes(app);
   registerNewFeaturesRoutes(app);
   registerUserProfileRoutes(app);

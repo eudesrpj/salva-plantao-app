@@ -1,17 +1,9 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { authStorage } from "../replit_integrations/auth/storage";
+// Removed: replit_integrations/auth/storage - use independent auth only
 
 function getPublishedDomain(req: any): string {
-  // Try Replit domain first
-  const replitDomains = process.env.REPLIT_DOMAINS;
-  if (replitDomains) {
-    const domains = replitDomains.split(",");
-    const appDomain = domains.find(d => d.includes(".replit.app"));
-    if (appDomain) return `https://${appDomain}`;
-  }
-  
-  // Fallback: use request headers (for Render and other production environments)
+  // Use request headers only (Replit fallback removed for Render production)
   const protocol = req.headers["x-forwarded-proto"] || (process.env.NODE_ENV === "production" ? "https" : "http");
   const host = req.headers.host || req.hostname || `localhost:${process.env.PORT || 5000}`;
   return `${protocol}://${host}`;

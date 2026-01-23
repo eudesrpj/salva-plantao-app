@@ -54,29 +54,21 @@ function getDatabaseConfig() {
    * SSL Configuration Strategy:
    * 
    * Production (Render/Supabase):
-   *   - rejectUnauthorized: false (Supabase certs are valid, but pooler may use intermediates)
+   *   - rejectUnauthorized: false (required for Render's PostgreSQL SSL)
    *   - sslmode=require in connection string (enforces SSL)
+   * 
+   * This avoids "SELF_SIGNED_CERT_IN_CHAIN" errors on Render by:
+   *   - Accepting self-signed or intermediate certificates
+   *   - Enforcing SSL at the connection string level
    * 
    * Development:
    *   - Same config as production for consistency
-   *   - Or: POSTGRES_ALLOW_SELF_SIGNED=true for local testing
    */
-  const allowSelfSigned =
-    process.env.POSTGRES_ALLOW_SELF_SIGNED === "true";
-
-  // For Supabase pooler (6543) or Supabase direct (5432)
-  if (url.includes("supabase") || url.includes("pooler")) {
-    config.ssl = {
-      // Supabase uses valid certificates, but intermediates may cause issues
-      // Set to false to skip certificate verification (safe for Supabase)
-      rejectUnauthorized: !allowSelfSigned ? false : true,
-    };
-  } else {
-    // For other PostgreSQL servers, use proper cert validation in production
-    config.ssl = {
-      rejectUnauthorized: process.env.NODE_ENV === "production" && !allowSelfSigned,
-    };
-  }
+  // Force rejectUnauthorized: false for Render compatibility
+  // This prevents "SELF_SIGNED_CERT_IN_CHAIN" errors while still using encrypted connections (sslmode=require)
+  config.ssl = {
+    rejectUnauthorized: false,
+  };
 
   return config;
 }

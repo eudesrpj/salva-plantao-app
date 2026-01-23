@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { storage } from "../storage";
-import { authStorage } from "../replit_integrations/auth/storage";
+// Removed: replit_integrations/auth/storage - using only independent storage
 import { generateCode, generateToken, sendAuthEmail } from "./emailService";
 
 const TOKEN_EXPIRY_MINUTES = 10;

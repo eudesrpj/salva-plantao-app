@@ -1,6 +1,21 @@
 # 🚀 Configuração de Variáveis de Ambiente para Render
 
-## Variáveis Obrigatórias
+## Variáveis Obrigatórias (Críticas para Deploy)
+
+### 0. **NPM_CONFIG_PRODUCTION** (Build Dependencies)
+```
+false
+```
+
+**Por quê é crítico:**
+- Garante que devDependencies sejam instaladas no Render
+- `tsx` e `esbuild` estão em `devDependencies` mas são necessários para o build
+- Sem isso: erro "tsx: not found" durante `npm run build`
+- **Sempre defina como `false` no Render, mesmo em produção**
+
+---
+
+## Variáveis Obrigatórias (Funcionalidade)
 
 ### 1. **DATABASE_URL** (PostgreSQL Connection)
 ```
@@ -111,6 +126,7 @@ No painel do Render, vá para **"Environment"** e adicione:
 | Variável | Valor | Obrigatória |
 |----------|-------|-------------|
 | `NODE_ENV` | `production` | ✅ |
+| `NPM_CONFIG_PRODUCTION` | `false` | ✅ |
 | `DATABASE_URL` | `postgresql://user:pass@host:5432/db?sslmode=require` | ✅ |
 | `JWT_SECRET` | `seu-valor-secreto-aqui` | ✅ |
 | `JWT_REFRESH_SECRET` | `seu-outro-valor-secreto-aqui` | ✅ |
@@ -175,25 +191,36 @@ curl https://seu-app.onrender.com/api/health/db
 
 ## ⚙️ Melhorias de Conexão Implementadas
 
-1. **Connection Timeout**: `connectionTimeoutMillis: 10000`
-   - Detecta falhas de conexão em até 10 segundos
+1. **Connection Timeout**: `connectionTimeoutMillis: 30000`
+   - Detecta falhas de conexão em até 30 segundos
+   - Ajusta para Render coldstart lento
    
 2. **Idle Timeout**: `idleTimeoutMillis: 30000`
    - Fecha conexões ociosas após 30 segundos
    
-3. **Pool Size**: `max: 20`
+3. **Pool Size**: `max: 20`, `min: 2`
    - Máximo de 20 conexões simultâneas
+   - Mínimo de 2 para manter pool aquecido
    
-4. **SSL Config**: `ssl: { rejectUnauthorized: false }`
-   - Suporta certificados self-signed (Supabase/Render)
+4. **SSL Certificate Handling**: `ssl: { rejectUnauthorized: false }`
+   - **Novo:** Agora aplicado a TODAS as conexões PostgreSQL, não só Supabase
+   - Resolve erro "SELF_SIGNED_CERT_IN_CHAIN" no Render
+   - Seguro porque `sslmode=require` ainda força conexão encriptada
+   - Essencial para Render's PostgreSQL + intermediários de certificado
    
 5. **Auto SSL Mode**: `?sslmode=require`
-   - Injetado automaticamente na DATABASE_URL
+   - Injetado automaticamente na DATABASE_URL se não presente
+   - Força conexão SSL/TLS
 
 6. **Non-blocking Seeding**
-   - Seeding ocorre APÓS servidor estar listening
+   - Seeding ocorre APÓS servidor estar listening (com `setImmediate`)
    - Falhas de seeding não derrubam o servidor
-   - Logs disponíveis mas não críticos
+   - Logs disponíveis no console mas não bloqueantes
+
+7. **Health Checks**
+   - `GET /health` - Verifica se servidor está respondendo
+   - `GET /api/health/db` - Verifica conexão com DB, retorna 503 se indisponível
+   - Smoke test (`npm run smoke`) valida startup completo
 
 ---
 
