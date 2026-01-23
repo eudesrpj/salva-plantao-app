@@ -11,6 +11,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { insertMonthlyExpenseSchema, insertFinancialGoalSchema } from "@shared/schema";
 import { setupAuthMiddleware, registerIndependentAuthRoutes, authenticate } from "./auth/independentAuth";
+import { registerAuthRoutes } from "./auth/authRoutes";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAiRoutes } from "./ai/routes";
@@ -25,6 +26,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuthMiddleware(app);
   registerIndependentAuthRoutes(app);
+  registerAuthRoutes(app);
   registerBillingRoutes(app);
   registerChatRoutes(app);
   registerImageRoutes(app);

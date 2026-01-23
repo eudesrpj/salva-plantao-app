@@ -15,6 +15,7 @@ import type { User } from "@shared/schema";
 import { storage } from "../storage";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import cookieParser from "cookie-parser";
 
 // Cookie name for auth token
 const AUTH_COOKIE_NAME = "auth_token";
@@ -202,7 +203,6 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
  */
 export function setupAuthMiddleware(app: Express): void {
   // Parse cookies
-  const cookieParser = require("cookie-parser");
   app.use(cookieParser());
   
   // Trust proxy headers from Replit load balancer
