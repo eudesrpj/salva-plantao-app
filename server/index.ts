@@ -135,5 +135,26 @@ app.use((req, res, next) => {
 
   httpServer.listen(port, host, () => {
     log(`serving on ${host}:${port}`);
+    
+    // Seed database plans AFTER server is listening (non-blocking, won't crash if it fails)
+    setImmediate(async () => {
+      try {
+        const { storage } = await import("./storage");
+        await storage.upsertPlans();
+        log("✓ Default plans seeded successfully", "database");
+      } catch (err) {
+        console.error("[database] Failed to seed plans:", err);
+        // Non-fatal: continue running
+      }
+      
+      try {
+        const { storage } = await import("./storage");
+        await storage.seedBillingPlans();
+        log("✓ Billing plans seeded successfully", "database");
+      } catch (err) {
+        console.error("[database] Failed to seed billing plans:", err);
+        // Non-fatal: continue running
+      }
+    });
   });
 })();

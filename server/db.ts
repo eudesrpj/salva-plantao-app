@@ -21,6 +21,9 @@ function getDatabaseConfig() {
   
   const config: pg.PoolConfig = {
     connectionString: url,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
+    max: 20,
   };
   
   // SSL configuration for Supabase/Render with certificate verification disabled
