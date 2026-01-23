@@ -10,5 +10,30 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Ensure SSL mode is set for Supabase/Render pooler
+function getDatabaseConfig() {
+  let url = process.env.DATABASE_URL;
+  
+  // Add sslmode=require if not already present (for Supabase/Render)
+  if (url && !url.includes("sslmode")) {
+    url += (url.includes("?") ? "&" : "?") + "sslmode=require";
+  }
+  
+  const config: pg.PoolConfig = {
+    connectionString: url,
+  };
+  
+  // SSL configuration for Supabase/Render with certificate verification disabled
+  // (Supabase/Render use valid certificates, but we explicitly disable verification for compatibility)
+  if (url && (url.includes("supabase") || url.includes("pooler"))) {
+    config.ssl = {
+      rejectUnauthorized: false,
+    };
+  }
+  
+  return config;
+}
+
+export const pool = new Pool(getDatabaseConfig());
 export const db = drizzle(pool, { schema });
+

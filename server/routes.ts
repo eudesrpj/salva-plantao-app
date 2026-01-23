@@ -34,9 +34,25 @@ export async function registerRoutes(
   registerNewFeaturesRoutes(app);
   registerUserProfileRoutes(app);
   
-  // Seed default plans on startup
-  await storage.upsertPlans().catch(err => console.error('Failed to seed plans:', err));
-  await storage.seedBillingPlans().catch(err => console.error('Failed to seed billing plans:', err));
+  // Seed default plans in background (after server starts) to avoid blocking startup
+  // This allows the app to boot even if database seeding fails
+  setImmediate(async () => {
+    try {
+      await storage.upsertPlans();
+      console.log("✓ Default plans seeded successfully");
+    } catch (err) {
+      console.error("Failed to seed plans:", err);
+      // Non-fatal: continue running
+    }
+    
+    try {
+      await storage.seedBillingPlans();
+      console.log("✓ Billing plans seeded successfully");
+    } catch (err) {
+      console.error("Failed to seed billing plans:", err);
+      // Non-fatal: continue running
+    }
+  });
 
   const getUserId = (req: any) => req.userId;
   

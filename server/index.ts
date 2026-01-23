@@ -84,6 +84,33 @@ app.use((req, res, next) => {
     });
   });
 
+  // Database health check endpoint (returns 503 if DB unavailable)
+  app.get("/api/health/db", async (_req, res) => {
+    try {
+      const { pool } = await import("./db");
+      const result = await pool.query("SELECT 1 as health");
+      
+      if (result.rows && result.rows[0]?.health === 1) {
+        return res.json({
+          status: "healthy",
+          timestamp: new Date().toISOString(),
+          database: "postgresql",
+        });
+      } else {
+        throw new Error("Unexpected query result");
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error("Database health check failed:", error);
+      return res.status(503).json({
+        status: "unhealthy",
+        timestamp: new Date().toISOString(),
+        error: "Database connection failed",
+        details: error,
+      });
+    }
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
