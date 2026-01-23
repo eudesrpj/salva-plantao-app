@@ -3,18 +3,21 @@ import fs from "fs";
 import path from "path";
 
 export function serveStatic(app: Express) {
-  const distPath = path.join(process.cwd(), "dist");
+  // Vite builds client to dist/public, server is in dist/index.cjs
+  const publicPath = path.join(process.cwd(), "dist", "public");
 
-  if (!fs.existsSync(distPath)) {
+  if (!fs.existsSync(publicPath)) {
     throw new Error(
-      `Could not find the build directory: ${distPath}. Did you run the build?`,
+      `Could not find the build directory: ${publicPath}. Did you run the build?`,
     );
   }
 
-  app.use(express.static(distPath));
+  // Serve static files (CSS, JS, images, etc.)
+  app.use(express.static(publicPath));
 
-  // SPA fallback (não interfere com /api porque isso entra antes)
+  // SPA fallback: any non-API route returns index.html for client-side routing
+  // This must come AFTER API routes are registered (in server/index.ts)
   app.get("*", (_req, res) => {
-    res.sendFile(path.join(distPath, "index.html"));
+    res.sendFile(path.join(publicPath, "index.html"));
   });
 }
