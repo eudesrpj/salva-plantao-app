@@ -35,10 +35,19 @@ const allowlist = [
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
 
-  console.log("building client...");
+  console.log("📦 Building client with Vite...");
+  console.log("   • Compressing images with imagemin");
+  console.log("   • Splitting vendor chunks");
+  console.log("   • Minifying with Terser");
+  
   await viteBuild();
+  console.log("✓ Client build complete\n");
 
-  console.log("building server...");
+  console.log("📦 Building server with esbuild...");
+  console.log("   • Bundling dependencies");
+  console.log("   • Minifying code");
+  console.log("   • Generating CJS module");
+  
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));
   const allDeps = [
     ...Object.keys(pkg.dependencies || {}),
@@ -59,9 +68,12 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+
+  console.log("✓ Server build complete\n");
+  console.log("🎉 Build successful! Ready for deployment on Render");
 }
 
 buildAll().catch((err) => {
-  console.error(err);
+  console.error("❌ Build failed:", err);
   process.exit(1);
 });

@@ -1,8 +1,3 @@
-// Set TLS environment FIRST (can also be set via NODE_TLS_REJECT_UNAUTHORIZED env var)
-if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED && process.env.NODE_ENV !== "production") {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-}
-
 import "dotenv/config";
 
 /*
