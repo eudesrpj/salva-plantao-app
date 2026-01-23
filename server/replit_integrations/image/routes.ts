@@ -4,6 +4,10 @@ import { openai } from "./client";
 export function registerImageRoutes(app: Express): void {
   app.post("/api/generate-image", async (req: Request, res: Response) => {
     try {
+      if (!openai) {
+        return res.status(503).json({ error: "Chat AI temporariamente indisponível" });
+      }
+
       const { prompt, size = "1024x1024" } = req.body;
 
       if (!prompt) {

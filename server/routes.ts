@@ -354,6 +354,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "contentType inválido" });
       }
 
+      // Check if OpenAI API key is available
+      if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+        return res.status(503).json({ message: "Chat AI temporariamente indisponível" });
+      }
+
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
