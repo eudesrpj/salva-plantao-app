@@ -18,6 +18,7 @@ import { registerAiRoutes } from "./ai/routes";
 import { registerBillingRoutes } from "./auth/billingRoutes";
 import { registerNewFeaturesRoutes } from "./routes/newFeaturesRoutes";
 import { registerUserProfileRoutes } from "./routes/userProfileRoutes";
+import { withDbTimeout } from "./utils/timeout";
 import { notifyUser, notifyAllAdmins, broadcastToRoom } from "./websocket";
 
 export async function registerRoutes(
@@ -1254,9 +1255,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
 
   // --- Prescriptions ---
   app.get(api.prescriptions.list.path, authenticate, checkNotBlocked, trackUserActivity, async (req, res) => {
-    const ageGroup = req.query.ageGroup as string | undefined;
-    const items = await storage.getPrescriptions(getUserId(req), ageGroup);
-    res.json(items);
+    try {
+      const ageGroup = req.query.ageGroup as string | undefined;
+      const items = await withDbTimeout(
+        storage.getPrescriptions(getUserId(req), ageGroup),
+        "Get prescriptions"
+      );
+      res.json(items);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to fetch prescriptions";
+      console.error("[prescriptions:list] Error:", message);
+      res.status(503).json({ error: "Service temporarily unavailable", details: message });
+    }
   });
 
   app.get("/api/prescriptions/search", authenticate, checkNotBlocked, async (req, res) => {
@@ -4680,15 +4690,18 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     res.json({ success: true });
   });
 
-  // --- Seed Data ---
-  await seedDatabase();
-
   return httpServer;
 }
 
-async function seedDatabase() {
-  const existing = await storage.getPrescriptions();
-  if (existing.length === 0) {
+/**
+ * Seed database with default data.
+ * Called AFTER server.listen() to avoid blocking startup.
+ * Non-blocking: errors are logged but don't crash the server.
+ */
+export async function seedDatabase() {
+  try {
+    const existing = await storage.getPrescriptions();
+    if (existing.length === 0) {
     await storage.createPrescription({
       title: "Dipirona",
       medication: "Dipirona",
@@ -4754,5 +4767,9 @@ async function seedDatabase() {
     await storage.setAdminSetting("payment_instructions", "Após o pagamento, envie o comprovante via WhatsApp para liberação imediata.");
     await storage.setAdminSetting("subscription_price", "29,90");
     await storage.setAdminSetting("ai_prompt", "Você é um assistente médico especializado. Responda de forma clara e objetiva, sempre recomendando buscar um profissional de saúde para diagnósticos e tratamentos.");
+    }
+  } catch (err) {
+    console.error("[seed] Database seeding failed:", err instanceof Error ? err.message : err);
+    // Non-fatal: log error but don't crash
   }
 }

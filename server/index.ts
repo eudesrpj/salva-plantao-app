@@ -7,7 +7,7 @@ Contato oficial: suporte@appsalvaplantao.com
 */
 
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes, seedDatabase } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupWebSocket } from "./websocket";
@@ -136,5 +136,11 @@ app.use((req, res, next) => {
   httpServer.listen(port, host, () => {
     log(`✓ Server listening on ${host}:${port}`);
     log(`📘 Health endpoint available at http://${host}:${port}/health`);
+    
+    // Seed database in background AFTER server is listening
+    // This prevents startup blocking if DB is slow or down
+    setImmediate(async () => {
+      await seedDatabase();
+    });
   });
 })();
