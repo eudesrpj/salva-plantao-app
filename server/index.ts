@@ -1,3 +1,8 @@
+// Set TLS environment FIRST (can also be set via NODE_TLS_REJECT_UNAUTHORIZED env var)
+if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED && process.env.NODE_ENV !== "production") {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
 import "dotenv/config";
 
 /*
@@ -134,27 +139,34 @@ app.use((req, res, next) => {
   const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost";
 
   httpServer.listen(port, host, () => {
-    log(`serving on ${host}:${port}`);
+    log(`✓ Server listening on ${host}:${port}`);
     
     // Seed database plans AFTER server is listening (non-blocking, won't crash if it fails)
-    setImmediate(async () => {
-      try {
-        const { storage } = await import("./storage");
-        await storage.upsertPlans();
-        log("✓ Default plans seeded successfully", "database");
-      } catch (err) {
-        console.error("[database] Failed to seed plans:", err);
-        // Non-fatal: continue running
-      }
-      
-      try {
-        const { storage } = await import("./storage");
-        await storage.seedBillingPlans();
-        log("✓ Billing plans seeded successfully", "database");
-      } catch (err) {
-        console.error("[database] Failed to seed billing plans:", err);
-        // Non-fatal: continue running
-      }
-    });
+    // Can be skipped with SKIP_STARTUP_TASKS=true env var
+    const skipStartupTasks = process.env.SKIP_STARTUP_TASKS === "true";
+    
+    if (skipStartupTasks) {
+      log("⊘ Startup tasks skipped (SKIP_STARTUP_TASKS=true)", "database");
+    } else {
+      setImmediate(async () => {
+        try {
+          const { storage } = await import("./storage");
+          await storage.upsertPlans();
+          log("✓ Default plans seeded successfully", "database");
+        } catch (err) {
+          console.error("[database] Failed to seed plans:", err);
+          // Non-fatal: continue running
+        }
+        
+        try {
+          const { storage } = await import("./storage");
+          await storage.seedBillingPlans();
+          log("✓ Billing plans seeded successfully", "database");
+        } catch (err) {
+          console.error("[database] Failed to seed billing plans:", err);
+          // Non-fatal: continue running
+        }
+      });
+    }
   });
 })();

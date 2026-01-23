@@ -42,14 +42,30 @@ export async function asaasRequest<T = any>(endpoint: string, options: RequestIn
     throw new Error('ASAAS_API_KEY not configured');
   }
 
-  const response = await fetch(`${ASAAS_API_URL}${endpoint}`, {
+  // Use custom fetch with SSL options to handle self-signed certificates and network issues
+  const fetchOptions: RequestInit & { agent?: any } = {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       'access_token': ASAAS_API_KEY,
       ...options.headers,
     },
-  });
+  };
+
+  // For production environments, allow self-signed certificates (Render, etc.)
+  if (process.env.NODE_ENV === 'production') {
+    try {
+      const https = await import('https');
+      const agent = new https.Agent({
+        rejectUnauthorized: false,
+      });
+      (fetchOptions as any).agent = agent;
+    } catch (err) {
+      console.warn('Could not configure HTTPS agent for ASAAS');
+    }
+  }
+
+  const response = await fetch(`${ASAAS_API_URL}${endpoint}`, fetchOptions);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
