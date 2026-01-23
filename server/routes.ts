@@ -3148,7 +3148,16 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       }
 
       // Get the app domain for success/cancel URLs
-      const appDomain = process.env.REPLIT_DOMAINS?.split(',')[0] || process.env.REPLIT_DEV_DOMAIN || 'localhost:5000';
+      // Try Replit domain first, then use request headers (for Render/production)
+      let appDomain = process.env.REPLIT_DOMAINS?.split(',')[0] || process.env.REPLIT_DEV_DOMAIN;
+      
+      if (!appDomain) {
+        // Fallback: use request headers for production environments like Render
+        const protocol = req.headers["x-forwarded-proto"] || (process.env.NODE_ENV === "production" ? "https" : "http");
+        const host = req.headers.host || `localhost:${process.env.PORT || 5000}`;
+        appDomain = host;
+      }
+
       const protocol = appDomain.includes('localhost') ? 'http' : 'https';
       const baseUrl = `${protocol}://${appDomain}`;
 
@@ -3156,7 +3165,7 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
         name: `Assinatura Salva Plantão - ${plan.name}`,
         description: `Assinatura ${plan.name} do Salva Plantão`,
         value: finalValue,
-        billingType: 'UNDEFINED', // Allow user to choose PIX or Card
+        billingType: 'UNDEFINED',
         chargeType: 'DETACHED',
         dueDateLimitDays: 7,
         notificationEnabled: true,

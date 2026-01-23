@@ -21,9 +21,22 @@ import cookieParser from "cookie-parser";
 const AUTH_COOKIE_NAME = "auth_token";
 const REFRESH_COOKIE_NAME = "refresh_token";
 
-// Secrets - get from env or use sensible defaults for development
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-key-change-in-production";
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "dev-refresh-secret-change-in-production";
+// Secrets - MUST be set in production via environment variables
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+
+if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "JWT_SECRET and JWT_REFRESH_SECRET must be set in production environment. Configure them in Render environment variables."
+    );
+  }
+  // In development, log a warning but allow with placeholder values
+  console.warn(
+    "⚠️  JWT_SECRET and JWT_REFRESH_SECRET not set. Using temporary development values. Set them in .env for production."
+  );
+}
+
 const JWT_EXPIRY = "15m";
 const REFRESH_JWT_EXPIRY = "7d";
 
@@ -43,6 +56,9 @@ declare global {
  * Create JWT token
  */
 export function createToken(userId: string, isRefresh = false): string {
+  if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+    throw new Error("JWT secrets not configured. Check environment variables.");
+  }
   const secret = isRefresh ? JWT_REFRESH_SECRET : JWT_SECRET;
   const expiresIn = isRefresh ? REFRESH_JWT_EXPIRY : JWT_EXPIRY;
   
@@ -58,6 +74,9 @@ export function createToken(userId: string, isRefresh = false): string {
  */
 export function verifyToken(token: string, isRefresh = false): { userId: string } | null {
   try {
+    if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+      throw new Error("JWT secrets not configured. Check environment variables.");
+    }
     const secret = isRefresh ? JWT_REFRESH_SECRET : JWT_SECRET;
     const decoded = jwt.verify(token, secret) as { userId: string; isRefresh: boolean };
     

@@ -103,8 +103,10 @@ app.use((req, res, next) => {
   // Use PORT from environment or fallback to 5000
   const port = parseInt(process.env.PORT || "5000", 10);
 
-  // Windows-friendly listen (no reusePort / no 0.0.0.0)
-  httpServer.listen(port, "localhost", () => {
-    log(`serving on port ${port}`);
+  // In production (Render), listen on all interfaces; in development, use localhost
+  const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost";
+
+  httpServer.listen(port, host, () => {
+    log(`serving on ${host}:${port}`);
   });
 })();
