@@ -20,7 +20,7 @@ function getDatabaseConfig() {
   let url = process.env.DATABASE_URL;
 
   if (!url) {
-    throw new Error("DATABASE_URL environment variable is not set");
+    throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");
   }
 
   // Add sslmode=require if not already present
@@ -71,14 +71,9 @@ function getDatabaseConfig() {
 let _pool: pg.Pool | null = null;
 let _db: ReturnType<typeof drizzle> | null = null;
 
-function initializePool() {
+function initializePool(): pg.Pool {
   if (!_pool) {
-    if (!process.env.DATABASE_URL) {
-      throw new Error(
-        "DATABASE_URL must be set. Did you forget to provision a database?",
-      );
-    }
-
+    // getDatabaseConfig() will check for DATABASE_URL and throw if not set
     _pool = new Pool(getDatabaseConfig());
 
     /**
@@ -99,7 +94,7 @@ function initializePool() {
   return _pool;
 }
 
-function initializeDb() {
+function initializeDb(): ReturnType<typeof drizzle> {
   if (!_db) {
     _db = drizzle(initializePool(), { schema });
   }
@@ -107,14 +102,18 @@ function initializeDb() {
 }
 
 export const pool = new Proxy({} as pg.Pool, {
-  get(_target, prop: keyof pg.Pool) {
-    return initializePool()[prop];
+  get(_target, prop: string | symbol) {
+    const poolInstance = initializePool();
+    const value = (poolInstance as any)[prop];
+    return typeof value === 'function' ? value.bind(poolInstance) : value;
   }
 });
 
 export const db = new Proxy({} as ReturnType<typeof drizzle>, {
-  get(_target, prop: keyof ReturnType<typeof drizzle>) {
-    return initializeDb()[prop];
+  get(_target, prop: string | symbol) {
+    const dbInstance = initializeDb();
+    const value = (dbInstance as any)[prop];
+    return typeof value === 'function' ? value.bind(dbInstance) : value;
   }
 });
 
