@@ -118,9 +118,7 @@ async function findOrCreateUserByEmail(email: string) {
   }
   
   const newUser = await storage.createUser({
-    email,
-    authProvider: "email",
-    status: "pending"
+    email
   });
   
   await storage.createAuthIdentity({
