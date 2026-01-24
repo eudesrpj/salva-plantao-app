@@ -4,12 +4,6 @@ import * as schema from "@shared/schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
-}
-
 /**
  * Database Configuration for Supabase Pooler + PostgreSQL
  * 
@@ -73,22 +67,54 @@ function getDatabaseConfig() {
   return config;
 }
 
-export const pool = new Pool(getDatabaseConfig());
+// Lazy initialization - only create pool when first accessed
+let _pool: pg.Pool | null = null;
+let _db: ReturnType<typeof drizzle> | null = null;
 
-/**
- * Error handlers for pool
- */
-pool.on("error", (err) => {
-  console.error("[db:pool] Unexpected error on idle client:", err);
-  // Don't exit - allow graceful error handling in routes
-});
+function initializePool() {
+  if (!_pool) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error(
+        "DATABASE_URL must be set. Did you forget to provision a database?",
+      );
+    }
 
-pool.on("connect", () => {
-  // Log connection events in development
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[db:pool] New connection established");
+    _pool = new Pool(getDatabaseConfig());
+
+    /**
+     * Error handlers for pool
+     */
+    _pool.on("error", (err) => {
+      console.error("[db:pool] Unexpected error on idle client:", err);
+      // Don't exit - allow graceful error handling in routes
+    });
+
+    _pool.on("connect", () => {
+      // Log connection events in development
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[db:pool] New connection established");
+      }
+    });
+  }
+  return _pool;
+}
+
+function initializeDb() {
+  if (!_db) {
+    _db = drizzle(initializePool(), { schema });
+  }
+  return _db;
+}
+
+export const pool = new Proxy({} as pg.Pool, {
+  get(_target, prop) {
+    return (initializePool() as any)[prop];
   }
 });
 
-export const db = drizzle(pool, { schema });
+export const db = new Proxy({} as ReturnType<typeof drizzle>, {
+  get(_target, prop) {
+    return (initializeDb() as any)[prop];
+  }
+});
 

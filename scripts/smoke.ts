@@ -108,6 +108,9 @@ async function main() {
       ...process.env,
       NODE_ENV: "production",
       PORT: PORT.toString(),
+      // Provide dummy JWT secrets for smoke test
+      JWT_SECRET: "test-jwt-secret-for-smoke-test",
+      JWT_REFRESH_SECRET: "test-jwt-refresh-secret-for-smoke-test",
       // DATABASE_URL should be set by .env if available
     },
     stdio: ["ignore", "pipe", "pipe"],
