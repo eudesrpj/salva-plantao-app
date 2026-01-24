@@ -129,7 +129,7 @@ export function registerBillingRoutes(app: Express) {
       });
 
       const baseUrl = getPublishedDomain(req);
-      const user = await authStorage.getUser(userId);
+      const user = await storage.getUser(userId);
 
       const paymentLink = await createAsaasPaymentLink({
         name: `Salva Plantão - ${plan.name}`,
@@ -165,7 +165,7 @@ export function registerBillingRoutes(app: Express) {
         return res.status(401).json({ message: "Não autenticado" });
       }
 
-      const user = await authStorage.getUser(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "Usuário não encontrado" });
       }
@@ -260,7 +260,7 @@ export function registerBillingRoutes(app: Express) {
       const plan = await storage.getBillingPlan(order.planCode);
       if (plan) {
         await storage.activateUserEntitlement(userId, order.planCode, plan.durationDays, orderId);
-        await authStorage.updateUserStatus(userId, "active");
+        await storage.updateUserStatus(userId, "active");
       }
 
       if (order.couponCode) {
