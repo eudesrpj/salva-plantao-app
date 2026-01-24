@@ -3745,7 +3745,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserChatTerms(userId: string): Promise<void> {
-    await db.update(users).set({ acceptedChatTermsAt: new Date() }).where(eq(users.id, userId));
+    await db.update(users).set({ chatTermsAcceptedAt: new Date() }).where(eq(users.id, userId));
   }
 }
 

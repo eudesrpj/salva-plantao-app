@@ -99,11 +99,11 @@ async function findOrCreateUserByEmail(email: string) {
   const identity = await storage.getAuthIdentityByProvider("email", email);
   
   if (identity) {
-    const user = await authStorage.getUser(identity.userId);
+    const user = await storage.getUser(identity.userId);
     if (user) return user;
   }
   
-  const existingUser = await authStorage.getUserByEmail(email);
+  const existingUser = await storage.getUserByEmail(email);
   if (existingUser) {
     const existingIdentity = await storage.getAuthIdentityByProvider("email", email);
     if (!existingIdentity) {
@@ -117,7 +117,7 @@ async function findOrCreateUserByEmail(email: string) {
     return existingUser;
   }
   
-  const newUser = await authStorage.upsertUser({
+  const newUser = await storage.createUser({
     email,
     authProvider: "email",
     status: "pending"
