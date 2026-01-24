@@ -1,0 +1,49 @@
+# Salva Plantão - Replit Configuration
+# This file tells Replit how to run the application
+
+# Main run command - starts the development server with HMR
+run = "npm run dev"
+
+# For production deployment on Replit, use:
+# run = "npm run build && npm run start"
+
+# Entry point for the application
+entrypoint = "server/index.ts"
+
+# Files to hide in the Replit file tree
+hidden = [".config", "node_modules", "dist", ".git", "*.log"]
+
+[nix]
+channel = "stable-24_05"
+
+# Install Node.js v20
+[nix.pkgs]
+pkgs = ["nodejs-20_x"]
+
+[deployment]
+# Build command - compile TypeScript + bundle client
+build = ["sh", "-c", "npm ci --prefer-offline --no-audit && npm run build"]
+# Run command - start production server
+run = ["npm", "run", "start"]
+
+# Environment variables configuration
+[env]
+NODE_ENV = "development"
+# PORT is automatically set by Replit - no need to configure
+
+# Language server for TypeScript
+[languages.typescript]
+pattern = "**/{*.ts,*.tsx}"
+syntax = "typescript"
+
+[languages.typescript.languageServer]
+start = "typescript-language-server --stdio"
+
+# Packager configuration for npm
+[packager]
+language = "nodejs"
+
+[packager.features]
+enabledForHosting = false
+packageSearch = true
+guessImports = true
