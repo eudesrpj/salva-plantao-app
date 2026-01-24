@@ -108,7 +108,9 @@ async function main() {
       ...process.env,
       NODE_ENV: "production",
       PORT: PORT.toString(),
-      // DATABASE_URL should be set by .env if available
+      // Provide a dummy DATABASE_URL for smoke testing
+      // The /api/health/db endpoint will return 503 if DB is unavailable
+      DATABASE_URL: process.env.DATABASE_URL || "postgresql://localhost:5432/dummy",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
