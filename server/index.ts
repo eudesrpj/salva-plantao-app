@@ -197,6 +197,8 @@ app.use((req, res, next) => {
     
     // Seed database in background AFTER server is listening
     // This prevents startup blocking if DB is slow or down
+    // Non-fatal: Seeding may fail if data already exists or if DB is temporarily unavailable
+    // The app can still run without seed data (admin can add it manually later)
     setImmediate(async () => {
       try {
         await seedDatabase();
@@ -204,6 +206,10 @@ app.use((req, res, next) => {
       } catch (error) {
         logger.error("Database seeding failed", error);
         // Non-fatal: log only, don't crash
+        // Seeding might fail if:
+        // - Data already exists (normal in production)
+        // - DB is temporarily slow/unavailable (will self-heal)
+        // - Some seed data has validation issues (non-critical)
       }
     });
   });
