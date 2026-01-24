@@ -15,6 +15,10 @@ import { setupWebSocket } from "./websocket";
 const app = express();
 const httpServer = createServer(app);
 
+// Trust proxy - required for Replit and other reverse proxies
+// This allows Express to correctly read X-Forwarded-* headers
+app.set('trust proxy', 1);
+
 // Setup WebSocket server for real-time notifications
 setupWebSocket(httpServer);
 
@@ -33,6 +37,34 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// CORS configuration for Replit compatibility
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Allow Replit domains and localhost
+  if (origin) {
+    if (
+      origin.includes('.replit.app') ||
+      origin.includes('.repl.co') ||
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1')
+    ) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  
+  next();
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

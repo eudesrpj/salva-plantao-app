@@ -99,7 +99,9 @@ export function setAuthCookies(res: Response, userId: string): void {
   const refreshToken = createToken(userId, true);
   
   const isProduction = process.env.NODE_ENV === "production";
-  const sameSite = isProduction ? "strict" : "lax";
+  // Use "lax" for Replit compatibility (Replit proxies can cause issues with "strict")
+  const sameSite = "lax";
+  // Secure cookies in production (HTTPS)
   const secure = isProduction;
   
   res.cookie(AUTH_COOKIE_NAME, token, {
