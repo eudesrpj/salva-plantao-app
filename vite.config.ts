@@ -88,12 +88,15 @@ export default defineConfig({
         // Otimizar nomes de chunks
         chunkFileNames: (chunkInfo) => {
           const facadeModuleId = chunkInfo.facadeModuleId
-            ? chunkInfo.facadeModuleId.split("/").pop().split(".")[0]
+            ? chunkInfo.facadeModuleId.split("/").pop()?.split(".")[0]
             : "chunk";
           return `chunks/[name]-[hash].js`;
         },
         entryFileNames: "js/[name]-[hash].js",
         assetFileNames: (assetInfo) => {
+          if (!assetInfo.name) {
+            return `[name]-[hash][extname]`;
+          }
           const info = assetInfo.name.split(".");
           const ext = info[info.length - 1];
           if (/png|jpe?g|gif|svg|webp|ico/i.test(ext)) {
