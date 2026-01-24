@@ -107,14 +107,14 @@ function initializeDb() {
 }
 
 export const pool = new Proxy({} as pg.Pool, {
-  get(_target, prop) {
-    return (initializePool() as any)[prop];
+  get(_target, prop: keyof pg.Pool) {
+    return initializePool()[prop];
   }
 });
 
 export const db = new Proxy({} as ReturnType<typeof drizzle>, {
-  get(_target, prop) {
-    return (initializeDb() as any)[prop];
+  get(_target, prop: keyof ReturnType<typeof drizzle>) {
+    return initializeDb()[prop];
   }
 });
 
