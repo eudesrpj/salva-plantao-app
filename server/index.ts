@@ -42,16 +42,24 @@ app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Allow Replit domains and localhost
+  // Allow Replit domains and localhost with secure validation
   if (origin) {
-    if (
-      origin.includes('.replit.app') ||
-      origin.includes('.repl.co') ||
-      origin.includes('localhost') ||
-      origin.includes('127.0.0.1')
-    ) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    try {
+      const originUrl = new URL(origin);
+      const hostname = originUrl.hostname;
+      
+      // Check if hostname ends with allowed domains or is localhost
+      if (
+        hostname.endsWith('.replit.app') ||
+        hostname.endsWith('.repl.co') ||
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1'
+      ) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+    } catch {
+      // Invalid origin URL, skip CORS headers
     }
   }
   

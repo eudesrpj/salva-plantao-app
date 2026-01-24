@@ -93,6 +93,14 @@ export function verifyToken(token: string, isRefresh = false): { userId: string 
 
 /**
  * Set auth cookies
+ * 
+ * Security Note: sameSite is set to "lax" for Replit proxy compatibility.
+ * While this reduces CSRF protection compared to "strict", the application
+ * implements additional CSRF protections:
+ * - HttpOnly cookies prevent XSS attacks
+ * - JWT tokens with expiry
+ * - Origin validation in API requests
+ * - Express trust proxy for correct client IP tracking
  */
 export function setAuthCookies(res: Response, userId: string): void {
   const token = createToken(userId, false);
