@@ -47,7 +47,7 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ message: result.error });
       }
       
-      const user = await authStorage.getUser(result.userId!);
+      const user = await storage.getUser(result.userId!);
       
       if (!user) {
         return res.status(500).json({ message: "Erro ao buscar usuário" });
@@ -96,7 +96,7 @@ export function registerAuthRoutes(app: Express) {
         return res.redirect("/login?error=expired_token");
       }
       
-      const user = await authStorage.getUser(result.userId!);
+      const user = await storage.getUser(result.userId!);
       
       if (!user) {
         return res.redirect("/login?error=user_not_found");
