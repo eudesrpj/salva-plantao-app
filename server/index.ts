@@ -11,6 +11,8 @@ import { registerRoutes, seedDatabase } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupWebSocket } from "./websocket";
+import { validateEnv } from "./config/env";
+import { logger, simpleLog } from "./config/logger";
 
 const app = express();
 const httpServer = createServer(app);
@@ -34,16 +36,8 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
+// Re-export simple log for backwards compatibility
+export const log = simpleLog;
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -72,13 +66,23 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Validate environment variables at startup
+  try {
+    validateEnv();
+  } catch (error) {
+    logger.error("Failed to validate environment variables", error);
+    process.exit(1);
+  }
+
   await registerRoutes(httpServer, app);
 
   // Health check endpoint
   app.get("/health", (_req, res) => {
+    const version = process.env.npm_package_version || "1.0.0";
     res.json({
       status: "ok",
       timestamp: new Date().toISOString(),
+      version,
       auth: "independent",
       node: process.version,
     });
@@ -111,12 +115,63 @@ app.use((req, res, next) => {
     }
   });
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  // Global error handler - must be last middleware
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+    
+    // Log error with context
+    logger.error("Request error", err, {
+      method: req.method,
+      path: req.path,
+      status,
+      userAgent: req.get("user-agent"),
+    });
 
-    res.status(status).json({ message });
-    throw err;
+    // Send appropriate response based on error type
+    if (status === 401) {
+      return res.status(401).json({ 
+        message: "Não autenticado. Por favor, faça login novamente.",
+        code: "UNAUTHORIZED"
+      });
+    }
+    
+    if (status === 403) {
+      return res.status(403).json({ 
+        message: message || "Acesso negado. Você não tem permissão para acessar este recurso.",
+        code: "FORBIDDEN"
+      });
+    }
+    
+    if (status === 404) {
+      return res.status(404).json({ 
+        message: message || "Recurso não encontrado.",
+        code: "NOT_FOUND"
+      });
+    }
+    
+    if (status >= 400 && status < 500) {
+      // Client error - send message to client
+      return res.status(status).json({ 
+        message,
+        code: "CLIENT_ERROR"
+      });
+    }
+
+    // Server error - hide details in production
+    if (process.env.NODE_ENV === "production") {
+      return res.status(500).json({ 
+        message: "Erro interno do servidor. Por favor, tente novamente mais tarde.",
+        code: "INTERNAL_ERROR"
+      });
+    } else {
+      // Development - show details
+      return res.status(status).json({ 
+        message,
+        code: "INTERNAL_ERROR",
+        stack: err.stack,
+      });
+    }
   });
 
   // Setup Vite only in development
@@ -134,13 +189,31 @@ app.use((req, res, next) => {
   const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost";
 
   httpServer.listen(port, host, () => {
+    const version = process.env.npm_package_version || "1.0.0";
     log(`✓ Server listening on ${host}:${port}`);
     log(`📘 Health endpoint available at http://${host}:${port}/health`);
+    log(`📦 Version: ${version}`);
+    logger.info("Server started successfully", { port, host, version, nodeVersion: process.version });
     
     // Seed database in background AFTER server is listening
     // This prevents startup blocking if DB is slow or down
+    // Non-fatal: Seeding may fail if data already exists or if DB is temporarily unavailable
+    // The app can still run without seed data (admin can add it manually later)
     setImmediate(async () => {
-      await seedDatabase();
+      try {
+        await seedDatabase();
+        logger.info("Database seeding completed");
+      } catch (error) {
+        logger.error("Database seeding failed", error);
+        // Non-fatal: log only, don't crash
+        // Seeding might fail if:
+        // - Data already exists (normal in production)
+        // - DB is temporarily slow/unavailable (will self-heal)
+        // - Some seed data has validation issues (non-critical)
+      }
     });
   });
-})();
+})().catch((error) => {
+  logger.error("Failed to start server", error);
+  process.exit(1);
+});

@@ -21,6 +21,7 @@ import { registerNewFeaturesRoutes } from "./routes/newFeaturesRoutes";
 import { registerUserProfileRoutes } from "./routes/userProfileRoutes";
 import { withDbTimeout } from "./utils/timeout";
 import { notifyUser, notifyAllAdmins, broadcastToRoom } from "./websocket";
+import { logger } from "./config/logger";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -2920,13 +2921,24 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
     try {
       const { event, payment: paymentData } = req.body;
       
+      // Log webhook receipt (structured logging)
+      logger.info("ASAAS webhook received", {
+        event,
+        paymentId: paymentData?.id,
+        paymentStatus: paymentData?.status,
+      });
+      
       if (!paymentData?.id) {
+        logger.warn("Invalid ASAAS webhook data - missing payment ID");
         return res.status(400).json({ message: 'Invalid webhook data' });
       }
 
       const existingPayment = await storage.getPaymentByProviderId(paymentData.id);
       if (!existingPayment) {
-        console.log('Payment not found for webhook:', paymentData.id);
+        logger.info("Payment not found for ASAAS webhook", { 
+          paymentId: paymentData.id,
+          event 
+        });
         return res.status(200).json({ message: 'Payment not found, ignoring' });
       }
 
@@ -2946,7 +2958,16 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
         case 'PAYMENT_UPDATED':
           newStatus = paymentData.status?.toLowerCase() || existingPayment.status;
           break;
+        default:
+          logger.warn("Unknown ASAAS webhook event", { event });
       }
+
+      logger.info("Updating payment status", {
+        paymentId: existingPayment.id,
+        oldStatus: existingPayment.status,
+        newStatus,
+        event,
+      });
 
       await storage.updatePayment(existingPayment.id, {
         status: newStatus,
@@ -2956,6 +2977,12 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
       if (newStatus === 'paid' && existingPayment.subscriptionId) {
         const subscription = await storage.getSubscription(existingPayment.subscriptionId);
         if (subscription) {
+          logger.info("Activating subscription", {
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            planId: subscription.planId,
+          });
+
           await storage.updateSubscription(subscription.id, {
             status: 'active',
             lastPaymentStatus: 'paid'
@@ -2967,11 +2994,38 @@ IMPORTANTE: Este é um RASCUNHO que será revisado por um médico antes de publi
             message: 'Sua assinatura foi ativada com sucesso!' 
           });
         }
+      } else if (newStatus === 'overdue' && existingPayment.subscriptionId) {
+        const subscription = await storage.getSubscription(existingPayment.subscriptionId);
+        if (subscription) {
+          logger.warn("Payment overdue, updating subscription status", {
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+          });
+
+          await storage.updateSubscription(subscription.id, {
+            status: 'past_due',
+            lastPaymentStatus: 'overdue'
+          });
+          notifyUser(subscription.userId, { 
+            type: 'payment_overdue', 
+            title: 'Pagamento Atrasado',
+            message: 'Seu pagamento está atrasado. Por favor, regularize sua situação.' 
+          });
+        }
       }
+
+      logger.info("ASAAS webhook processed successfully", { 
+        event, 
+        paymentId: paymentData.id,
+        newStatus 
+      });
 
       res.status(200).json({ received: true });
     } catch (error: any) {
-      console.error('Webhook error:', error);
+      logger.error('ASAAS webhook error', error, {
+        event: req.body?.event,
+        paymentId: req.body?.payment?.id,
+      });
       res.status(500).json({ message: error.message });
     }
   });
