@@ -44,17 +44,24 @@ async function checkDatabase() {
   console.log("📋 Step 2: Parsing connection details");
   try {
     const url = new URL(databaseUrl);
-    console.log(`   Host: ${url.hostname}`);
+    const hostname = url.hostname;
+    
+    console.log(`   Host: ${hostname}`);
     console.log(`   Port: ${url.port || '5432'}`);
     console.log(`   Database: ${url.pathname.slice(1).split('?')[0]}`);
     console.log(`   SSL Mode: ${url.searchParams.get('sslmode') || 'not specified'}`);
     
-    // Detect provider
+    // Detect provider - check if hostname ends with known provider domains
     let provider = "Unknown";
-    if (url.hostname.includes('supabase.com')) provider = "Supabase";
-    else if (url.hostname.includes('neon.tech')) provider = "Neon";
-    else if (url.hostname.includes('render.com')) provider = "Render";
-    else if (url.hostname.includes('replit')) provider = "Replit DB";
+    if (hostname.endsWith('.supabase.com') || hostname === 'supabase.com') {
+      provider = "Supabase";
+    } else if (hostname.endsWith('.neon.tech') || hostname === 'neon.tech') {
+      provider = "Neon";
+    } else if (hostname.endsWith('.render.com') || hostname === 'render.com') {
+      provider = "Render";
+    } else if (hostname.includes('replit')) {
+      provider = "Replit DB";
+    }
     
     console.log(`   Provider: ${provider}\n`);
   } catch (error) {
