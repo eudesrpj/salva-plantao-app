@@ -38,11 +38,11 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-// CORS configuration for Replit compatibility
+// CORS configuration for production and development
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Allow Replit domains and localhost with secure validation
+  // Allow production domain, Replit domains and localhost with secure validation
   if (origin) {
     try {
       const originUrl = new URL(origin);
@@ -50,6 +50,8 @@ app.use((req, res, next) => {
       
       // Check if hostname ends with allowed domains or is localhost
       if (
+        hostname === 'appsalvaplantao.com' ||
+        hostname.endsWith('.appsalvaplantao.com') ||
         hostname.endsWith('.replit.app') ||
         hostname.endsWith('.repl.co') ||
         hostname === 'localhost' ||
