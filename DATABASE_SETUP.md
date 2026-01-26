@@ -625,7 +625,7 @@ curl -X POST http://localhost:5000/api/login \
 
 ## 🔄 Changelog
 
-### v1.0.0 (2024-01-26)
+### v1.0.0 (2026-01-26)
 - ✅ Documentação inicial completa
 - ✅ Scripts de verificação e diagnóstico
 - ✅ Suporte a múltiplos provedores
