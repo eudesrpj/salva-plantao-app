@@ -92,7 +92,7 @@ export default function AtendimentoHub() {
 
         {/* Featured - Emergency */}
         <div className="mb-8">
-          <Link href="/emergency">
+          <Link href="/">
             <a>
               <Card className="border-2 border-red-300 bg-gradient-to-r from-red-50 to-red-100 hover:shadow-lg transition-shadow cursor-pointer">
                 <CardContent className="p-6 flex items-center gap-4">
