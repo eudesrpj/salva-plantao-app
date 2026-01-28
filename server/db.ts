@@ -66,9 +66,12 @@ function getDatabaseConfig() {
    */
   // Force rejectUnauthorized: false for Render compatibility
   // This prevents "SELF_SIGNED_CERT_IN_CHAIN" errors while still using encrypted connections (sslmode=require)
-  config.ssl = {
-    rejectUnauthorized: false,
-  };
+  // For local development with sslmode=disable, don't set SSL config
+  if (!url.includes("sslmode=disable")) {
+    config.ssl = {
+      rejectUnauthorized: false,
+    };
+  }
 
   return config;
 }

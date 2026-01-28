@@ -21,6 +21,7 @@ export default function Handovers() {
     
     try {
       await create.mutateAsync({
+        userId: "", // Will be set by backend from session
         patientName: formData.get("patientName") as string,
         age: formData.get("age") as string,
         diagnosis: formData.get("diagnosis") as string,

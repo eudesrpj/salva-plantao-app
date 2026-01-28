@@ -150,7 +150,7 @@ export default function Notes() {
               <Card key={task.id} className="p-4" data-testid={`card-task-${task.id}`}>
                 <div className="flex items-start gap-3">
                   <Checkbox 
-                    checked={task.isCompleted}
+                    checked={task.isCompleted ?? false}
                     onCheckedChange={() => toggleTask.mutate(task.id)}
                     data-testid={`checkbox-task-complete-${task.id}`}
                   />
@@ -209,7 +209,7 @@ export default function Notes() {
                 <Card key={task.id} className="p-4 opacity-60" data-testid={`card-task-completed-${task.id}`}>
                   <div className="flex items-start gap-3">
                     <Checkbox 
-                      checked={task.isCompleted}
+                      checked={task.isCompleted ?? false}
                       onCheckedChange={() => toggleTask.mutate(task.id)}
                       data-testid={`checkbox-task-uncomplete-${task.id}`}
                     />

@@ -61,6 +61,11 @@ import AtendimentoHub from "@/pages/AtendimentoHub";
 import FerramentasHub from "@/pages/FerramentasHub";
 import FinanceiroHub from "@/pages/FinanceiroHub";
 import PerfilHub from "@/pages/PerfilHub";
+import IRPFCalculator from "@/pages/IRPFCalculator";
+import Calculators from "@/pages/Calculators";
+import FerramentasHub from "@/pages/FerramentasHub";
+import FinanceiroHub from "@/pages/FinanceiroHub";
+import PerfilHub from "@/pages/PerfilHub";
 import { BottomNav } from "@/components/BottomNav";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -217,6 +222,10 @@ function Router() {
 
       <Route path="/donate">
         <ProtectedRoute component={Donate} />
+      </Route>
+
+      <Route path="/calculators">
+        <ProtectedRoute component={Calculators} />
       </Route>
 
       <Route path="/drug-interactions">

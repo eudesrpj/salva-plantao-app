@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { requestEmailAuth, verifyEmailCode, verifyMagicLink, deleteUserAccount } from "./authService";
-// Removed: replit_integrations/auth/storage - using only independent storage
+import { authStorage } from "../replit_integrations/auth/storage";
 
 export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/email/request", async (req, res) => {
