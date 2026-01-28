@@ -16,12 +16,10 @@ import path from "path";
 config({ path: path.resolve(process.cwd(), ".env") });
 
 // ============================================
-// Importar storage
+// Importar storage e pool
 // ============================================
-const { db, pool } = await import("./server/db.js");
-const { Storage } = await import("./server/storage.js");
-
-const storage = new Storage(db);
+const { storage } = await import("../server/storage.js");
+const { pool } = await import("../server/db.js");
 
 async function seed() {
   console.log("[seed] Starting database seeding...");

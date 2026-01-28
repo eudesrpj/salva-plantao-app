@@ -33,6 +33,20 @@ import {
   interconsultMessages
 } from './schema';
 
+// Re-export types for use in client
+export type Note = typeof notes.$inferSelect;
+export type NoteInput = z.infer<typeof insertNoteSchema>;
+export type Shift = typeof shifts.$inferSelect;
+export type ShiftInput = z.infer<typeof insertShiftSchema>;
+export type Prescription = typeof prescriptions.$inferSelect;
+export type PrescriptionInput = z.infer<typeof insertPrescriptionSchema>;
+export type Checklist = typeof checklists.$inferSelect;
+export type ChecklistInput = z.infer<typeof insertChecklistSchema>;
+export type LibraryCategory = typeof libraryCategories.$inferSelect;
+export type LibraryItem = typeof libraryItems.$inferSelect;
+export type Handover = typeof handovers.$inferSelect;
+export type Goal = typeof goals.$inferSelect;
+
 export const errorSchemas = {
   validation: z.object({
     message: z.string(),

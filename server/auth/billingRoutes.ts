@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-// Removed: replit_integrations/auth/storage - use independent auth only
+import { authStorage } from "../replit_integrations/auth/storage";
 
 function getPublishedDomain(req: any): string {
   // Use request headers only (Replit fallback removed for Render production)
